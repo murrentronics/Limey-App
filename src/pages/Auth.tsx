@@ -77,7 +77,7 @@ const Auth = () => {
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-full bg-black border-4 border-green-500 flex items-center justify-center mb-4 relative">
             <span className="text-green-500 font-bold text-2xl">L</span>
-            <div className="absolute inset-0 rounded-full border-4 border-green-500 animate-pulse"></div>
+            <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-green-500 to-green-400 opacity-20 animate-pulse"></div>
           </div>
           <h1 className="text-2xl font-bold text-green-500">Limey</h1>
           <p className="text-sm text-gray-400">Trinidad & Tobago</p>
