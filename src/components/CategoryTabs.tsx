@@ -22,8 +22,8 @@ export const CategoryTabs = ({ selectedCategory, onCategoryChange }: CategoryTab
       <div className="flex items-center justify-between px-4 py-2">
         {/* Limey Logo */}
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">L</span>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-card flex items-center justify-center border border-border">
+            <span className="text-lg">🐍</span>
           </div>
           <span className="text-primary font-bold text-lg">Limey</span>
         </div>
