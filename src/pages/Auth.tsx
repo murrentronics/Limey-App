@@ -1,9 +1,6 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,20 +8,10 @@ const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const { toast } = useToast();
-
-  useEffect(() => {
-    // Check if already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        navigate('/');
-      }
-    });
-  }, [navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +19,10 @@ const Auth = () => {
 
     try {
       if (isSignUp) {
+        if (password !== confirmPassword) {
+          throw new Error("Passwords don't match");
+        }
+
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -39,7 +30,7 @@ const Auth = () => {
             emailRedirectTo: `${window.location.origin}/`,
             data: {
               username,
-              display_name: displayName || username
+              display_name: username
             }
           }
         });
@@ -47,9 +38,14 @@ const Auth = () => {
         if (error) throw error;
 
         toast({
-          title: "Success!",
-          description: "Check your email to confirm your account",
+          title: "Account created!",
+          description: "You can now sign in with your credentials",
         });
+        
+        // Switch to sign in after successful signup
+        setIsSignUp(false);
+        setPassword("");
+        setConfirmPassword("");
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -62,8 +58,6 @@ const Auth = () => {
           title: "Welcome back!",
           description: "Successfully signed in",
         });
-        
-        navigate('/');
       }
     } catch (error: any) {
       toast({
@@ -77,115 +71,109 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          {/* Limey Logo */}
-          <div className="flex items-center justify-center mb-4">
-            <div className="w-16 h-16 rounded-full bg-primary limey-glow flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-2xl">L</span>
-            </div>
+    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-gray-900 rounded-lg p-8 border border-gray-800">
+        {/* Limey Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-16 h-16 rounded-full bg-black border-4 border-green-500 flex items-center justify-center mb-4 relative">
+            <span className="text-green-500 font-bold text-2xl">L</span>
+            <div className="absolute inset-0 rounded-full border-4 border-green-500 animate-pulse"></div>
           </div>
-          <h1 className="text-2xl font-bold text-primary">Limey</h1>
-          <p className="text-sm text-muted-foreground">Trinidad & Tobago</p>
-          
-          <CardTitle className="mt-4">
+          <h1 className="text-2xl font-bold text-green-500">Limey</h1>
+          <p className="text-sm text-gray-400">Trinidad & Tobago</p>
+        </div>
+
+        {/* Auth Form */}
+        <div className="text-center mb-6">
+          <h2 className="text-xl font-semibold text-white mb-2">
             {isSignUp ? "Join Limey" : "Welcome Back"}
-          </CardTitle>
-          <CardDescription>
+          </h2>
+          <p className="text-gray-400 text-sm">
             {isSignUp 
               ? "Create your creator account" 
               : "Sign in to your Limey account"
             }
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
-            {isSignUp && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="displayName">Display Name</Label>
-                  <Input
-                    id="displayName"
-                    type="text"
-                    placeholder="Display Name"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
+          </p>
+        </div>
+
+        <form onSubmit={handleAuth} className="space-y-4">
+          {isSignUp && (
+            <div>
               <Input
-                id="email"
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-green-500"
                 required
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+          )}
+          
+          <div>
+            <Input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-green-500"
+              required
+            />
+          </div>
+          
+          <div>
+            <Input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-green-500"
+              required
+            />
+          </div>
+
+          {isSignUp && (
+            <div>
               <Input
-                id="password"
                 type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-green-500"
                 required
               />
             </div>
+          )}
 
-            <Button 
-              type="submit" 
-              className="w-full limey-gradient"
-              disabled={loading}
-            >
-              {loading ? "Loading..." : isSignUp ? "Create Account" : "Sign In"}
-            </Button>
-          </form>
+          <Button 
+            type="submit" 
+            className="w-full bg-green-500 hover:bg-green-600 text-black font-semibold py-3 mt-6"
+            disabled={loading}
+          >
+            {loading ? "Loading..." : isSignUp ? "Create Account" : "Sign in"}
+          </Button>
+        </form>
 
-          <div className="mt-4 text-center">
-            <Button
-              variant="link"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-primary"
-            >
-              {isSignUp 
-                ? "Already have an account? Sign in" 
-                : "Don't have an account? Sign up"
-              }
-            </Button>
+        {!isSignUp && (
+          <div className="text-center mt-4">
+            <button className="text-green-500 text-sm hover:underline">
+              Forgot your password?
+            </button>
           </div>
+        )}
 
-          <div className="mt-4 text-center">
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/')}
-              className="text-primary"
-            >
-              Continue as Guest
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        <div className="text-center mt-6">
+          <button
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-green-500 text-sm hover:underline"
+          >
+            {isSignUp 
+              ? "Already have an account? Sign in" 
+              : "Don't have an account? Sign up"
+            }
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

@@ -37,31 +37,40 @@ export const VideoFeed = ({ category }: VideoFeedProps) => {
   const fetchVideos = async () => {
     setLoading(true);
     try {
-      let query = supabase
+      // First get videos
+      let videoQuery = supabase
         .from('videos')
-        .select(`
-          *,
-          profiles:user_id (
-            username,
-            display_name,
-            avatar_url,
-            trini_credits
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (category !== "All") {
-        query = query.eq('category', category.toLowerCase());
+        videoQuery = videoQuery.eq('category', category.toLowerCase());
       }
 
-      const { data, error } = await query;
+      const { data: videosData, error: videosError } = await videoQuery;
 
-      if (error) {
-        console.error('Error fetching videos:', error);
+      if (videosError) {
+        console.error('Error fetching videos:', videosError);
         return;
       }
 
-      setVideos((data as any) || []);
+      // Then get profiles for each video
+      const videosWithProfiles = await Promise.all(
+        (videosData || []).map(async (video) => {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('username, display_name, avatar_url, trini_credits')
+            .eq('user_id', video.user_id)
+            .single();
+
+          return {
+            ...video,
+            profiles: profile
+          };
+        })
+      );
+
+      setVideos(videosWithProfiles);
     } catch (error) {
       console.error('Error:', error);
     } finally {
