@@ -1,31 +1,21 @@
 import { Button } from "@/components/ui/button";
-
 interface CategoryTabsProps {
   selectedCategory: string;
   onCategoryChange: (category: string) => void;
 }
-
-const categories = [
-  "All",
-  "Soca", 
-  "Dancehall",
-  "Carnival",
-  "Comedy",
-  "Dance",
-  "Music",
-  "Local News"
-];
-
-export const CategoryTabs = ({ selectedCategory, onCategoryChange }: CategoryTabsProps) => {
-  return (
-    <div className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
+const categories = ["All", "Soca", "Dancehall", "Carnival", "Comedy", "Dance", "Music", "Local News"];
+export const CategoryTabs = ({
+  selectedCategory,
+  onCategoryChange
+}: CategoryTabsProps) => {
+  return <div className="fixed top-0 left-0 right-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="flex items-center justify-between px-4 py-2">
         {/* Limey Logo */}
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-card flex items-center justify-center border border-border">
             <span className="text-lg">🐍</span>
           </div>
-          <span className="text-primary font-bold text-lg">Limey</span>
+          <span className="text-primary font-bold text-3xl text-left">Limey</span>
         </div>
 
         {/* Search & Upload */}
@@ -37,23 +27,10 @@ export const CategoryTabs = ({ selectedCategory, onCategoryChange }: CategoryTab
       </div>
       
       {/* Category Scroll */}
-      <div className="flex overflow-x-auto scrollbar-hide px-4 pb-2">
-        {categories.map((category) => (
-          <Button
-            key={category}
-            variant={selectedCategory === category ? "default" : "ghost"}
-            size="sm"
-            className={`flex-shrink-0 mr-2 ${
-              selectedCategory === category 
-                ? "bg-primary text-primary-foreground" 
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => onCategoryChange(category)}
-          >
+      <div className="flex overflow-x-auto scrollbar-hide px-4 pb-2 mx-[10px] my-[50px]">
+        {categories.map(category => <Button key={category} variant={selectedCategory === category ? "default" : "ghost"} size="sm" className={`flex-shrink-0 mr-2 ${selectedCategory === category ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} onClick={() => onCategoryChange(category)}>
             {category}
-          </Button>
-        ))}
+          </Button>)}
       </div>
-    </div>
-  );
+    </div>;
 };
