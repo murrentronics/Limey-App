@@ -75,8 +75,8 @@ const Auth = () => {
       <div className="w-full max-w-md bg-gray-900 rounded-lg p-8 border border-gray-800">
         {/* Limey Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-full bg-black border-4 border-green-500 flex items-center justify-center mb-4 relative">
-            <span className="text-green-500 font-bold text-2xl">L</span>
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-green-600 border-4 border-green-400 flex items-center justify-center mb-4 relative shadow-lg">
+            <span className="text-black font-bold text-2xl">🐍</span>
             <div className="absolute -inset-2 rounded-full bg-gradient-to-r from-green-500 to-green-400 opacity-20 animate-pulse"></div>
           </div>
           <h1 className="text-2xl font-bold text-green-500">Limey</h1>
