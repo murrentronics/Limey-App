@@ -9,12 +9,12 @@ const LimeyLogo = ({ className = "", showText = true, showCircle = false }: Lime
     <div className={`flex flex-col items-center justify-center ${className}`}>
       {showCircle && (
         <div className="relative mb-4 flex justify-center">
-          <div className="w-24 h-24 bg-black border-4 border-primary rounded-full neon-glow overflow-hidden flex items-end justify-center relative">
-            {/* Snake image, head overlaps top */}
+          <div className="w-24 h-24 bg-black border-4 border-primary rounded-full neon-glow overflow-hidden flex items-center justify-center relative">
+            {/* Snake image, centered */}
             <img
               src="/snake-logo.png"
               alt="Limey Snake Logo"
-              className="absolute left-1/2 -translate-x-1/2 -top-14 w-32 h-40 object-contain drop-shadow-[0_0_16px_hsl(120,100%,50%)]"
+              className="w-32 h-40 object-contain drop-shadow-[0_0_16px_hsl(120,100%,50%)]"
               style={{ zIndex: 2 }}
             />
           </div>
@@ -28,6 +28,14 @@ const LimeyLogo = ({ className = "", showText = true, showCircle = false }: Lime
             fontWeight: 900,
             letterSpacing: "0.15em",
             filter: "drop-shadow(0 0 8px hsl(120, 100%, 50%))",
+            WebkitTextStroke: '2px black',
+            textShadow: '0 0 2px black, 0 0 4px black',
+            backgroundImage: 'url(/snake-logo.png)',
+            backgroundSize: 'cover',
+            backgroundRepeat: 'repeat',
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            color: 'transparent',
           }}
         >
           Limey
