@@ -64,6 +64,9 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
   const [editValue, setEditValue] = useState("");
   const [showMenuId, setShowMenuId] = useState<string | null>(null);
 
+  const viewTimer = useRef<NodeJS.Timeout | null>(null);
+  const hasRecordedView = useRef(false);
+
   // Fetch comments
   useEffect(() => {
     const fetchComments = async () => {
@@ -159,17 +162,24 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
   };
 
   useEffect(() => {
-    // Auto-play when video changes
+    // Reset timer and flag when video changes
+    hasRecordedView.current = false;
+    if (viewTimer.current) {
+      clearTimeout(viewTimer.current);
+      viewTimer.current = null;
+    }
     if (videoRef.current) {
-      videoRef.current.play();
-      setIsPlaying(true);
-      
-      // Record view for this video (only for other users' videos)
-      if (user && video.user_id !== user.id) {
-        recordVideoView(video.id, video.user_id);
-      }
+      videoRef.current.currentTime = 0;
     }
   }, [video.id, user]);
+
+  const handleTimeUpdate = () => {
+    if (!user || video.user_id === user.id || hasRecordedView.current) return;
+    if (videoRef.current && videoRef.current.currentTime >= 10) {
+      recordVideoView(video.id, video.user_id);
+      hasRecordedView.current = true;
+    }
+  };
 
   // Record video view (only for other users' videos)
   const recordVideoView = async (videoId: string, creatorId: string) => {
@@ -365,6 +375,7 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
           playsInline
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
+          onTimeUpdate={handleTimeUpdate}
         />
 
         {/* Top Controls */}

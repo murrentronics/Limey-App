@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical, ChevronDown, X } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 
 const Profile = () => {
@@ -17,10 +17,45 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [userVideos, setUserVideos] = useState<any[]>([]);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [showFollowOverlay, setShowFollowOverlay] = useState<null | "following" | "followers">(null);
+  const [followingList, setFollowingList] = useState<any[]>([]);
+  const [followersList, setFollowersList] = useState<any[]>([]);
+  const [loadingFollowList, setLoadingFollowList] = useState(false);
 
   useEffect(() => {
     fetchProfile();
   }, [username, user]);
+
+  useEffect(() => {
+    if (!isOwnProfile && profile?.user_id && user?.id) {
+      // Check if current user is following this profile
+      supabase
+        .from('follows')
+        .select('*')
+        .eq('follower_id', user.id)
+        .eq('following_id', profile.user_id)
+        .single()
+        .then(({ data }) => setIsFollowing(!!data));
+    }
+    setFollowerCount(profile?.follower_count || 0);
+  }, [profile, user, isOwnProfile]);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showDropdown]);
 
   const fetchProfile = async () => {
     try {
@@ -133,9 +168,148 @@ const Profile = () => {
     fetchUserVideos(profile.user_id);
   };
 
+  const handleFollowToggle = async () => {
+    if (!user || !profile?.user_id) return;
+    if (isFollowing) {
+      // Unfollow
+      await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', profile.user_id);
+      setIsFollowing(false);
+      setFollowerCount((prev) => Math.max(0, prev - 1));
+      // Optionally update profile table follower_count in DB
+      await supabase
+        .from('profiles')
+        .update({ follower_count: Math.max(0, followerCount - 1) })
+        .eq('user_id', profile.user_id);
+    } else {
+      // Follow
+      await supabase
+        .from('follows')
+        .insert({ follower_id: user.id, following_id: profile.user_id });
+      setIsFollowing(true);
+      setFollowerCount((prev) => prev + 1);
+      // Optionally update profile table follower_count in DB
+      await supabase
+        .from('profiles')
+        .update({ follower_count: followerCount + 1 })
+        .eq('user_id', profile.user_id);
+    }
+    setShowDropdown(false);
+  };
 
   // State for avatar view modal (must be before any return)
   const [showViewModal, setShowViewModal] = useState(false);
+
+  const fetchFollowingList = async () => {
+    setLoadingFollowList(true);
+    // Step 1: Get following IDs
+    const { data: follows, error: followsError } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id);
+    if (followsError) {
+      setFollowingList([]);
+      setLoadingFollowList(false);
+      return;
+    }
+    const ids = follows.map((f: any) => f.following_id);
+    if (ids.length === 0) {
+      setFollowingList([]);
+      setLoadingFollowList(false);
+      return;
+    }
+    // Step 2: Get profiles for those IDs
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('user_id, username, avatar_url')
+      .in('user_id', ids);
+    if (profilesError) {
+      setFollowingList([]);
+      setLoadingFollowList(false);
+      return;
+    }
+    setFollowingList(
+      ids.map((id: string) => ({
+        following_id: id,
+        profiles: profiles.find((p: any) => p.user_id === id) || null
+      }))
+    );
+    setLoadingFollowList(false);
+  };
+  const fetchFollowersList = async () => {
+    setLoadingFollowList(true);
+    // Step 1: Get follower IDs
+    const { data: follows, error: followsError } = await supabase
+      .from('follows')
+      .select('follower_id')
+      .eq('following_id', user.id);
+    if (followsError) {
+      setFollowersList([]);
+      setLoadingFollowList(false);
+      return;
+    }
+    const ids = follows.map((f: any) => f.follower_id);
+    if (ids.length === 0) {
+      setFollowersList([]);
+      setLoadingFollowList(false);
+      return;
+    }
+    // Step 2: Get profiles for those IDs
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('user_id, username, avatar_url')
+      .in('user_id', ids);
+    if (profilesError) {
+      setFollowersList([]);
+      setLoadingFollowList(false);
+      return;
+    }
+    setFollowersList(
+      ids.map((id: string) => ({
+        follower_id: id,
+        profiles: profiles.find((p: any) => p.user_id === id) || null
+      }))
+    );
+    setLoadingFollowList(false);
+  };
+
+  const handleOpenFollowOverlay = (type: "following" | "followers") => {
+    setShowFollowOverlay(type);
+    if (type === "following") fetchFollowingList();
+    else fetchFollowersList();
+  };
+  const handleRemoveUser = async (targetUserId: string, type: "following" | "followers") => {
+    if (type === "following") {
+      // Remove from follows table: you unfollow someone
+      await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', targetUserId);
+      // Update counts in DB
+      await supabase.from('profiles').update({ following_count: (profile.following_count || 1) - 1 }).eq('user_id', user.id);
+      await supabase.from('profiles').update({ follower_count: (profile.follower_count || 1) - 1 }).eq('user_id', targetUserId);
+      // Update UI
+      setFollowingList((prev) => prev.filter((f) => f.following_id !== targetUserId));
+      setProfile((prev: any) => ({ ...prev, following_count: (prev.following_count || 1) - 1 }));
+    } else if (type === "followers") {
+      // Remove from follows table: remove a follower (block)
+      await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', targetUserId)
+        .eq('following_id', user.id);
+      // Update counts in DB
+      await supabase.from('profiles').update({ follower_count: (profile.follower_count || 1) - 1 }).eq('user_id', user.id);
+      await supabase.from('profiles').update({ following_count: (profile.following_count || 1) - 1 }).eq('user_id', targetUserId);
+      // Update UI
+      setFollowersList((prev) => prev.filter((f) => f.follower_id !== targetUserId));
+      setProfile((prev: any) => ({ ...prev, follower_count: (prev.follower_count || 1) - 1 }));
+    }
+  };
 
   if (loading) {
     return (
@@ -190,7 +364,7 @@ const Profile = () => {
             letterSpacing: '0.15em',
             filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
           }}>
-            {isOwnProfile ? 'Profile' : `@${profile.username}`}
+            {isOwnProfile ? 'Profile' : 'You are viewing...'}
           </h1>
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
@@ -254,17 +428,61 @@ const Profile = () => {
           <div className="flex items-center space-x-6 mb-4">
             <div className="text-center">
               <div className="text-xl font-bold text-foreground">{profile?.following_count || 0}</div>
-              <div className="text-xs text-muted-foreground">Following</div>
+              <div className="text-xs text-muted-foreground underline cursor-pointer" onClick={() => isOwnProfile && handleOpenFollowOverlay("following") }>Following</div>
             </div>
             <div className="text-center">
-              <div className="text-xl font-bold text-foreground">{profile?.follower_count || 0}</div>
-              <div className="text-xs text-muted-foreground">Followers</div>
+              <div className="text-xl font-bold text-foreground">{followerCount}</div>
+              <div className="text-xs text-muted-foreground underline cursor-pointer" onClick={() => isOwnProfile && handleOpenFollowOverlay("followers") }>Followers</div>
             </div>
             <div className="text-center">
               <div className="text-xl font-bold text-foreground">{profile?.likes_received || 0}</div>
               <div className="text-xs text-muted-foreground">Likes</div>
             </div>
           </div>
+
+          {/* Overlay Popup for Following/Followers */}
+          {showFollowOverlay && (
+            <div className="fixed inset-0 z-50 flex flex-col bg-black/90">
+              <div className="flex justify-end p-4">
+                <button className="text-white text-lg font-bold" onClick={() => setShowFollowOverlay(null)}>Close</button>
+              </div>
+              <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto px-4 pb-8">
+                <h2 className="text-2xl font-bold mb-6 text-primary logo-text-glow">{showFollowOverlay === "following" ? "Following" : "Followers"}</h2>
+                {loadingFollowList ? (
+                  <div className="text-center py-8 text-white">Loading...</div>
+                ) : (
+                  <ul className="divide-y divide-border w-full max-w-md mx-auto">
+                    {(showFollowOverlay === "following" ? followingList : followersList).map((item: any) => {
+                      const userObj = item.profiles;
+                      const userId = showFollowOverlay === "following" ? item.following_id : item.follower_id;
+                      return (
+                        <li key={userId} className="flex items-center justify-between py-3">
+                          <div className="flex items-center gap-3">
+                            {userObj?.avatar_url && <img src={userObj.avatar_url} alt="avatar" className="w-10 h-10 rounded-full" />}
+                            <button
+                              className="font-semibold text-white underline hover:text-primary transition"
+                              onClick={() => {
+                                setShowFollowOverlay(null);
+                                navigate(`/profile/${userObj?.username || userId}`);
+                              }}
+                            >
+                              @{userObj?.username || userId}
+                            </button>
+                          </div>
+                          <button
+                            className="text-red-600 font-bold text-base px-3 py-1 rounded hover:bg-red-100 hover:text-red-700 transition"
+                            onClick={() => handleRemoveUser(userId, showFollowOverlay)}
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Bio */}
           {profile?.bio && (
@@ -317,9 +535,37 @@ const Profile = () => {
               </>
             ) : (
               <>
-                <Button variant="outline">
-                  Follow
+                <div className="relative" ref={dropdownRef}>
+                  <Button
+                    variant={isFollowing ? "default" : "outline"}
+                    onClick={() => {
+                      if (isFollowing) {
+                        setShowDropdown((prev) => !prev);
+                      } else {
+                        handleFollowToggle();
+                      }
+                    }}
+                    className="flex items-center gap-2 min-w-[110px]"
+                  >
+                    {isFollowing ? (
+                      <>
+                        Following <ChevronDown size={16} />
+                      </>
+                    ) : (
+                      <>Follow</>
+                    )}
                 </Button>
+                  {isFollowing && showDropdown && (
+                    <div className="absolute left-0 mt-2 w-full bg-red-600 text-white border-none rounded shadow z-10">
+                      <button
+                        className="w-full px-4 py-2 text-left hover:bg-red-700 hover:text-white"
+                        onClick={() => handleFollowToggle()}
+                      >
+                        Unfollow
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <Button 
                   variant="neon"
                   onClick={() => {

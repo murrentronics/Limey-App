@@ -12,8 +12,8 @@ const LimeyLogo = ({ className = "", showText = true, showCircle = false }: Lime
           <div className="w-24 h-24 bg-black border-4 border-primary rounded-full neon-glow overflow-hidden flex items-center justify-center relative">
             {/* Snake image, centered */}
             <img
-              src="/snake-logo.png"
-              alt="Limey Snake Logo"
+              src="/limey-tree-logo.png"
+              alt="Limey Tree Logo"
               className="w-32 h-40 object-contain drop-shadow-[0_0_16px_hsl(120,100%,50%)]"
               style={{ zIndex: 2 }}
             />
@@ -30,7 +30,7 @@ const LimeyLogo = ({ className = "", showText = true, showCircle = false }: Lime
             filter: "drop-shadow(0 0 8px hsl(120, 100%, 50%))",
             WebkitTextStroke: '2px black',
             textShadow: '0 0 2px black, 0 0 4px black',
-            backgroundImage: 'url(/snake-logo.png)',
+            backgroundImage: 'url(/limey-tree-logo.png)',
             backgroundSize: 'cover',
             backgroundRepeat: 'repeat',
             WebkitBackgroundClip: 'text',
