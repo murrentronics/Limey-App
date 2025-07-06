@@ -153,7 +153,14 @@ const Profile = () => {
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
               ← Back
             </Button>
-            <h1 className="text-2xl font-bold text-primary">Profile Not Found</h1>
+            <h1 className="text-2xl font-black text-primary tracking-wider logo-text-glow" style={{
+              fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              fontWeight: '900',
+              letterSpacing: '0.15em',
+              filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
+            }}>
+              Profile Not Found
+            </h1>
             <div></div>
           </div>
         </div>
@@ -177,7 +184,12 @@ const Profile = () => {
               ← Back
             </Button>
           )}
-          <h1 className="text-2xl font-bold text-primary">
+          <h1 className="text-2xl font-black text-primary tracking-wider logo-text-glow" style={{
+            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            fontWeight: '900',
+            letterSpacing: '0.15em',
+            filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
+          }}>
             {isOwnProfile ? 'Profile' : `@${profile.username}`}
           </h1>
           <div className="flex items-center space-x-2">

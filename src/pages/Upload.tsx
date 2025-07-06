@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import BottomNavigation from "@/components/BottomNavigation";
+import LimeyLogo from "@/components/LimeyLogo";
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -222,7 +223,7 @@ const Upload = () => {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-primary">Upload</h1>
+          <LimeyLogo showText={false} />
         </div>
       </div>
 

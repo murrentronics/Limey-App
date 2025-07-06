@@ -183,7 +183,14 @@ const Settings = () => {
           >
             <ArrowLeft size={20} />
           </Button>
-          <h1 className="text-2xl font-bold text-primary">Settings</h1>
+          <h1 className="text-2xl font-black text-primary tracking-wider logo-text-glow" style={{
+            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            fontWeight: '900',
+            letterSpacing: '0.15em',
+            filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
+          }}>
+            Settings
+          </h1>
         </div>
       </div>
 

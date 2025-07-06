@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share, Play, Volume2, VolumeX, Plus } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
+import LimeyLogo from "@/components/LimeyLogo";
 
 const Feed = () => {
   const [activeCategory, setActiveCategory] = useState("All");
@@ -405,7 +406,7 @@ const Feed = () => {
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Limey</h1>
+          <LimeyLogo showText={false} className="text-white" />
           <div className="flex items-center space-x-2">
             {/* Search Icon Button */}
             <Button variant="ghost" size="icon" onClick={() => setShowSearch((v) => !v)} aria-label="Search" className="text-white hover:bg-white/10">
