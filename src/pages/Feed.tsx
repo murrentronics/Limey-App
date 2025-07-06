@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus } from "lucide-react";
-import BottomNavigation from "@/components/ui/BottomNavigation";
+import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const Feed = () => {
@@ -669,7 +669,7 @@ const Feed = () => {
                         <div className="flex flex-col items-center">
                           {user && video.user_id !== user.id && (
                             <Button
-                              variant={video.is_following ? "secondary" : "outline"}
+                              variant="default"
                               size="sm"
                               onClick={async (e) => {
                                 e.stopPropagation();
@@ -686,10 +686,14 @@ const Feed = () => {
                                     : v
                                 ));
                               }}
-                              className="w-20 mb-2"
+                              className={`w-24 mb-2 rounded-full font-semibold transition-colors ${video.is_following ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-white text-black hover:bg-gray-200 border border-gray-300'}`}
                               data-control
                             >
-                              {video.is_following ? "Unfollow" : "Follow"}
+                              {video.is_following ? (
+                                <span className="flex items-center gap-1">✔ Following</span>
+                              ) : (
+                                <span>Follow</span>
+                              )}
                             </Button>
                           )}
                           <span className="text-white text-xs font-semibold mt-1">
@@ -875,7 +879,7 @@ const Feed = () => {
                       <div className="flex flex-col items-center">
                         {user && video.user_id !== user.id && (
                           <Button
-                            variant={video.is_following ? "secondary" : "outline"}
+                            variant="default"
                             size="sm"
                             onClick={async (e) => {
                               e.stopPropagation();
@@ -892,10 +896,14 @@ const Feed = () => {
                                   : v
                               ));
                             }}
-                            className="w-20 mb-2"
+                            className={`w-24 mb-2 rounded-full font-semibold transition-colors ${video.is_following ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-white text-black hover:bg-gray-200 border border-gray-300'}`}
                             data-control
                           >
-                            {video.is_following ? "Unfollow" : "Follow"}
+                            {video.is_following ? (
+                              <span className="flex items-center gap-1">✔ Following</span>
+                            ) : (
+                              <span>Follow</span>
+                            )}
                           </Button>
                         )}
                         <span className="text-white text-xs font-semibold mt-1">
