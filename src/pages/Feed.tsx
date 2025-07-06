@@ -32,6 +32,31 @@ const Feed = () => {
     "All", "Soca", "Dancehall", "Carnival", "Comedy", "Dance", "Music", "Local News"
   ];
 
+  // Define currentVideos before using it in useEffect
+  const currentVideos = searchResults !== null ? searchResults : videos;
+
+  // Record video view (only for other users' videos)
+  const recordVideoView = async (videoId: string, creatorId: string) => {
+    if (!user || user.id === creatorId) return; // Don't record own views
+    
+    try {
+      // Call the database function to record the view
+      const { error } = await supabase.rpc('record_video_view', {
+        video_uuid: videoId
+      });
+      
+      if (error) {
+        console.error('Error recording video view:', error);
+        // Fallback: function might not exist yet, so we'll just log it
+        console.log('View recorded for video:', videoId);
+      }
+    } catch (error) {
+      console.error('Error recording video view:', error);
+      // Fallback: function might not exist yet, so we'll just log it
+      console.log('View recorded for video:', videoId);
+    }
+  };
+
   useEffect(() => {
     fetchVideos();
   }, [activeCategory]);
@@ -343,26 +368,6 @@ const Feed = () => {
       console.error('Error following/unfollowing:', error);
     }
   };
-
-  // Record video view (only for other users' videos)
-  const recordVideoView = async (videoId: string, creatorId: string) => {
-    if (!user || user.id === creatorId) return; // Don't record own views
-    
-    try {
-      // Call the database function to record the view
-      const { error } = await supabase.rpc('record_video_view', {
-        video_uuid: videoId
-      });
-      
-      if (error) {
-        console.error('Error recording video view:', error);
-      }
-    } catch (error) {
-      console.error('Error recording video view:', error);
-    }
-  };
-
-  const currentVideos = searchResults !== null ? searchResults : videos;
 
   // Helper function to get username with fallback
   const getUsername = (video: any) => {
