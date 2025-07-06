@@ -4,7 +4,7 @@
   }
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Volume2, VolumeX, Heart, MessageCircle, Share, Play } from "lucide-react";
+import { X, Volume2, VolumeX, Heart, MessageCircle, Share, Play, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -242,6 +242,49 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
   const displayUsername = video.profiles?.username || 'unknown';
   const displayAvatar = video.profiles?.avatar_url || '';
 
+  // Helper function to get username with fallback
+  const getUsername = (video: any) => {
+    if (video.profiles?.username) {
+      return video.profiles.username;
+    }
+    // If no username in profiles, try to get from user_id or use a fallback
+    return video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown';
+  };
+
+  // Follow function
+  const handleFollow = async (targetUserId: string, targetUsername: string) => {
+    if (!user) return;
+    
+    try {
+      // Check if already following
+      const { data: existingFollow } = await supabase
+        .from('follows')
+        .select('*')
+        .eq('follower_id', user.id)
+        .eq('following_id', targetUserId)
+        .single();
+
+      if (existingFollow) {
+        // Unfollow
+        await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', targetUserId);
+      } else {
+        // Follow
+        await supabase
+          .from('follows')
+          .insert({
+            follower_id: user.id,
+            following_id: targetUserId
+          });
+      }
+    } catch (error) {
+      console.error('Error following/unfollowing:', error);
+    }
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -290,15 +333,6 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
           >
             <X size={20} />
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleMute}
-            className="text-white p-2 bg-black/30 hover:bg-black/50 rounded-full"
-            data-control
-          >
-            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
-          </Button>
         </div>
 
         {/* Center Play Button - Only show when paused */}
@@ -322,25 +356,47 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
             <div className="flex-1 mr-4 space-y-3">
               {/* User Profile - Raised like TikTok */}
               <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-red-500 p-0.5">
-                  <div className="w-full h-full rounded-full bg-black flex items-center justify-center">
-                    {displayAvatar ? (
-                      <img 
-                        src={displayAvatar} 
-                        alt="Profile" 
-                        className="w-full h-full rounded-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-white font-bold text-lg">
-                        {displayUsername.charAt(0).toUpperCase()}
-                      </span>
-                    )}
+                <div className="relative">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-red-500 p-0.5">
+                    <div className="w-full h-full rounded-full bg-black flex items-center justify-center">
+                      {displayAvatar ? (
+                        <img 
+                          src={displayAvatar} 
+                          alt="Profile" 
+                          className="w-full h-full rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-white font-bold text-lg">
+                          {getUsername(video).charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {/* Follow button - only show if not the current user */}
+                  {user && video.user_id !== user.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleFollow(video.user_id, getUsername(video));
+                      }}
+                      className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-100 transition-colors"
+                      data-control
+                    >
+                      <Plus size={12} className="text-black" />
+                    </button>
+                  )}
                 </div>
                 <div>
-                  <p className="text-white font-semibold text-lg">
-                    @{displayUsername}
-                  </p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Navigate to profile page
+                      window.location.href = `/profile/${getUsername(video)}`;
+                    }}
+                    className="text-white font-semibold text-lg hover:text-white/80 transition-colors"
+                  >
+                    @{getUsername(video)}
+                  </button>
                 </div>
               </div>
 
@@ -364,8 +420,12 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleLike}
-                  className="w-12 h-12 rounded-full p-0 text-white hover:bg-white/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLike();
+                  }}
+                  className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                  data-control
                 >
                   <Heart 
                     size={28} 
@@ -382,9 +442,10 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-12 h-12 rounded-full p-0 text-white hover:bg-white/10"
+                  className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                  data-control
                 >
-                  <MessageCircle size={28} />
+                  <MessageCircle size={28} className="text-white" />
                 </Button>
                 <span className="text-white text-xs font-semibold mt-1">
                   {video.comment_count || 0}
@@ -396,10 +457,14 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleShare}
-                  className="w-12 h-12 rounded-full p-0 text-white hover:bg-white/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleShare();
+                  }}
+                  className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                  data-control
                 >
-                  <Share size={28} />
+                  <Share size={28} className="text-white" />
                 </Button>
                 <span className="text-white text-xs font-semibold mt-1">
                   Share
