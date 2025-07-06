@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share, Play, Volume2, VolumeX, Plus } from "lucide-react";
-import BottomNavigation from "@/components/BottomNavigation";
+import BottomNavigation from "@/components/ui/BottomNavigation";
 
 const Feed = () => {
   const [activeCategory, setActiveCategory] = useState("All");
@@ -58,6 +58,7 @@ const Feed = () => {
   };
 
   useEffect(() => {
+    console.log("Feed - fetching videos for category:", activeCategory);
     fetchVideos();
   }, [activeCategory]);
 
@@ -189,6 +190,7 @@ const Feed = () => {
   };
 
   const fetchVideos = async () => {
+    console.log("Feed - fetchVideos called");
     try {
       setLoading(true);
       setError(null);
@@ -261,6 +263,7 @@ const Feed = () => {
       console.error('Error fetching videos:', error);
       setError('Failed to load videos. Please try again.');
     } finally {
+      console.log("Feed - fetchVideos completed, loading set to false");
       setLoading(false);
     }
   };

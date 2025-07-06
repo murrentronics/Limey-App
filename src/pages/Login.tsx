@@ -12,14 +12,14 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, user } = useAuth();
+  const { signIn, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
+    if (user && !authLoading) {
       navigate("/");
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,12 +28,10 @@ const Login = () => {
     try {
       const { error } = await signIn(email, password);
       
-      if (!error) {
-        console.log("Login successful, should redirect");
-        navigate("/");
-      } else {
+      if (error) {
         console.error("Login error:", error);
       }
+      // Don't navigate here - let the useEffect handle it when auth state updates
     } catch (err) {
       console.error("Login exception:", err);
     }
