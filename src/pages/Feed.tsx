@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus } from "lucide-react";
-import BottomNavigation from "@/components/BottomNavigation";
+import BottomNavigation from "@/components/ui/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const Feed = () => {
@@ -79,12 +79,12 @@ const Feed = () => {
           if (!videoId) return;
           
           if (entry.isIntersecting) {
-            // Play the video that's now visible
+            // Play the video that's now visible from the beginning
             const video = videoRefs.current[videoId];
             if (video) {
+              video.currentTime = 0;
               video.play();
               setIsPlaying(prev => ({ ...prev, [videoId]: true }));
-              
               // Record view for this video
               const videoData = currentVideos.find(v => v.id === videoId);
               if (videoData) {
