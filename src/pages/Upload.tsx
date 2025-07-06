@@ -145,6 +145,16 @@ const Upload = () => {
         .from('limeytt-uploads')
         .getPublicUrl(fileName);
 
+      // Fetch username and avatar_url from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('username, avatar_url')
+        .eq('user_id', user.id)
+        .single();
+      if (profileError || !profile) {
+        throw new Error('Could not fetch user profile for video upload.');
+      }
+
       // Insert metadata into videos table
       const { data: insertData, error: dbError } = await supabase.from('videos').insert({
         title,
@@ -154,6 +164,8 @@ const Upload = () => {
         duration,
         user_id: user.id,
         category,
+        username: profile.username,
+        avatar_url: profile.avatar_url,
         // Add more fields as needed (e.g., tags)
       }).select();
       

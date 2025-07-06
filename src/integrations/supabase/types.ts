@@ -89,6 +89,35 @@ export type Database = {
         }
         Relationships: []
       }
+      comment_likes: {
+        Row: {
+          comment_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_likes_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           content: string
@@ -114,15 +143,7 @@ export type Database = {
           user_id?: string
           video_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "comments_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "videos"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       follows: {
         Row: {
@@ -182,13 +203,6 @@ export type Database = {
             columns: ["gift_id"]
             isOneToOne: false
             referencedRelation: "gifts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "gift_transactions_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "videos"
             referencedColumns: ["id"]
           },
         ]
@@ -269,6 +283,75 @@ export type Database = {
             referencedColumns: ["user_id"]
           },
         ]
+      }
+      messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_read: boolean | null
+          receiver_id: string
+          sender_id: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          receiver_id: string
+          sender_id: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          receiver_id?: string
+          sender_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_read: boolean | null
+          notification_type: string
+          reference_id: string | null
+          reference_type: string | null
+          sender_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          notification_type: string
+          reference_id?: string | null
+          reference_type?: string | null
+          sender_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          notification_type?: string
+          reference_id?: string | null
+          reference_type?: string | null
+          sender_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -432,9 +515,33 @@ export type Database = {
           user_id?: string
           video_id?: string
         }
+        Relationships: []
+      }
+      video_views: {
+        Row: {
+          creator_id: string
+          id: string
+          video_id: string
+          viewed_at: string | null
+          viewer_id: string
+        }
+        Insert: {
+          creator_id: string
+          id?: string
+          video_id: string
+          viewed_at?: string | null
+          viewer_id: string
+        }
+        Update: {
+          creator_id?: string
+          id?: string
+          video_id?: string
+          viewed_at?: string | null
+          viewer_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "video_likes_video_id_fkey"
+            foreignKeyName: "video_views_video_id_fkey"
             columns: ["video_id"]
             isOneToOne: false
             referencedRelation: "videos"
@@ -444,71 +551,60 @@ export type Database = {
       }
       videos: {
         Row: {
+          avatar_url: string | null
           category: string | null
           comment_count: number | null
-          created_at: string
+          created_at: string | null
           description: string | null
           duration: number | null
           id: string
-          is_featured: boolean | null
-          is_trending: boolean | null
           like_count: number | null
-          share_count: number | null
           tags: string[] | null
           thumbnail_url: string | null
           title: string
-          updated_at: string
-          user_id: string
+          updated_at: string | null
+          user_id: string | null
+          username: string
           video_url: string
           view_count: number | null
         }
         Insert: {
+          avatar_url?: string | null
           category?: string | null
           comment_count?: number | null
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           duration?: number | null
           id?: string
-          is_featured?: boolean | null
-          is_trending?: boolean | null
           like_count?: number | null
-          share_count?: number | null
           tags?: string[] | null
           thumbnail_url?: string | null
           title: string
-          updated_at?: string
-          user_id: string
+          updated_at?: string | null
+          user_id?: string | null
+          username: string
           video_url: string
           view_count?: number | null
         }
         Update: {
+          avatar_url?: string | null
           category?: string | null
           comment_count?: number | null
-          created_at?: string
+          created_at?: string | null
           description?: string | null
           duration?: number | null
           id?: string
-          is_featured?: boolean | null
-          is_trending?: boolean | null
           like_count?: number | null
-          share_count?: number | null
           tags?: string[] | null
           thumbnail_url?: string | null
           title?: string
-          updated_at?: string
-          user_id?: string
+          updated_at?: string | null
+          user_id?: string | null
+          username?: string
           video_url?: string
           view_count?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "videos_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
@@ -527,6 +623,10 @@ export type Database = {
         Args: { video_id_input: string }
         Returns: undefined
       }
+      fix_existing_usernames: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       generate_video_search_vector: {
         Args: { p_title: string; p_description: string; p_tags: string[] }
         Returns: unknown
@@ -538,6 +638,10 @@ export type Database = {
           title: string
           content: string
         }[]
+      }
+      get_genuine_view_count: {
+        Args: { video_uuid: string }
+        Returns: number
       }
       get_trending_videos: {
         Args:
@@ -605,6 +709,27 @@ export type Database = {
           recent_comments: Json
         }[]
       }
+      get_videos_by_category: {
+        Args: { category_filter: string }
+        Returns: {
+          avatar_url: string | null
+          category: string | null
+          comment_count: number | null
+          created_at: string | null
+          description: string | null
+          duration: number | null
+          id: string
+          like_count: number | null
+          tags: string[] | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string | null
+          user_id: string | null
+          username: string
+          video_url: string
+          view_count: number | null
+        }[]
+      }
       increment_comment_count: {
         Args: { video_id_input: string }
         Returns: undefined
@@ -615,6 +740,14 @@ export type Database = {
       }
       increment_video_count: {
         Args: { user_id: string }
+        Returns: undefined
+      }
+      increment_video_view: {
+        Args: { video_id_param: string }
+        Returns: undefined
+      }
+      record_video_view: {
+        Args: { video_uuid: string }
         Returns: undefined
       }
       search_posts: {
@@ -670,6 +803,10 @@ export type Database = {
       update_user_profile: {
         Args: { user_id: number; new_username: string; new_email: string }
         Returns: undefined
+      }
+      validate_username: {
+        Args: { username: string }
+        Returns: boolean
       }
     }
     Enums: {

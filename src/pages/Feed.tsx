@@ -402,6 +402,14 @@ const Feed = () => {
     return `/profile/${username}`;
   };
 
+  // Helper to ensure follow fields exist on all videos
+  const addFollowFields = (videosArr) =>
+    videosArr.map((v) => ({
+      ...v,
+      is_following: v.is_following ?? false,
+      follower_count: v.follower_count ?? 0,
+    }));
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}
@@ -656,6 +664,38 @@ const Feed = () => {
                             <Share2 size={24} className="text-white" />
                           </Button>
                         </div>
+
+                        {/* Follow Button */}
+                        <div className="flex flex-col items-center">
+                          {user && video.user_id !== user.id && (
+                            <Button
+                              variant={video.is_following ? "secondary" : "outline"}
+                              size="sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await handleFollow(video.user_id, getUsername(video));
+                                setVideos((prev) => prev.map((v) =>
+                                  v.id === video.id
+                                    ? {
+                                        ...v,
+                                        is_following: !v.is_following,
+                                        follower_count: v.is_following
+                                          ? (v.follower_count || 1) - 1
+                                          : (v.follower_count || 0) + 1,
+                                      }
+                                    : v
+                                ));
+                              }}
+                              className="w-20 mb-2"
+                              data-control
+                            >
+                              {video.is_following ? "Unfollow" : "Follow"}
+                            </Button>
+                          )}
+                          <span className="text-white text-xs font-semibold mt-1">
+                            {video.follower_count || 0} Followers
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -829,6 +869,38 @@ const Feed = () => {
                         >
                           <Share2 size={24} className="text-white" />
                         </Button>
+                      </div>
+
+                      {/* Follow Button */}
+                      <div className="flex flex-col items-center">
+                        {user && video.user_id !== user.id && (
+                          <Button
+                            variant={video.is_following ? "secondary" : "outline"}
+                            size="sm"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await handleFollow(video.user_id, getUsername(video));
+                              setVideos((prev) => prev.map((v) =>
+                                v.id === video.id
+                                  ? {
+                                      ...v,
+                                      is_following: !v.is_following,
+                                      follower_count: v.is_following
+                                        ? (v.follower_count || 1) - 1
+                                        : (v.follower_count || 0) + 1,
+                                    }
+                                  : v
+                              ));
+                            }}
+                            className="w-20 mb-2"
+                            data-control
+                          >
+                            {video.is_following ? "Unfollow" : "Follow"}
+                          </Button>
+                        )}
+                        <span className="text-white text-xs font-semibold mt-1">
+                          {video.follower_count || 0} Followers
+                        </span>
                       </div>
                     </div>
                   </div>
