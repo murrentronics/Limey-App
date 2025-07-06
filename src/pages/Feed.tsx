@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share, Play, Volume2, VolumeX, Plus } from "lucide-react";
-import BottomNavigation from "@/components/ui/BottomNavigation";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const Feed = () => {
   const [activeCategory, setActiveCategory] = useState("All");
