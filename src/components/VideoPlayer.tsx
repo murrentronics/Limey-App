@@ -8,6 +8,7 @@ import { X, Volume2, VolumeX, Heart, MessageCircle, Share, Play, Plus } from "lu
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface Video {
   id: string;
@@ -244,12 +245,29 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
 
   // Helper function to get username with fallback
   const getUsername = (video: any) => {
+    // First try to get username from profiles
     if (video.profiles?.username) {
       return video.profiles.username;
     }
-    // If no username in profiles, try to get from user_id or use a fallback
-    return video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown';
+    
+    // If no username in profiles, create a fallback from user_id
+    if (video.user_id) {
+      // Create a more user-friendly fallback username
+      const userId = video.user_id.replace(/[^a-zA-Z0-9]/g, '');
+      return `user_${userId.slice(0, 8)}`;
+    }
+    
+    // Last resort fallback
+    return 'unknown_user';
   };
+
+  // Helper function to get profile URL for navigation
+  const getProfileUrl = (video: any) => {
+    const username = getUsername(video);
+    return `/profile/${username}`;
+  };
+
+  const navigate = useNavigate();
 
   // Follow function
   const handleFollow = async (targetUserId: string, targetUsername: string) => {
@@ -390,8 +408,7 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      // Navigate to profile page
-                      window.location.href = `/profile/${getUsername(video)}`;
+                      navigate(getProfileUrl(video));
                     }}
                     className="text-white font-semibold text-lg hover:text-white/80 transition-colors"
                   >

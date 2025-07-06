@@ -7,32 +7,82 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
 import { MoreVertical } from "lucide-react";
+import { useParams, useNavigate } from "react-router-dom";
 
 const Profile = () => {
   const { user, signOut } = useAuth();
+  const { username } = useParams();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [userVideos, setUserVideos] = useState<any[]>([]);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      fetchProfile();
-      fetchUserVideos();
-    }
-  }, [user]);
+    fetchProfile();
+  }, [username, user]);
 
   const fetchProfile = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user?.id)
-        .single();
+      setLoading(true);
+      
+      // Determine if this is the current user's profile or another user's profile
+      const isOwn = !username || username === user?.id || username === profile?.username;
+      setIsOwnProfile(isOwn);
+      
+      let targetUserId = user?.id;
+      let targetUsername = username;
 
-      if (error) {
-        console.error('Error fetching profile:', error);
+      if (!isOwn && username) {
+        // Fetch profile by username for other users
+        const { data: profileByUsername, error: usernameError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('username', username)
+          .single();
+
+        if (usernameError) {
+          console.error('Error fetching profile by username:', usernameError);
+          // Try to find by user_id if username doesn't exist
+          const { data: profileById, error: idError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', username)
+            .single();
+
+          if (idError) {
+            console.error('Profile not found:', idError);
+            setProfile(null);
+            setLoading(false);
+            return;
+          } else {
+            setProfile(profileById);
+            targetUserId = profileById.user_id;
+            targetUsername = profileById.username;
+          }
+        } else {
+          setProfile(profileByUsername);
+          targetUserId = profileByUsername.user_id;
+          targetUsername = profileByUsername.username;
+        }
       } else {
-        setProfile(data);
+        // Fetch current user's profile
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', user?.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching profile:', error);
+        } else {
+          setProfile(data);
+        }
+      }
+
+      // Fetch videos for the target user
+      if (targetUserId) {
+        await fetchUserVideos(targetUserId);
       }
     } catch (err) {
       console.error('Profile fetch error:', err);
@@ -42,13 +92,12 @@ const Profile = () => {
   };
 
   // Fetch user videos from the new videos table only (all assets in limeytt-uploads)
-  const fetchUserVideos = async () => {
-    if (!user?.id) return;
+  const fetchUserVideos = async (targetUserId: string) => {
     try {
       const { data: dbVideos, error: dbError } = await supabase
         .from('videos')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .order('created_at', { ascending: false });
       setUserVideos(dbVideos || []);
     } catch (err) {
@@ -58,7 +107,13 @@ const Profile = () => {
   };
 
   const handleDeleteVideo = async (videoId: string, videoUrl: string, thumbnailUrl?: string) => {
+    if (!isOwnProfile) {
+      alert("You can only delete your own videos.");
+      return;
+    }
+    
     if (!window.confirm("Are you sure you want to delete this video? This cannot be undone.")) return;
+    
     // Remove from DB
     const { error: dbError } = await supabase.from('videos').delete().eq('id', videoId);
     // Remove from storage (limeytt-uploads)
@@ -71,7 +126,7 @@ const Profile = () => {
       if (thumbPath) await supabase.storage.from('limeytt-uploads').remove([thumbPath]);
     }
     // Refresh list
-    fetchUserVideos();
+    fetchUserVideos(profile.user_id);
   };
 
 
@@ -86,15 +141,52 @@ const Profile = () => {
     );
   }
 
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <div className="sticky top-0 z-10 bg-background border-b border-border p-4">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+              ← Back
+            </Button>
+            <h1 className="text-2xl font-bold text-primary">Profile Not Found</h1>
+            <div></div>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold mb-2">User not found</h2>
+            <p className="text-muted-foreground">The profile you're looking for doesn't exist.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-primary">Profile</h1>
+          {!isOwnProfile && (
+            <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+              ← Back
+            </Button>
+          )}
+          <h1 className="text-2xl font-bold text-primary">
+            {isOwnProfile ? 'Profile' : `@${profile.username}`}
+          </h1>
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm">Settings</Button>
-            <Button variant="outline" size="sm" onClick={signOut}>Logout</Button>
+            {isOwnProfile ? (
+              <>
+                <Button variant="ghost" size="sm">Settings</Button>
+                <Button variant="outline" size="sm" onClick={signOut}>Logout</Button>
+              </>
+            ) : (
+              <Button variant="ghost" size="sm">
+                <MoreVertical size={16} />
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -112,7 +204,7 @@ const Profile = () => {
               />
             ) : (
               <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center text-3xl font-bold text-primary">
-                {profile?.username?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase()}
+                {profile?.username?.charAt(0)?.toUpperCase() || 'U'}
               </div>
             )}
             {/* Avatar is now clickable for full screen view, no camera button */}
@@ -139,7 +231,7 @@ const Profile = () => {
           
           {/* Display name */}
           <p className="text-muted-foreground mb-4">
-            {profile?.display_name || user?.email}
+            {profile?.display_name || profile?.email}
           </p>
           
           {/* Stats */}
@@ -172,36 +264,65 @@ const Profile = () => {
             </Badge>
           )}
 
-          {/* Trini Credits */}
-          <div className="flex items-center space-x-2 mb-6">
-            <span className="text-sm text-muted-foreground">TriniCredits:</span>
-            <Badge variant="secondary" className="bg-primary/10 text-primary">
-              💰 {profile?.trini_credits || 0}
-            </Badge>
-          </div>
+          {/* Trini Credits - Only show for own profile */}
+          {isOwnProfile && (
+            <div className="flex items-center space-x-2 mb-6">
+              <span className="text-sm text-muted-foreground">TriniCredits:</span>
+              <Badge variant="secondary" className="bg-primary/10 text-primary">
+                💰 {profile?.trini_credits || 0}
+              </Badge>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex space-x-3">
-            <Button variant="outline" onClick={() => window.location.href = '/edit-profile'}>
-              Edit Profile
-            </Button>
-            <Button 
-              variant="neon"
-              onClick={() => {
-                const url = `${window.location.origin}/profile/${profile?.username || user?.id}`;
-                if (navigator.share) {
-                  navigator.share({
-                    title: `Check out @${profile?.username || 'user'} on Limey!`,
-                    url
-                  });
-                } else {
-                  navigator.clipboard.writeText(url);
-                  alert('Profile link copied to clipboard!');
-                }
-              }}
-            >
-              Share Profile
-            </Button>
+            {isOwnProfile ? (
+              <>
+                <Button variant="outline" onClick={() => navigate('/edit-profile')}>
+                  Edit Profile
+                </Button>
+                <Button 
+                  variant="neon"
+                  onClick={() => {
+                    const url = `${window.location.origin}/profile/${profile?.username || user?.id}`;
+                    if (navigator.share) {
+                      navigator.share({
+                        title: `Check out @${profile?.username || 'user'} on Limey!`,
+                        url
+                      });
+                    } else {
+                      navigator.clipboard.writeText(url);
+                      alert('Profile link copied to clipboard!');
+                    }
+                  }}
+                >
+                  Share Profile
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline">
+                  Follow
+                </Button>
+                <Button 
+                  variant="neon"
+                  onClick={() => {
+                    const url = `${window.location.origin}/profile/${profile?.username}`;
+                    if (navigator.share) {
+                      navigator.share({
+                        title: `Check out @${profile?.username} on Limey!`,
+                        url
+                      });
+                    } else {
+                      navigator.clipboard.writeText(url);
+                      alert('Profile link copied to clipboard!');
+                    }
+                  }}
+                >
+                  Share Profile
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -235,19 +356,21 @@ const Profile = () => {
                       {/* No cover image, just a background */}
                     </div>
                   )}
-                  {/* 3-dots menu */}
-                  <div className="absolute top-2 right-2 z-10">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleDeleteVideo(video.id, video.video_url, video.thumbnail_url);
-                      }}
-                    >
-                      <MoreVertical size={18} />
-                    </Button>
-                  </div>
+                  {/* 3-dots menu - Only show for own videos */}
+                  {isOwnProfile && (
+                    <div className="absolute top-2 right-2 z-10">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleDeleteVideo(video.id, video.video_url, video.thumbnail_url);
+                        }}
+                      >
+                        <MoreVertical size={18} />
+                      </Button>
+                    </div>
+                  )}
                   <div className="absolute bottom-2 right-2">
                     <Badge variant="secondary" className="bg-black/70 text-white text-xs">
                       {video.duration ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}` : '0:00'}
@@ -268,10 +391,14 @@ const Profile = () => {
             </div>
             {userVideos.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-muted-foreground mb-4">No videos yet</p>
-                <Button variant="neon" onClick={() => window.location.href = '/upload'}>
-                  Create Your First Video
-                </Button>
+                <p className="text-muted-foreground mb-4">
+                  {isOwnProfile ? 'No videos yet' : 'No videos posted yet'}
+                </p>
+                {isOwnProfile && (
+                  <Button variant="neon" onClick={() => navigate('/upload')}>
+                    Create Your First Video
+                  </Button>
+                )}
               </div>
             )}
           </TabsContent>
