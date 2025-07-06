@@ -26,15 +26,12 @@ const Profile = () => {
     try {
       setLoading(true);
       
-      // Determine if this is the current user's profile or another user's profile
-      const isOwn = !username || username === user?.id || username === profile?.username;
-      setIsOwnProfile(isOwn);
-      
       let targetUserId = user?.id;
       let targetUsername = username;
+      let isOwn = false;
 
-      if (!isOwn && username) {
-        // Fetch profile by username for other users
+      if (username) {
+        // Fetch profile by username
         const { data: profileByUsername, error: usernameError } = await supabase
           .from('profiles')
           .select('*')
@@ -59,14 +56,18 @@ const Profile = () => {
             setProfile(profileById);
             targetUserId = profileById.user_id;
             targetUsername = profileById.username;
+            // Check if this is the current user's profile
+            isOwn = profileById.user_id === user?.id;
           }
         } else {
           setProfile(profileByUsername);
           targetUserId = profileByUsername.user_id;
           targetUsername = profileByUsername.username;
+          // Check if this is the current user's profile
+          isOwn = profileByUsername.user_id === user?.id;
         }
       } else {
-        // Fetch current user's profile
+        // No username provided, fetch current user's profile
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -77,8 +78,11 @@ const Profile = () => {
           console.error('Error fetching profile:', error);
         } else {
           setProfile(data);
+          isOwn = true;
         }
       }
+
+      setIsOwnProfile(isOwn);
 
       // Fetch videos for the target user
       if (targetUserId) {
@@ -340,22 +344,11 @@ const Profile = () => {
               {userVideos.map((video) => (
                 <Card
                   key={video.id}
-                  className="relative aspect-[9/16] cursor-pointer group"
+                  className="relative aspect-[9/16] cursor-pointer group bg-black/10"
                   onClick={() => {
                     // TODO: Open video player modal here
                   }}
                 >
-                  {video.thumbnail_url ? (
-                    <img
-                      src={`https://<YOUR_SUPABASE_PROJECT_ID>.supabase.co/storage/v1/object/public/limeytt-uploads/${video.thumbnail_url}`}
-                      alt={video.title}
-                      className="w-full h-full object-cover rounded-lg group-hover:opacity-80 transition-opacity"
-                    />
-                  ) : (
-                    <div className="w-full h-full object-cover rounded-lg group-hover:opacity-80 transition-opacity bg-black/10 flex items-center justify-center">
-                      {/* No cover image, just a background */}
-                    </div>
-                  )}
                   {/* 3-dots menu - Only show for own videos */}
                   {isOwnProfile && (
                     <div className="absolute top-2 right-2 z-10">
@@ -379,11 +372,6 @@ const Profile = () => {
                   <div className="absolute bottom-2 left-2">
                     <div className="text-white text-xs">
                       👁️ {video.view_count || 0}
-                    </div>
-                  </div>
-                  <div className="absolute bottom-10 left-2 right-2">
-                    <div className="text-white text-xs font-semibold truncate">
-                      {video.title}
                     </div>
                   </div>
                 </Card>

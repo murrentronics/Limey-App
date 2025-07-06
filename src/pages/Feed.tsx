@@ -57,6 +57,12 @@ const Feed = () => {
             if (video) {
               video.play();
               setIsPlaying(prev => ({ ...prev, [videoId]: true }));
+              
+              // Record view for this video
+              const videoData = currentVideos.find(v => v.id === videoId);
+              if (videoData) {
+                recordVideoView(videoId, videoData.user_id);
+              }
             }
           } else {
             // Pause the video that's no longer visible
@@ -76,7 +82,7 @@ const Feed = () => {
     videoContainers.forEach(container => observer.observe(container));
 
     return () => observer.disconnect();
-  }, [videos, searchResults]);
+  }, [videos, searchResults, currentVideos]);
 
   // Search function for hashtags, tags, categories, title, description
   const handleSearch = async (e?: React.FormEvent) => {
@@ -338,6 +344,24 @@ const Feed = () => {
     }
   };
 
+  // Record video view (only for other users' videos)
+  const recordVideoView = async (videoId: string, creatorId: string) => {
+    if (!user || user.id === creatorId) return; // Don't record own views
+    
+    try {
+      // Call the database function to record the view
+      const { error } = await supabase.rpc('record_video_view', {
+        video_uuid: videoId
+      });
+      
+      if (error) {
+        console.error('Error recording video view:', error);
+      }
+    } catch (error) {
+      console.error('Error recording video view:', error);
+    }
+  };
+
   const currentVideos = searchResults !== null ? searchResults : videos;
 
   // Helper function to get username with fallback
@@ -361,6 +385,10 @@ const Feed = () => {
   // Helper function to get profile URL for navigation
   const getProfileUrl = (video: any) => {
     const username = getUsername(video);
+    // If this is the current user's video, navigate to their own profile
+    if (user && video.user_id === user.id) {
+      return '/profile';
+    }
     return `/profile/${username}`;
   };
 

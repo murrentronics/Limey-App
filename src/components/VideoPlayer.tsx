@@ -163,8 +163,31 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
     if (videoRef.current) {
       videoRef.current.play();
       setIsPlaying(true);
+      
+      // Record view for this video (only for other users' videos)
+      if (user && video.user_id !== user.id) {
+        recordVideoView(video.id, video.user_id);
+      }
     }
-  }, [video.id]);
+  }, [video.id, user]);
+
+  // Record video view (only for other users' videos)
+  const recordVideoView = async (videoId: string, creatorId: string) => {
+    if (!user || user.id === creatorId) return; // Don't record own views
+    
+    try {
+      // Call the database function to record the view
+      const { error } = await supabase.rpc('record_video_view', {
+        video_uuid: videoId
+      });
+      
+      if (error) {
+        console.error('Error recording video view:', error);
+      }
+    } catch (error) {
+      console.error('Error recording video view:', error);
+    }
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setStartY(e.touches[0].clientY);
@@ -264,6 +287,10 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
   // Helper function to get profile URL for navigation
   const getProfileUrl = (video: any) => {
     const username = getUsername(video);
+    // If this is the current user's video, navigate to their own profile
+    if (user && video.user_id === user.id) {
+      return '/profile';
+    }
     return `/profile/${username}`;
   };
 
