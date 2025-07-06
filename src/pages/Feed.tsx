@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share, Play, Volume2, VolumeX, Plus } from "lucide-react";
-import BottomNavigation from "@/components/BottomNavigation";
+import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus } from "lucide-react";
+import BottomNavigation from "@/components/ui/BottomNavigation";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const Feed = () => {
   const [activeCategory, setActiveCategory] = useState("All");
@@ -326,15 +327,16 @@ const Feed = () => {
   };
 
   const handleShare = async (video: any) => {
+    const videoUrl = `${window.location.origin}/video/${video.id}`;
     try {
       await navigator.share({
         title: video.title,
         text: video.description,
-        url: window.location.href
+        url: videoUrl
       });
     } catch (error) {
       // Fallback: copy to clipboard
-      navigator.clipboard.writeText(window.location.href);
+      navigator.clipboard.writeText(videoUrl);
     }
   };
 
@@ -556,13 +558,10 @@ const Feed = () => {
                         {/* User Profile */}
                         <div className="flex items-center space-x-3">
                           <div className="relative">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-red-500 p-0.5">
-                              <div className="w-full h-full rounded-full bg-black flex items-center justify-center">
-                                <span className="text-white font-bold text-lg">
-                                  {getUsername(video).charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                            </div>
+                            <Avatar className="w-12 h-12">
+                              <AvatarImage src={video.profiles?.avatar_url || undefined} alt={getUsername(video)} />
+                              <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+                            </Avatar>
                             {/* Follow button - only show if not the current user */}
                             {user && video.user_id !== user.id && (
                               <button
@@ -654,11 +653,8 @@ const Feed = () => {
                             className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
                             data-control
                           >
-                            <Share size={24} className="text-white" />
+                            <Share2 size={24} className="text-white" />
                           </Button>
-                          <span className="text-white text-xs font-semibold mt-1">
-                            Share
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -736,13 +732,10 @@ const Feed = () => {
                       {/* User Profile */}
                       <div className="flex items-center space-x-3">
                         <div className="relative">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-red-500 p-0.5">
-                            <div className="w-full h-full rounded-full bg-black flex items-center justify-center">
-                              <span className="text-white font-bold text-lg">
-                                {getUsername(video).charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                          </div>
+                          <Avatar className="w-12 h-12">
+                            <AvatarImage src={video.profiles?.avatar_url || undefined} alt={getUsername(video)} />
+                            <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+                          </Avatar>
                           {/* Follow button - only show if not the current user */}
                           {user && video.user_id !== user.id && (
                             <button
@@ -834,11 +827,8 @@ const Feed = () => {
                           className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
                           data-control
                         >
-                          <Share size={24} className="text-white" />
+                          <Share2 size={24} className="text-white" />
                         </Button>
-                        <span className="text-white text-xs font-semibold mt-1">
-                          Share
-                        </span>
                       </div>
                     </div>
                   </div>
