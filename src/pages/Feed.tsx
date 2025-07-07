@@ -90,7 +90,7 @@ const Feed = () => {
             
             // Play the video that's now visible
             const video = videoRefs.current[videoId];
-            if (video && !isPlaying[videoId]) {
+            if (video) {
               // Ensure video is muted for autoplay
               video.muted = true;
               video.currentTime = 0;
@@ -108,7 +108,7 @@ const Feed = () => {
           } else {
             // Pause the video that's no longer visible
             const video = videoRefs.current[videoId];
-            if (video && isPlaying[videoId]) {
+            if (video) {
               video.pause();
               video.currentTime = 0;
               setIsPlaying(prev => ({ ...prev, [videoId]: false }));
@@ -363,8 +363,11 @@ const Feed = () => {
           }
         });
         // Play the selected video
-        video.play();
-        setIsPlaying(prev => ({ ...prev, [videoId]: true }));
+        video.play().then(() => {
+          setIsPlaying(prev => ({ ...prev, [videoId]: true }));
+        }).catch((error) => {
+          console.log('Manual play failed for video:', videoId, error);
+        });
       }
     }
   };

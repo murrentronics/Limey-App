@@ -6,7 +6,7 @@ const Index = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center space-y-8">
-        <LimeyLogo showCircle={true} />
+        <LimeyLogo showCircle={true} circleSize={192} wordmark={true} />
         
         <div className="space-y-4">
           <h2 className="text-2xl text-foreground">

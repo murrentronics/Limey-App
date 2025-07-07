@@ -42,7 +42,7 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 space-y-6">
-        <LimeyLogo showCircle={true} />
+        <LimeyLogo showCircle={true} wordmark={true} />
         
         <div className="text-center">
           <h2 className="text-2xl font-bold text-foreground">Welcome Back</h2>
