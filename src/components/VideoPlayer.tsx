@@ -39,10 +39,19 @@ interface VideoPlayerProps {
 
 // ...existing code...
 const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious }: VideoPlayerProps) => {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
-  const [startY, setStartY] = useState(0);
+  const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [comments, setComments] = useState<CommentRow[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [editingComment, setEditingComment] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [showComments, setShowComments] = useState(false);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchStartTime, setTouchStartTime] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -57,12 +66,6 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
     video_id: string;
     profiles?: { username: string; avatar_url?: string } | null;
   };
-  const [comments, setComments] = useState<CommentRow[]>([]);
-  const [commentInput, setCommentInput] = useState("");
-  const [loadingComment, setLoadingComment] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [showMenuId, setShowMenuId] = useState<string | null>(null);
 
   const viewTimer = useRef<NodeJS.Timeout | null>(null);
   const hasRecordedView = useRef(false);
@@ -89,10 +92,9 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
 
   // Add comment
   const handleAddComment = async () => {
-    if (!user || !commentInput.trim()) return;
-    setLoadingComment(true);
+    if (!user || !newComment.trim()) return;
     const { error, data } = await supabase.from("comments").insert({
-      content: commentInput,
+      content: newComment,
       user_id: user.id,
       video_id: video.id,
     }).select("*, profiles(username, avatar_url)").single();
@@ -102,16 +104,15 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
         profiles: hasProfile(data.profiles) ? data.profiles : null,
       } as CommentRow;
       setComments((prev) => [fixedData, ...prev]);
-      setCommentInput("");
+      setNewComment("");
     }
-    setLoadingComment(false);
   };
 
   // Edit comment
   const handleSaveEdit = async (id: string) => {
-    if (!editValue.trim()) return;
+    if (!editText.trim()) return;
     const { error, data } = await supabase.from("comments").update({
-      content: editValue,
+      content: editText,
       updated_at: new Date().toISOString(),
     }).eq("id", id).select("*, profiles(username, avatar_url)").single();
     if (!error && data) {
@@ -120,9 +121,8 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
         profiles: hasProfile(data.profiles) ? data.profiles : null,
       } as CommentRow;
       setComments((prev) => prev.map((c) => c.id === id ? fixedData : c));
-      setEditingId(null);
-      setEditValue("");
-      setShowMenuId(null);
+      setEditingComment(null);
+      setEditText("");
     }
   };
 
@@ -131,9 +131,8 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
     const { error } = await supabase.from("comments").delete().eq("id", id);
     if (!error) {
       setComments((prev) => prev.filter((c) => c.id !== id));
-      setEditingId(null);
-      setEditValue("");
-      setShowMenuId(null);
+      setEditingComment(null);
+      setEditText("");
     }
   };
   // Restore handleShare function
@@ -156,9 +155,8 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
 
   // Cancel edit
   const handleCancelEdit = () => {
-    setEditingId(null);
-    setEditValue("");
-    setShowMenuId(null);
+    setEditingComment(null);
+    setEditText("");
   };
 
   useEffect(() => {
@@ -200,12 +198,13 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    setStartY(e.touches[0].clientY);
+    setTouchStartY(e.touches[0].clientY);
+    setTouchStartTime(Date.now());
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     const endY = e.changedTouches[0].clientY;
-    const diffY = startY - endY;
+    const diffY = touchStartY - endY;
     
     // Swipe threshold
     if (Math.abs(diffY) > 50) {
@@ -326,6 +325,10 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', targetUserId);
+        
+        // Update local state
+        setFollowStatus(prev => ({ ...prev, [targetUserId]: false }));
+        return false; // Now not following
       } else {
         // Follow
         await supabase
@@ -334,11 +337,40 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
             follower_id: user.id,
             following_id: targetUserId
           });
+        
+        // Update local state
+        setFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
+        return true; // Now following
       }
     } catch (error) {
       console.error('Error following/unfollowing:', error);
+      return followStatus[targetUserId] || false; // Return current status on error
     }
   };
+
+  // Check follow status for the current video
+  const checkFollowStatus = async () => {
+    if (!user || video.user_id === user.id) return;
+    
+    try {
+      const { data: existingFollow } = await supabase
+        .from('follows')
+        .select('*')
+        .eq('follower_id', user.id)
+        .eq('following_id', video.user_id)
+        .single();
+      
+      setFollowStatus(prev => ({ ...prev, [video.user_id]: !!existingFollow }));
+    } catch (error) {
+      console.error('Error checking follow status:', error);
+      setFollowStatus(prev => ({ ...prev, [video.user_id]: false }));
+    }
+  };
+
+  // Check follow status when video changes
+  useEffect(() => {
+    checkFollowStatus();
+  }, [video.user_id, user]);
 
   return (
     <div 
@@ -372,8 +404,16 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
           className="w-full h-full object-cover"
           loop
           autoPlay
+          muted={true}
           playsInline
-          onPlay={() => setIsPlaying(true)}
+          onPlay={() => {
+            setIsPlaying(true);
+            // Unmute after successful play
+            if (videoRef.current) {
+              videoRef.current.muted = false;
+              setIsMuted(false);
+            }
+          }}
           onPause={() => setIsPlaying(false)}
           onTimeUpdate={handleTimeUpdate}
         />
@@ -388,6 +428,20 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
             data-control
           >
             <X size={20} />
+          </Button>
+          
+          {/* Mute Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMute();
+            }}
+            className="text-white p-2 bg-black/30 hover:bg-black/50 rounded-full"
+            data-control
+          >
+            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
           </Button>
         </div>
 
@@ -431,14 +485,18 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
                   {/* Follow button - only show if not the current user */}
                   {user && video.user_id !== user.id && (
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        handleFollow(video.user_id, getUsername(video));
+                        await handleFollow(video.user_id, getUsername(video));
                       }}
                       className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-100 transition-colors"
                       data-control
                     >
-                      <Plus size={12} className="text-black" />
+                      {followStatus[video.user_id] ? (
+                        <span className="text-green-600 font-bold text-sm">✓</span>
+                      ) : (
+                        <Plus size={12} className="text-black" />
+                      )}
                     </button>
                   )}
                 </div>

@@ -406,10 +406,14 @@ const Profile = () => {
               role="button"
             ></div>
             {/* View Modal for Avatar */}
-            {showViewModal && profile?.avatar_url && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowViewModal(false)}>
+            {showViewModal && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black" onClick={() => setShowViewModal(false)}>
                 <button className="absolute top-4 right-4 text-white text-2xl bg-black/60 rounded-full px-3 py-1" onClick={e => { e.stopPropagation(); setShowViewModal(false); }}>&times;</button>
-                <img src={profile.avatar_url} alt="Profile" className="max-w-xs max-h-[80vh] rounded-lg border-2 border-primary bg-white" onClick={e => e.stopPropagation()} />
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Profile" className="max-w-xs max-h-[80vh] rounded-lg border-2 border-primary bg-white" onClick={e => e.stopPropagation()} />
+                ) : (
+                  <img src="/limey-tree-logo.png" alt="Default Profile" className="max-w-xs max-h-[80vh] rounded-lg border-2 border-primary bg-white" onClick={e => e.stopPropagation()} />
+                )}
               </div>
             )}
           </div>
@@ -442,7 +446,7 @@ const Profile = () => {
 
           {/* Overlay Popup for Following/Followers */}
           {showFollowOverlay && (
-            <div className="fixed inset-0 z-50 flex flex-col bg-black/90">
+            <div className="fixed inset-0 z-50 flex flex-col bg-black">
               <div className="flex justify-end p-4">
                 <button className="text-white text-lg font-bold" onClick={() => setShowFollowOverlay(null)}>Close</button>
               </div>
@@ -458,7 +462,11 @@ const Profile = () => {
                       return (
                         <li key={userId} className="flex items-center justify-between py-3">
                           <div className="flex items-center gap-3">
-                            {userObj?.avatar_url && <img src={userObj.avatar_url} alt="avatar" className="w-10 h-10 rounded-full" />}
+                            {userObj?.avatar_url ? (
+                              <img src={userObj.avatar_url} alt="avatar" className="w-10 h-10 rounded-full" />
+                            ) : (
+                              <img src="/limey-tree-logo.png" alt="default avatar" className="w-10 h-10 rounded-full" />
+                            )}
                             <button
                               className="font-semibold text-white underline hover:text-primary transition"
                               onClick={() => {

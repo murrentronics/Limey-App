@@ -21,6 +21,7 @@ const Feed = () => {
   const [isPlaying, setIsPlaying] = useState<{ [key: string]: boolean }>({});
   const [isMuted, setIsMuted] = useState<{ [key: string]: boolean }>({});
   const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
+  const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
   const [globalMuted, setGlobalMuted] = useState(false);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,7 +71,7 @@ const Feed = () => {
     }
   }, [showSearch]);
 
-  // Auto-play video when it becomes visible
+  // Auto-play video when it becomes visible - TikTok style
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -79,29 +80,46 @@ const Feed = () => {
           if (!videoId) return;
           
           if (entry.isIntersecting) {
-            // Play the video that's now visible from the beginning
-            const video = videoRefs.current[videoId];
-            if (video) {
-              video.currentTime = 0;
-              video.play();
-              setIsPlaying(prev => ({ ...prev, [videoId]: true }));
-              // Record view for this video
-              const videoData = currentVideos.find(v => v.id === videoId);
-              if (videoData) {
-                recordVideoView(videoId, videoData.user_id);
+            // Pause all other videos first
+            Object.keys(videoRefs.current).forEach((id) => {
+              if (id !== videoId && videoRefs.current[id]) {
+                videoRefs.current[id]?.pause();
+                setIsPlaying(prev => ({ ...prev, [id]: false }));
               }
+            });
+            
+            // Play the video that's now visible
+            const video = videoRefs.current[videoId];
+            if (video && !isPlaying[videoId]) {
+              // Ensure video is muted for autoplay
+              video.muted = true;
+              video.currentTime = 0;
+              
+              video.play().then(() => {
+                setIsPlaying(prev => ({ ...prev, [videoId]: true }));
+                // Unmute after successful play if global mute is off
+                if (!globalMuted) {
+                  video.muted = false;
+                }
+              }).catch((error) => {
+                console.log('Autoplay failed for video:', videoId, error);
+              });
             }
           } else {
             // Pause the video that's no longer visible
             const video = videoRefs.current[videoId];
-            if (video) {
+            if (video && isPlaying[videoId]) {
               video.pause();
+              video.currentTime = 0;
               setIsPlaying(prev => ({ ...prev, [videoId]: false }));
             }
           }
         });
       },
-      { threshold: 0.5 } // Trigger when 50% of video is visible
+      { 
+        threshold: 0.5, // Trigger when 50% of video is visible
+        rootMargin: '0px 0px 0px 0px' // No margin
+      }
     );
 
     // Observe all video containers
@@ -109,7 +127,47 @@ const Feed = () => {
     videoContainers.forEach(container => observer.observe(container));
 
     return () => observer.disconnect();
-  }, [videos, searchResults, currentVideos]);
+  }, [videos, searchResults, isPlaying, globalMuted]);
+
+  // Play first video when videos load
+  useEffect(() => {
+    if (videos.length > 0 && !loading) {
+      setTimeout(() => {
+        const firstVideoId = videos[0].id;
+        const video = videoRefs.current[firstVideoId];
+        if (video) {
+          // Pause all videos first
+          Object.keys(videoRefs.current).forEach((id) => {
+            if (id !== firstVideoId && videoRefs.current[id]) {
+              videoRefs.current[id]?.pause();
+              setIsPlaying(prev => ({ ...prev, [id]: false }));
+            }
+          });
+          
+          // Play first video
+          video.currentTime = 0;
+          // Start muted for autoplay to work
+          video.muted = true;
+          
+          const playPromise = video.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                setIsPlaying(prev => ({ ...prev, [firstVideoId]: true }));
+                // Unmute after playing if global mute is off
+                if (!globalMuted) {
+                  video.muted = false;
+                }
+              })
+              .catch((error) => {
+                console.log('First video autoplay failed:', error);
+                setIsPlaying(prev => ({ ...prev, [firstVideoId]: true }));
+              });
+          }
+        }
+      }, 100);
+    }
+  }, [videos, loading]);
 
   // Search function for hashtags, tags, categories, title, description
   const handleSearch = async (e?: React.FormEvent) => {
@@ -254,11 +312,14 @@ const Feed = () => {
           }));
           
           setVideos(videosWithProfiles);
+          await checkFollowStatus(videosWithProfiles);
         } else {
           setVideos(fallbackData || []);
+          await checkFollowStatus(fallbackData || []);
         }
       } else {
         setVideos(data || []);
+        await checkFollowStatus(data || []);
       }
     } catch (error) {
       console.error('Error fetching videos:', error);
@@ -294,6 +355,14 @@ const Feed = () => {
         video.pause();
         setIsPlaying(prev => ({ ...prev, [videoId]: false }));
       } else {
+        // Pause all other videos first
+        Object.keys(videoRefs.current).forEach((id) => {
+          if (id !== videoId && videoRefs.current[id]) {
+            videoRefs.current[id]?.pause();
+            setIsPlaying(prev => ({ ...prev, [id]: false }));
+          }
+        });
+        // Play the selected video
         video.play();
         setIsPlaying(prev => ({ ...prev, [videoId]: true }));
       }
@@ -301,13 +370,13 @@ const Feed = () => {
   };
 
   const toggleGlobalMute = () => {
-    setGlobalMuted(!globalMuted);
+    const newMutedState = !globalMuted;
+    setGlobalMuted(newMutedState);
     // Update all videos to match global mute state
     Object.keys(videoRefs.current).forEach(videoId => {
       const video = videoRefs.current[videoId];
       if (video) {
-        video.muted = !globalMuted;
-        setIsMuted(prev => ({ ...prev, [videoId]: !globalMuted }));
+        video.muted = newMutedState;
       }
     });
   };
@@ -360,6 +429,10 @@ const Feed = () => {
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', targetUserId);
+        
+        // Update local state
+        setFollowStatus(prev => ({ ...prev, [targetUserId]: false }));
+        return false; // Now not following
       } else {
         // Follow
         await supabase
@@ -368,9 +441,14 @@ const Feed = () => {
             follower_id: user.id,
             following_id: targetUserId
           });
+        
+        // Update local state
+        setFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
+        return true; // Now following
       }
     } catch (error) {
       console.error('Error following/unfollowing:', error);
+      return followStatus[targetUserId] || false; // Return current status on error
     }
   };
 
@@ -409,6 +487,35 @@ const Feed = () => {
       is_following: v.is_following ?? false,
       follower_count: v.follower_count ?? 0,
     }));
+
+  // Check follow status for all videos
+  const checkFollowStatus = async (videosArr: any[]) => {
+    if (!user) return;
+    
+    try {
+      const userIds = videosArr.map(video => video.user_id).filter(id => id !== user.id);
+      if (userIds.length === 0) return;
+      
+      const { data: follows } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+        .in('following_id', userIds);
+      
+      const followingSet = new Set(follows?.map(f => f.following_id) || []);
+      const newFollowStatus: { [key: string]: boolean } = {};
+      
+      videosArr.forEach(video => {
+        if (video.user_id !== user.id) {
+          newFollowStatus[video.user_id] = followingSet.has(video.user_id);
+        }
+      });
+      
+      setFollowStatus(prev => ({ ...prev, ...newFollowStatus }));
+    } catch (error) {
+      console.error('Error checking follow status:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-black">
@@ -478,8 +585,8 @@ const Feed = () => {
         )}
       </div>
 
-      {/* Global Mute Toggle - Outside Header, Aligned with Action Buttons */}
-      <div className="fixed top-24 right-4 z-40">
+      {/* Global Mute Toggle - Below Header */}
+      <div className="fixed top-20 right-4 z-40">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -552,7 +659,7 @@ const Feed = () => {
                     src={video.video_url}
                     className="w-full h-full object-cover"
                     loop
-                    muted={isMuted[video.id] || false}
+                      muted={globalMuted}
                     playsInline
                     onPlay={() => setIsPlaying(prev => ({ ...prev, [video.id]: true }))}
                     onPause={() => setIsPlaying(prev => ({ ...prev, [video.id]: false }))}
@@ -573,14 +680,18 @@ const Feed = () => {
                             {/* Follow button - only show if not the current user */}
                             {user && video.user_id !== user.id && (
                               <button
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  handleFollow(video.user_id, getUsername(video));
+                                  await handleFollow(video.user_id, getUsername(video));
                                 }}
                                 className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-100 transition-colors"
                                 data-control
                               >
-                                <Plus size={12} className="text-black" />
+                                {followStatus[video.user_id] ? (
+                                  <span className="text-green-600 font-bold text-sm">✓</span>
+                                ) : (
+                                  <Plus size={12} className="text-black" />
+                                )}
                               </button>
                             )}
                           </div>
@@ -664,42 +775,6 @@ const Feed = () => {
                             <Share2 size={24} className="text-white" />
                           </Button>
                         </div>
-
-                        {/* Follow Button */}
-                        <div className="flex flex-col items-center">
-                          {user && video.user_id !== user.id && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await handleFollow(video.user_id, getUsername(video));
-                                setVideos((prev) => prev.map((v) =>
-                                  v.id === video.id
-                                    ? {
-                                        ...v,
-                                        is_following: !v.is_following,
-                                        follower_count: v.is_following
-                                          ? (v.follower_count || 1) - 1
-                                          : (v.follower_count || 0) + 1,
-                                      }
-                                    : v
-                                ));
-                              }}
-                              className={`w-24 mb-2 rounded-full font-semibold transition-colors ${video.is_following ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-white text-black hover:bg-gray-200 border border-gray-300'}`}
-                              data-control
-                            >
-                              {video.is_following ? (
-                                <span className="flex items-center gap-1">✔ Following</span>
-                              ) : (
-                                <span>Follow</span>
-                              )}
-                            </Button>
-                          )}
-                          <span className="text-white text-xs font-semibold mt-1">
-                            {video.follower_count || 0} Followers
-                          </span>
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -720,6 +795,8 @@ const Feed = () => {
                       </Button>
                     </div>
                   )}
+
+                  
                 </div>
               ))}
             </div>
@@ -762,7 +839,7 @@ const Feed = () => {
                   src={video.video_url}
                   className="w-full h-full object-cover"
                   loop
-                  muted={isMuted[video.id] || false}
+                    muted={globalMuted}
                   playsInline
                   onPlay={() => setIsPlaying(prev => ({ ...prev, [video.id]: true }))}
                   onPause={() => setIsPlaying(prev => ({ ...prev, [video.id]: false }))}
@@ -783,14 +860,18 @@ const Feed = () => {
                           {/* Follow button - only show if not the current user */}
                           {user && video.user_id !== user.id && (
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                handleFollow(video.user_id, getUsername(video));
+                                await handleFollow(video.user_id, getUsername(video));
                               }}
                               className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-100 transition-colors"
                               data-control
                             >
-                              <Plus size={12} className="text-black" />
+                              {followStatus[video.user_id] ? (
+                                <span className="text-green-600 font-bold text-sm">✓</span>
+                              ) : (
+                                <Plus size={12} className="text-black" />
+                              )}
                             </button>
                           )}
                         </div>
@@ -874,42 +955,6 @@ const Feed = () => {
                           <Share2 size={24} className="text-white" />
                         </Button>
                       </div>
-
-                      {/* Follow Button */}
-                      <div className="flex flex-col items-center">
-                        {user && video.user_id !== user.id && (
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              await handleFollow(video.user_id, getUsername(video));
-                              setVideos((prev) => prev.map((v) =>
-                                v.id === video.id
-                                  ? {
-                                      ...v,
-                                      is_following: !v.is_following,
-                                      follower_count: v.is_following
-                                        ? (v.follower_count || 1) - 1
-                                        : (v.follower_count || 0) + 1,
-                                    }
-                                  : v
-                              ));
-                            }}
-                            className={`w-24 mb-2 rounded-full font-semibold transition-colors ${video.is_following ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-white text-black hover:bg-gray-200 border border-gray-300'}`}
-                            data-control
-                          >
-                            {video.is_following ? (
-                              <span className="flex items-center gap-1">✔ Following</span>
-                            ) : (
-                              <span>Follow</span>
-                            )}
-                          </Button>
-                        )}
-                        <span className="text-white text-xs font-semibold mt-1">
-                          {video.follower_count || 0} Followers
-                        </span>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -930,6 +975,8 @@ const Feed = () => {
                     </Button>
                   </div>
                 )}
+
+
               </div>
             ))}
           </div>
