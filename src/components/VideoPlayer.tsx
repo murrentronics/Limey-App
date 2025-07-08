@@ -447,12 +447,15 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
 
         {/* Center Play Button - Only show when paused */}
         {!isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center z-10">
             <Button
               variant="ghost"
-              className="w-16 h-16 rounded-full bg-white/20 hover:bg-white/30 text-white pointer-events-auto"
-              style={{ pointerEvents: 'none' }}
-              tabIndex={-1}
+              className="w-16 h-16 rounded-full bg-white/20 hover:bg-white/30 text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+              data-control
             >
               <Play size={32} className="ml-1" />
             </Button>

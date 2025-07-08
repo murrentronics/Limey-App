@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical, ChevronDown, X } from "lucide-react";
+import { MoreVertical, ChevronDown, X, Settings } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
+import VideoPlayer from "@/components/VideoPlayer";
 
 const Profile = () => {
   const { user, signOut } = useAuth();
@@ -25,6 +26,8 @@ const Profile = () => {
   const [followingList, setFollowingList] = useState<any[]>([]);
   const [followersList, setFollowersList] = useState<any[]>([]);
   const [loadingFollowList, setLoadingFollowList] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -369,7 +372,9 @@ const Profile = () => {
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
               <>
-                <Button variant="ghost" size="sm">Settings</Button>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
+                  <Settings size={16} />
+                </Button>
                 <Button variant="outline" size="sm" onClick={signOut}>Logout</Button>
               </>
             ) : (
@@ -526,16 +531,15 @@ const Profile = () => {
                 <Button 
                   variant="neon"
                   onClick={() => {
-                    const url = `${window.location.origin}/profile/${profile?.username || user?.id}`;
-                    if (navigator.share) {
-                      navigator.share({
-                        title: `Check out @${profile?.username || 'user'} on Limey!`,
-                        url
-                      });
-                    } else {
-                      navigator.clipboard.writeText(url);
-                      alert('Profile link copied to clipboard!');
-                    }
+                    const profileUrl = `${window.location.origin}/profile/${profile?.username}`;
+                    navigator.share({
+                      title: `${profile?.display_name || profile?.username}'s Profile`,
+                      text: `Check out ${profile?.display_name || profile?.username}'s profile on Limey!`,
+                      url: profileUrl
+                    }).catch(() => {
+                      // Fallback: copy to clipboard
+                      navigator.clipboard.writeText(profileUrl);
+                    });
                   }}
                 >
                   Share Profile
@@ -576,20 +580,9 @@ const Profile = () => {
                 </div>
                 <Button 
                   variant="neon"
-                  onClick={() => {
-                    const url = `${window.location.origin}/profile/${profile?.username}`;
-                    if (navigator.share) {
-                      navigator.share({
-                        title: `Check out @${profile?.username} on Limey!`,
-                        url
-                      });
-                    } else {
-                      navigator.clipboard.writeText(url);
-                      alert('Profile link copied to clipboard!');
-                    }
-                  }}
+                  onClick={() => navigate(`/message/${profile?.username || user?.id}`)}
                 >
-                  Share Profile
+                  Message
                 </Button>
               </>
             )}
@@ -607,12 +600,13 @@ const Profile = () => {
           </TabsList>
           <TabsContent value="videos" className="mt-4">
             <div className="grid grid-cols-3 gap-2">
-              {userVideos.map((video) => (
+              {userVideos.map((video, idx) => (
                 <Card
                   key={video.id}
                   className="relative aspect-[9/16] cursor-pointer group bg-black/10"
                   onClick={() => {
-                    // TODO: Open video player modal here
+                    setCurrentVideoIndex(idx);
+                    setShowVideoModal(true);
                   }}
                 >
                   {/* 3-dots menu - Only show for own videos */}
@@ -668,6 +662,17 @@ const Profile = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {showVideoModal && currentVideoIndex !== null && (
+        <VideoPlayer
+          video={userVideos[currentVideoIndex]}
+          videos={userVideos}
+          currentIndex={currentVideoIndex}
+          onClose={() => setShowVideoModal(false)}
+          onNext={() => setCurrentVideoIndex(i => (i !== null && i < userVideos.length - 1 ? i + 1 : i))}
+          onPrevious={() => setCurrentVideoIndex(i => (i !== null && i > 0 ? i - 1 : i))}
+        />
+      )}
 
       {/* Bottom Navigation */}
       <BottomNavigation />

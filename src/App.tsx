@@ -15,6 +15,9 @@ import Profile from "./pages/Profile";
 import Upload from "./pages/Upload";
 import Settings from "./pages/Settings";
 import EditProfile from "@/pages/EditProfile";
+import Inbox from "@/pages/Inbox";
+import Chat from "@/pages/Chat";
+import Message from "@/pages/Message";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +37,9 @@ const App = () => (
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/profile/:username" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
+            <Route path="/chat/:chatId" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+            <Route path="/message/:username" element={<ProtectedRoute><Message /></ProtectedRoute>} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/welcome" element={<Index />} />

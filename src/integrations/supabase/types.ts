@@ -284,35 +284,97 @@ export type Database = {
           },
         ]
       }
-      messages: {
+      chats: {
         Row: {
-          content: string
-          created_at: string
           id: string
-          is_read: boolean | null
-          receiver_id: string
           sender_id: string
+          receiver_id: string
+          last_message: string | null
+          deleted_for_sender: boolean
+          deleted_for_receiver: boolean
+          created_at: string
           updated_at: string
         }
         Insert: {
-          content: string
-          created_at?: string
           id?: string
-          is_read?: boolean | null
-          receiver_id: string
           sender_id: string
+          receiver_id: string
+          last_message?: string | null
+          deleted_for_sender?: boolean
+          deleted_for_receiver?: boolean
+          created_at?: string
           updated_at?: string
         }
         Update: {
-          content?: string
-          created_at?: string
           id?: string
-          is_read?: boolean | null
-          receiver_id?: string
           sender_id?: string
+          receiver_id?: string
+          last_message?: string | null
+          deleted_for_sender?: boolean
+          deleted_for_receiver?: boolean
+          created_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "chats_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "chats_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          id: string
+          chat_id: string
+          sender_id: string
+          receiver_id: string
+          content: string
+          deleted_for_sender: boolean
+          deleted_for_receiver: boolean
+          deleted_for_everyone: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          chat_id: string
+          sender_id: string
+          receiver_id: string
+          content: string
+          deleted_for_sender?: boolean
+          deleted_for_receiver?: boolean
+          deleted_for_everyone?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          chat_id?: string
+          sender_id?: string
+          receiver_id?: string
+          content?: string
+          deleted_for_sender?: boolean
+          deleted_for_receiver?: boolean
+          deleted_for_everyone?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
