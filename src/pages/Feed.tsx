@@ -72,17 +72,27 @@ const Feed = () => {
           if (!videoId) return;
 
           if (entry.isIntersecting) {
-            // Pause all other videos first
-            Object.keys(videoRefs.current).forEach((id) => {
-              if (id !== videoId && videoRefs.current[id]) {
-                videoRefs.current[id]?.pause();
-                setIsPlaying(prev => ({ ...prev, [id]: false }));
-              }
-            });
-
-            // Play the video that's now visible
+            // Only auto-play if the video isn't already being manually controlled
             const video = videoRefs.current[videoId];
             if (video && !isPlaying[videoId]) {
+              // Pause all other videos first
+              Object.keys(videoRefs.current).forEach((id) => {
+                if (id !== videoId && videoRefs.current[id] && isPlaying[id]) {
+                  videoRefs.current[id]?.pause();
+                }
+              });
+
+              // Update state to pause all others
+              setIsPlaying(prev => {
+                const newState = { ...prev };
+                Object.keys(newState).forEach(id => {
+                  if (id !== videoId) {
+                    newState[id] = false;
+                  }
+                });
+                return newState;
+              });
+
               // Ensure video is muted for autoplay
               video.muted = true;
               video.currentTime = 0;
@@ -116,7 +126,7 @@ const Feed = () => {
     videoContainers.forEach(container => observer.observe(container));
 
     return () => observer.disconnect();
-  }, [videos, searchResults, isPlaying, globalMuted]);
+  }, [videos, searchResults, globalMuted]); // Removed isPlaying dependency to prevent conflicts
 
   // Play first video when videos load
   useEffect(() => {
@@ -317,19 +327,29 @@ const Feed = () => {
       video.pause();
       setIsPlaying(prev => ({ ...prev, [videoId]: false }));
     } else {
-      // Pause all others
+      // Pause all other videos first
       Object.keys(videoRefs.current).forEach(id => {
-        if (id !== videoId && videoRefs.current[id]) {
+        if (id !== videoId && videoRefs.current[id] && isPlaying[id]) {
           videoRefs.current[id]?.pause();
-          setIsPlaying(prev => ({ ...prev, [id]: false }));
         }
       });
+      
+      // Update state to pause all others
+      setIsPlaying(prev => {
+        const newState = { ...prev };
+        Object.keys(newState).forEach(id => {
+          if (id !== videoId) {
+            newState[id] = false;
+          }
+        });
+        return newState;
+      });
+      
       // Play this video
       video.play().then(() => {
         setIsPlaying(prev => ({ ...prev, [videoId]: true }));
       }).catch(e => {
         console.log("Play error:", e);
-        setIsPlaying(prev => ({ ...prev, [videoId]: false }));
       });
     }
   };
