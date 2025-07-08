@@ -71,49 +71,57 @@ const Feed = () => {
           const videoId = entry.target.getAttribute('data-video-id');
           if (!videoId) return;
 
+          const video = videoRefs.current[videoId];
+          if (!video) return;
+
           if (entry.isIntersecting) {
-            // Only auto-play if the video isn't already being manually controlled
-            const video = videoRefs.current[videoId];
-            if (video && !isPlaying[videoId]) {
-              // Pause all other videos first
-              Object.keys(videoRefs.current).forEach((id) => {
-                if (id !== videoId && videoRefs.current[id] && isPlaying[id]) {
-                  videoRefs.current[id]?.pause();
+            // Only auto-play if the video isn't already playing
+            if (!video.paused) return;
+
+            // Pause ALL other videos first
+            Object.keys(videoRefs.current).forEach((id) => {
+              if (id !== videoId && videoRefs.current[id]) {
+                const otherVideo = videoRefs.current[id];
+                if (!otherVideo.paused) {
+                  otherVideo.pause();
+                  otherVideo.currentTime = 0;
+                  console.log(`Paused video ${id} because ${videoId} came into view`);
+                }
+              }
+            });
+
+            // Update state to pause all others
+            setIsPlaying(prev => {
+              const newState = { ...prev };
+              Object.keys(newState).forEach(id => {
+                if (id !== videoId) {
+                  newState[id] = false;
                 }
               });
+              return newState;
+            });
 
-              // Update state to pause all others
-              setIsPlaying(prev => {
-                const newState = { ...prev };
-                Object.keys(newState).forEach(id => {
-                  if (id !== videoId) {
-                    newState[id] = false;
-                  }
-                });
-                return newState;
-              });
+            // Start this video
+            video.muted = true;
+            video.currentTime = 0;
 
-              // Ensure video is muted for autoplay
-              video.muted = true;
-              video.currentTime = 0;
-
-              video.play().then(() => {
-                setIsPlaying(prev => ({ ...prev, [videoId]: true }));
-                // Unmute after successful play if globalMuted is false
-                if (!globalMuted) {
-                  video.muted = false;
-                }
-              }).catch((error) => {
-                console.log('Autoplay failed for video:', videoId, error);
-              });
-            }
+            video.play().then(() => {
+              setIsPlaying(prev => ({ ...prev, [videoId]: true }));
+              console.log(`Started playing video ${videoId}`);
+              // Unmute after successful play if globalMuted is false
+              if (!globalMuted) {
+                video.muted = false;
+              }
+            }).catch((error) => {
+              console.log('Autoplay failed for video:', videoId, error);
+            });
           } else {
-            // Pause the video that's no longer visible
-            const video = videoRefs.current[videoId];
-            if (video && isPlaying[videoId]) {
+            // Video is no longer visible - pause it
+            if (!video.paused) {
               video.pause();
               video.currentTime = 0;
               setIsPlaying(prev => ({ ...prev, [videoId]: false }));
+              console.log(`Paused video ${videoId} because it went out of view`);
             }
           }
         });
@@ -126,7 +134,7 @@ const Feed = () => {
     videoContainers.forEach(container => observer.observe(container));
 
     return () => observer.disconnect();
-  }, [videos, searchResults, globalMuted]); // Removed isPlaying dependency to prevent conflicts
+  }, [videos, searchResults, globalMuted]);
 
   // Play first video when videos load
   useEffect(() => {
@@ -135,16 +143,20 @@ const Feed = () => {
         const firstVideoId = videos[0].id;
         const video = videoRefs.current[firstVideoId];
         if (video) {
-          // Pause all
+          // Pause ALL other videos first
           Object.keys(videoRefs.current).forEach((id) => {
             if (id !== firstVideoId && videoRefs.current[id]) {
-              videoRefs.current[id]?.pause();
-              setIsPlaying(prev => ({ ...prev, [id]: false }));
+              const otherVideo = videoRefs.current[id];
+              if (!otherVideo.paused) {
+                otherVideo.pause();
+                otherVideo.currentTime = 0;
+                setIsPlaying(prev => ({ ...prev, [id]: false }));
+              }
             }
           });
+          
           // Play the first video
           video.currentTime = 0;
-          // Start muted for autoplay
           video.muted = true;
 
           const playPromise = video.play();
@@ -322,15 +334,21 @@ const Feed = () => {
     const video = videoRefs.current[videoId];
     if (!video) return;
     
-    if (isPlaying[videoId]) {
+    if (!video.paused) {
       // Pause the video
       video.pause();
       setIsPlaying(prev => ({ ...prev, [videoId]: false }));
+      console.log(`Manually paused video ${videoId}`);
     } else {
-      // Pause all other videos first
+      // Pause ALL other videos first
       Object.keys(videoRefs.current).forEach(id => {
-        if (id !== videoId && videoRefs.current[id] && isPlaying[id]) {
-          videoRefs.current[id]?.pause();
+        if (id !== videoId && videoRefs.current[id]) {
+          const otherVideo = videoRefs.current[id];
+          if (!otherVideo.paused) {
+            otherVideo.pause();
+            otherVideo.currentTime = 0;
+            console.log(`Paused video ${id} because ${videoId} was manually started`);
+          }
         }
       });
       
@@ -348,6 +366,7 @@ const Feed = () => {
       // Play this video
       video.play().then(() => {
         setIsPlaying(prev => ({ ...prev, [videoId]: true }));
+        console.log(`Manually started video ${videoId}`);
       }).catch(e => {
         console.log("Play error:", e);
       });
@@ -673,8 +692,8 @@ const Feed = () => {
                     loop
                     muted={globalMuted}
                     playsInline
-                      onPlay={() => setIsPlaying(prev => ({ ...prev, [video.id]: true }))}
-                      onPause={() => setIsPlaying(prev => ({ ...prev, [video.id]: false }))}
+                    onPlay={() => setIsPlaying(prev => ({ ...prev, [video.id]: true }))}
+                    onPause={() => setIsPlaying(prev => ({ ...prev, [video.id]: false }))}
                   />
 
                   {/* Video Info Overlay */}
