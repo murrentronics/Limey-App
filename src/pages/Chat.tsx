@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Send, MoreVertical, Trash2, User, Copy, MessageSquare } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+
 import BottomNavigation from "@/components/BottomNavigation";
 
 const Chat = () => {
@@ -23,7 +24,13 @@ const Chat = () => {
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const [longPressedMessage, setLongPressedMessage] = useState<string | null>(null);
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<string | null>(null);
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const ajaxPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMessageCountRef = useRef<number>(0);
+  const [, setNow] = useState(Date.now());
 
   useEffect(() => {
     if (chatId && user) {
@@ -31,9 +38,10 @@ const Chat = () => {
       fetchChat();
       fetchMessages();
       const cleanup = subscribeToMessages();
+      const typingCleanup = subscribeToTypingStatus();
       
-      // Start polling for new messages as fallback
-      startPolling();
+      // Start AJAX polling for reliable message updates
+      startAjaxPolling();
       
       // Debug: Check all messages in the database
       debugCheckMessages();
@@ -42,13 +50,19 @@ const Chat = () => {
       return () => {
         console.log('Chat component unmounting, cleaning up subscription and polling');
         cleanup();
-        stopPolling();
+        typingCleanup();
+        stopAjaxPolling();
+        // Clear typing timeout
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
       };
     }
   }, [chatId, user]);
 
   useEffect(() => {
-    scrollToBottom();
+    // Disable automatic scrolling to prevent loops
+    // User can scroll manually without interference
   }, [messages]);
 
   // Debug: Log when messages change
@@ -192,8 +206,8 @@ const Chat = () => {
           console.log('Adding new message to state');
           return [...prev, payload.new];
         });
-        // Auto-scroll to bottom when new message arrives
-        setTimeout(() => scrollToBottom(), 100);
+        // Auto-scroll to bottom when new message arrives (only if at bottom)
+        setTimeout(() => smartScrollToBottom(), 100);
       })
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -236,10 +250,42 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    // Disable scroll detection to prevent feedback loops
+    // User can scroll manually without interference
+  };
+
+  const smartScrollToBottom = () => {
+    // Completely disable automatic scrolling to prevent loops
+    console.log('Smart scroll called but disabled to prevent loops');
+    // Only allow manual user scrolling
+  };
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !user || !chat) return;
 
     console.log('Sending message:', newMessage.trim());
+    console.log('Current user ID:', user.id);
+    console.log('Chat sender_id:', chat.sender_id);
+    console.log('Chat receiver_id:', chat.receiver_id);
+    
+    // Determine the correct receiver_id
+    const receiverId = chat.sender_id === user.id ? chat.receiver_id : chat.sender_id;
+    console.log('Determined receiver_id:', receiverId);
+    
+    // Prevent sending message to yourself
+    if (receiverId === user.id) {
+      console.error('Cannot send message to yourself!');
+      return;
+    }
+    
+    // Stop typing indicator
+    setIsTyping(false);
+    broadcastTypingStatus(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
     setSending(true);
     
     try {
@@ -248,7 +294,7 @@ const Chat = () => {
         .insert({
           chat_id: chatId,
           sender_id: user.id,
-          receiver_id: chat.sender_id === user.id ? chat.receiver_id : chat.sender_id,
+          receiver_id: receiverId,
           content: newMessage.trim()
         })
         .select()
@@ -270,7 +316,7 @@ const Chat = () => {
           })
           .eq('id', chatId);
         
-        // Auto-scroll to bottom after sending
+        // Auto-scroll to bottom after sending (user always wants to see their message)
         setTimeout(() => scrollToBottom(), 100);
       }
     } catch (error) {
@@ -377,17 +423,18 @@ const Chat = () => {
     if (!window.confirm("Are you sure you want to delete this chat?")) return;
     
     try {
-      // Mark chat as deleted for the current user instead of actually deleting it
-      const updateField = chat.sender_id === user?.id ? 'deleted_for_sender' : 'deleted_for_receiver';
+      // Actually delete the chat from the database
       const { error } = await supabase
         .from('chats')
-        .update({ [updateField]: true })
+        .delete()
         .eq('id', chatId);
       
       if (error) {
         console.error('Error deleting chat:', error);
       } else {
-        navigate('/inbox');
+        console.log('Chat deleted successfully from database');
+        // Reload the current chat page after deletion
+        window.location.reload();
       }
     } catch (error) {
       console.error('Error deleting chat:', error);
@@ -395,17 +442,15 @@ const Chat = () => {
   };
 
   const getChatPartner = () => {
-    if (!chat) return null;
-    
-    console.log('Getting chat partner for chat:', chat);
-    console.log('Current user ID:', user?.id);
-    console.log('Chat sender_id:', chat.sender_id);
-    console.log('Chat receiver_id:', chat.receiver_id);
-    
-    const partner = chat.sender_id === user?.id ? chat.receiver : chat.sender;
-    console.log('Chat partner:', partner);
-    
-    return partner;
+    if (!chat || !user) return null;
+    // If current user is sender, partner is receiver; else, partner is sender
+    if (chat.sender_id === user.id) {
+      // Defensive: if receiver is missing, fallback to sender
+      return chat.receiver && chat.receiver.user_id !== user.id ? chat.receiver : null;
+    } else if (chat.receiver_id === user.id) {
+      return chat.sender && chat.sender.user_id !== user.id ? chat.sender : null;
+    }
+    return null;
   };
 
   const formatTime = (timestamp: string) => {
@@ -486,52 +531,155 @@ const Chat = () => {
     }
   };
 
-  // Polling functions for fallback real-time updates
-  const startPolling = () => {
-    console.log('Starting polling for new messages');
-    pollingInterval.current = setInterval(async () => {
-      if (!chatId || !lastMessageTimestamp) return;
+  // Typing indicator functions
+  const handleTyping = () => {
+    if (!isTyping) {
+      setIsTyping(true);
+      // Broadcast typing status to other user
+      broadcastTypingStatus(true);
+    }
+    
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Set timeout to stop typing indicator after 3 seconds of inactivity
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+      broadcastTypingStatus(false);
+    }, 3000);
+  };
+
+  const broadcastTypingStatus = async (typing: boolean) => {
+    if (!user || !chatId) return;
+    
+    try {
+      // Update typing status in the chat
+      const { error } = await supabase
+        .from('chats')
+        .update({
+          [`typing_${chat.sender_id === user.id ? 'sender' : 'receiver'}`]: typing,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', chatId);
+      
+      if (error) {
+        console.error('Error updating typing status:', error);
+      }
+    } catch (error) {
+      console.error('Error broadcasting typing status:', error);
+    }
+  };
+
+  const subscribeToTypingStatus = () => {
+    const subscription = supabase
+      .channel(`typing_${chatId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chats',
+        filter: `id=eq.${chatId}`
+      }, (payload) => {
+        const newChat = payload.new;
+        const isCurrentUserSender = chat?.sender_id === user?.id;
+        
+        if (isCurrentUserSender) {
+          // Current user is sender, check if receiver is typing
+          setOtherUserTyping(newChat.typing_receiver === true);
+        } else {
+          // Current user is receiver, check if sender is typing
+          setOtherUserTyping(newChat.typing_sender === true);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  };
+
+  // AJAX Polling Functions (WordPress-style reliable updates)
+  const startAjaxPolling = () => {
+    console.log('Starting AJAX polling for reliable message updates');
+    ajaxPollingRef.current = setInterval(async () => {
+      if (!chatId) return;
       
       try {
-        const { data: newMessages, error } = await supabase
+        // Get the timestamp of the last message we have
+        const lastMessageTimestamp = messages.length > 0 ? messages[messages.length - 1].created_at : null;
+        
+        // Fetch only new messages since our last message
+        let query = supabase
           .from('messages')
           .select('*')
           .eq('chat_id', chatId)
-          .gt('created_at', lastMessageTimestamp)
           .order('created_at', { ascending: true });
 
+        if (lastMessageTimestamp) {
+          query = query.gt('created_at', lastMessageTimestamp);
+        }
+
+        const { data: newMessages, error } = await query;
+
         if (error) {
-          console.error('Polling error:', error);
-        } else if (newMessages && newMessages.length > 0) {
-          console.log('Polling found new messages:', newMessages.length);
+          console.error('AJAX polling error:', error);
+          return;
+        }
+
+        // Only update if we have new messages
+        if (newMessages && newMessages.length > 0) {
+          console.log('AJAX polling found new messages:', newMessages.length);
           setMessages(prev => {
+            // Check for duplicates by message ID
             const existingIds = new Set(prev.map(msg => msg.id));
             const uniqueNewMessages = newMessages.filter(msg => !existingIds.has(msg.id));
+            
             if (uniqueNewMessages.length > 0) {
-              const updated = [...prev, ...uniqueNewMessages];
-              // Update last message timestamp
-              const lastMessage = updated[updated.length - 1];
-              setLastMessageTimestamp(lastMessage.created_at);
-              return updated;
+              console.log('Adding unique new messages:', uniqueNewMessages.length);
+              return [...prev, ...uniqueNewMessages];
+            } else {
+              console.log('All messages already exist, no duplicates added');
+              return prev;
             }
-            return prev;
           });
-          // Auto-scroll to bottom for new messages
-          setTimeout(() => scrollToBottom(), 100);
+          // Only scroll if user is at bottom, with longer delay
+          setTimeout(() => smartScrollToBottom(), 200);
         }
+        
       } catch (error) {
-        console.error('Polling error:', error);
+        console.error('AJAX polling error:', error);
       }
-    }, 3000); // Check every 3 seconds
+    }, 5000); // Check every 5 seconds instead of 2
   };
 
-  const stopPolling = () => {
-    if (pollingInterval.current) {
-      console.log('Stopping polling');
-      clearInterval(pollingInterval.current);
-      pollingInterval.current = null;
+  const stopAjaxPolling = () => {
+    if (ajaxPollingRef.current) {
+      console.log('Stopping AJAX polling');
+      clearInterval(ajaxPollingRef.current);
+      ajaxPollingRef.current = null;
     }
   };
+
+  // Force re-render for time updates
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30000); // every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  // Scroll to bottom only on initial page load
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // After updating messages (real-time, polling, or manual refresh), always scroll to bottom
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages]);
 
   if (loading) {
     return (
@@ -569,8 +717,50 @@ const Chat = () => {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={fetchMessages}
-              className="text-white/60 hover:text-white"
+              onClick={async () => {
+                // Get the timestamp of the last message we have
+                const lastMessageTimestamp = messages.length > 0 ? messages[messages.length - 1].created_at : null;
+                
+                // Fetch only new messages since our last message
+                let query = supabase
+                  .from('messages')
+                  .select('*')
+                  .eq('chat_id', chatId)
+                  .order('created_at', { ascending: true });
+
+                if (lastMessageTimestamp) {
+                  query = query.gt('created_at', lastMessageTimestamp);
+                }
+
+                const { data: newMessages, error } = await query;
+
+                if (error) {
+                  console.error('Manual refresh error:', error);
+                  return;
+                }
+
+                // Only update if we have new messages
+                if (newMessages && newMessages.length > 0) {
+                  console.log('Manual refresh found new messages:', newMessages.length);
+                  setMessages(prev => {
+                    // Check for duplicates by message ID
+                    const existingIds = new Set(prev.map(msg => msg.id));
+                    const uniqueNewMessages = newMessages.filter(msg => !existingIds.has(msg.id));
+                    
+                    if (uniqueNewMessages.length > 0) {
+                      console.log('Adding unique new messages:', uniqueNewMessages.length);
+                      return [...prev, ...uniqueNewMessages];
+                    } else {
+                      console.log('All messages already exist, no duplicates added');
+                      return prev;
+                    }
+                  });
+                  setTimeout(() => smartScrollToBottom(), 100);
+                } else {
+                  console.log('No new messages found');
+                }
+              }}
+              className="text-white/60 hover:text-white mr-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -591,6 +781,24 @@ const Chat = () => {
             {showChatMenu && (
               <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[120px]" data-dropdown>
                 <button
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+                  onClick={() => {
+                    setShowChatMenu(false);
+                    debugCheckMessages();
+                  }}
+                >
+                  Debug Messages
+                </button>
+                <button
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+                  onClick={() => {
+                    setShowChatMenu(false);
+                    testRealtime();
+                  }}
+                >
+                  Test Message
+                </button>
+                <button
                   className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
                   onClick={() => {
                     setShowChatMenu(false);
@@ -606,7 +814,10 @@ const Chat = () => {
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 pt-20 pb-32 px-4 overflow-y-auto">
+      <div
+        className="absolute left-0 right-0 overflow-y-auto px-4"
+        style={{ top: '72px', bottom: '120px' }}
+      >
         {messages.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -717,10 +928,29 @@ const Chat = () => {
 
       {/* Message Input - Fixed at bottom above bottom navigation */}
       <div className="fixed bottom-20 left-0 right-0 p-4 bg-black/20 backdrop-blur-md border-t border-white/10">
+        {/* Typing Indicator */}
+        {otherUserTyping && (
+          <div className="mb-2 px-3 py-1">
+            <div className="flex items-center space-x-2">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              <span className="text-xs text-white/60 italic">
+                {partner?.username || 'Someone'} is typing...
+              </span>
+            </div>
+          </div>
+        )}
+        
         <div className="flex items-center space-x-2">
           <Input
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={(e) => {
+              setNewMessage(e.target.value);
+              handleTyping();
+            }}
             onKeyPress={handleKeyPress}
             placeholder="Type a message..."
             className="flex-1 bg-white/10 border-white/20 text-white placeholder-white/50"

@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical, ChevronDown, X, Settings } from "lucide-react";
+import { MoreVertical, ChevronDown, X, Settings, MessageSquare } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import VideoPlayer from "@/components/VideoPlayer";
 
@@ -372,6 +372,9 @@ const Profile = () => {
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
               <>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/inbox')}>
+                  <MessageSquare size={16} />
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
                   <Settings size={16} />
                 </Button>
