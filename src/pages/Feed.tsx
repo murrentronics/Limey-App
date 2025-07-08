@@ -311,19 +311,25 @@ const Feed = () => {
   const togglePlay = (videoId: string) => {
     const video = videoRefs.current[videoId];
     if (!video) return;
+    
     if (isPlaying[videoId]) {
       // Pause the video
       video.pause();
+      setIsPlaying(prev => ({ ...prev, [videoId]: false }));
     } else {
       // Pause all others
       Object.keys(videoRefs.current).forEach(id => {
         if (id !== videoId && videoRefs.current[id]) {
           videoRefs.current[id]?.pause();
+          setIsPlaying(prev => ({ ...prev, [id]: false }));
         }
       });
       // Play this video
-      video.play().catch(e => {
+      video.play().then(() => {
+        setIsPlaying(prev => ({ ...prev, [videoId]: true }));
+      }).catch(e => {
         console.log("Play error:", e);
+        setIsPlaying(prev => ({ ...prev, [videoId]: false }));
       });
     }
   };

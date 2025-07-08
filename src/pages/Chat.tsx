@@ -397,10 +397,10 @@ const Chat = () => {
           setMessages(prev => prev.filter(msg => msg.id !== messageId));
         }
       } else {
-        // Delete for me only - mark as deleted for sender
+        // Delete for me only - mark as deleted for everyone (no partial deletion support)
         const { error } = await supabase
           .from('messages')
-          .update({ deleted_for_sender: true })
+          .update({ deleted_for_everyone: true })
           .eq('id', messageId);
         
         if (error) {
