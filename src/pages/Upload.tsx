@@ -289,7 +289,7 @@ const Upload = () => {
             />
             <label htmlFor="file-upload">
               <Button variant="neon" asChild className="cursor-pointer">
-                <span>{file ? "Change File" : "+ Create"}</span>
+                <span>{file ? "Change File" : "Select File"}</span>
               </Button>
             </label>
           </div>
