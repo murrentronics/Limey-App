@@ -24,7 +24,7 @@ const Index = () => {
           
           <div>
             <Link to="/login">
-              <Button variant="outline" className="w-64">
+              <Button variant="outline" className="w-64 py-0">
                 Sign In
               </Button>
             </Link>
