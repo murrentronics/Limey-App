@@ -27,14 +27,7 @@ const BottomNavigation = () => {
               onClick={() => navigate(item.path)}
               className={item.isUpload ? "px-3" : "p-3"}
             >
-              {item.isUpload ? (
-                <>
-                  <IconComponent size={16} />
-                  <span className="ml-1">Create</span>
-                </>
-              ) : (
-                <IconComponent size={20} />
-              )}
+              <IconComponent size={20} />
             </Button>
           );
         })}
