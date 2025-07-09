@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import LimeyLogo from "@/components/LimeyLogo";
+
 const Index = () => {
-  return <div className="min-h-screen flex items-center justify-center bg-background">
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center space-y-8">
         <LimeyLogo showCircle={true} circleSize={192} wordmark={true} />
         
@@ -10,7 +12,7 @@ const Index = () => {
           <h2 className="text-2xl text-foreground">
             Trinbago's Home for Creators
           </h2>
-          <p className="text-muted-foreground max-w-md mx-auto text-center px-[20px]">
+          <p className="text-muted-foreground max-w-md mx-auto">
             Share your moments, discover local talent, and connect with the Caribbean community.
           </p>
         </div>
@@ -24,7 +26,7 @@ const Index = () => {
           
           <div>
             <Link to="/login">
-              <Button variant="outline" className="w-64 py-0">
+              <Button variant="outline" className="w-64">
                 Sign In
               </Button>
             </Link>
@@ -41,6 +43,8 @@ const Index = () => {
             </div>
         </div>
       </div>
-    </div>;
+    </div>
+  );
 };
+
 export default Index;
