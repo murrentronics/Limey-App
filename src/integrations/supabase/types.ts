@@ -105,6 +105,8 @@ export type Database = {
           sender_id: string
           typing_receiver: boolean | null
           typing_sender: boolean | null
+          unread_count_receiver: number | null
+          unread_count_sender: number | null
           updated_at: string | null
         }
         Insert: {
@@ -117,6 +119,8 @@ export type Database = {
           sender_id: string
           typing_receiver?: boolean | null
           typing_sender?: boolean | null
+          unread_count_receiver?: number | null
+          unread_count_sender?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -129,6 +133,8 @@ export type Database = {
           sender_id?: string
           typing_receiver?: boolean | null
           typing_sender?: boolean | null
+          unread_count_receiver?: number | null
+          unread_count_sender?: number | null
           updated_at?: string | null
         }
         Relationships: [
@@ -622,6 +628,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           duration: number | null
+          filter: string | null
           id: string
           like_count: number | null
           tags: string[] | null
@@ -640,6 +647,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           duration?: number | null
+          filter?: string | null
           id?: string
           like_count?: number | null
           tags?: string[] | null
@@ -658,6 +666,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           duration?: number | null
+          filter?: string | null
           id?: string
           like_count?: number | null
           tags?: string[] | null
@@ -783,6 +792,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           duration: number | null
+          filter: string | null
           id: string
           like_count: number | null
           tags: string[] | null
@@ -809,6 +819,10 @@ export type Database = {
       }
       increment_video_view: {
         Args: { video_id_param: string }
+        Returns: undefined
+      }
+      mark_chat_as_read: {
+        Args: { chat_uuid: string; user_uuid: string }
         Returns: undefined
       }
       record_video_view: {
