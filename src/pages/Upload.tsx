@@ -5,7 +5,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Paintbrush, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -296,17 +295,13 @@ const Upload = () => {
             <div className="flex gap-3 justify-center">
               <label htmlFor="file-upload">
                 <Button variant="neon" asChild className="cursor-pointer">
-                  <span className="flex items-center gap-2">
-                    <Paintbrush size={18} />
-                    {file ? "Change File" : "Create"}
-                  </span>
+                  <span>{file ? "Change File" : "+ Create"}</span>
                 </Button>
               </label>
               
               <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="neon" className="cursor-pointer flex items-center gap-2">
-                    <Plus size={18} />
+                  <Button variant="neon" className="cursor-pointer">
                     Upload
                   </Button>
                 </SheetTrigger>
