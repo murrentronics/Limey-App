@@ -5,11 +5,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Paintbrush, Plus } from "lucide-react";
+import { Paintbrush, Plus, RotateCcw, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import BottomNavigation from "@/components/BottomNavigation";
+import { useNavigate } from "react-router-dom";
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -22,10 +23,37 @@ const Upload = () => {
   // Thumbnail selection removed, handled by backend or default
   const { toast } = useToast();
   const { user } = useAuth();
+  const [captureMode, setCaptureMode] = useState<'none' | 'camera' | 'gallery'>('none');
+  const navigate = useNavigate();
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, mode: 'camera' | 'gallery') => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
+      // Only allow supported video types
+      const supportedTypes = ["video/mp4", "video/webm", "video/quicktime", "video/mov", "video/3gpp", "video/ogg", "video/x-matroska"];
+      if (!supportedTypes.includes(selectedFile.type)) {
+        toast({
+          title: "Unsupported File Type",
+          description: "Please select a supported video file (mp4, webm, mov, etc.)",
+          variant: "destructive"
+        });
+        e.target.value = "";
+        setFile(null);
+        setPreview(null);
+        return;
+      }
+      // Check file size (50 MB = 50 * 1024 * 1024 bytes)
+      if (selectedFile.size > 50 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Your video is too large. The maximum allowed size is 50 MB. Please use a mobile app (like InShot, CapCut, or your phone's built-in editor) to compress your video before uploading.",
+          variant: "destructive"
+        });
+        e.target.value = "";
+        setFile(null);
+        setPreview(null);
+        return;
+      }
       setFile(selectedFile);
       
       // Create preview for videos/images
@@ -37,6 +65,7 @@ const Upload = () => {
         const name = selectedFile.name.split('.')[0];
         setTitle(name.charAt(0).toUpperCase() + name.slice(1));
       }
+      setCaptureMode(mode);
     }
   };
 
@@ -50,9 +79,31 @@ const Upload = () => {
       video.playsInline = true;
       video.onloadedmetadata = () => {
         const duration = Math.round(video.duration);
+        if (duration > 300) { // 5 minutes = 300 seconds
+          toast({
+            title: "Video Too Long",
+            description: "Please select a video that is 5 minutes or less.",
+            variant: "destructive"
+          });
+          setFile(null);
+          setPreview(null);
+          reject(new Error('Video duration exceeds 5 minutes'));
+          return;
+        }
         resolve(duration);
       };
-      video.onerror = (e) => reject(new Error('Failed to load video for metadata extraction'));
+      video.onerror = (e) => {
+        // Show toast error and reset file input
+        console.error('Video metadata extraction error:', e);
+        toast({
+          title: "Failed to Load Video",
+          description: "Could not read video metadata. This may happen with unsupported formats or corrupted files. Try a different video, preferably one recorded with your phone camera (mp4, mov, webm).",
+          variant: "destructive"
+        });
+        setFile(null);
+        setPreview(null);
+        reject(new Error('Failed to load video for metadata extraction'));
+      };
     });
   };
 
@@ -141,7 +192,19 @@ const Upload = () => {
       const { data, error } = await supabase.storage
         .from('limeytt-uploads')
         .upload(fileName, file);
-      if (error) throw error;
+      if (error) {
+        // Check for file size error
+        if (error.message && error.message.toLowerCase().includes('maximum allowed size')) {
+          toast({
+            title: "File Too Large",
+            description: "Your video is too large. The maximum allowed size is 50 MB.",
+            variant: "destructive"
+          });
+          setUploading(false);
+          return;
+        }
+        throw error;
+      }
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
@@ -192,6 +255,7 @@ const Upload = () => {
       setTitle("");
       setDescription("");
       setPreview(null);
+      setCaptureMode('none');
     } catch (error: any) {
       console.error('Upload error:', error);
       
@@ -236,8 +300,15 @@ const Upload = () => {
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-2xl font-black text-primary tracking-wider logo-text-glow" style={{
+        <div className="relative flex items-center justify-center">
+          <button
+            className="absolute left-0 top-1/2 -translate-y-1/2 p-2 text-primary hover:bg-primary/10 rounded-full"
+            onClick={() => navigate(-1)}
+            aria-label="Go Back"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <span className="text-2xl font-black text-primary tracking-wider logo-text-glow mx-auto" style={{
             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             fontWeight: '900',
             letterSpacing: '0.15em',
@@ -284,53 +355,58 @@ const Upload = () => {
             )}
             
             
+            {/* Add a separate file input for the Create button with capture="environment" */}
             <Input
               type="file"
               accept="video/*"
               capture="environment"
-              onChange={handleFileSelect}
+              onChange={e => handleFileSelect(e, 'camera')}
+              className="hidden"
+              id="file-create"
+            />
+            {/* The Create button triggers this input */}
+            <Input
+              type="file"
+              accept="video/*"
+              onChange={e => handleFileSelect(e, 'gallery')}
               className="hidden"
               id="file-upload"
             />
-            
+            {/* The Upload/Change Video button triggers the regular input (no capture) */}
             <div className="flex gap-3 justify-center">
-              <label htmlFor="file-upload">
-                <Button variant="neon" asChild className="cursor-pointer">
-                  <span className="flex items-center gap-2">
-                    <Paintbrush size={18} />
-                    {file ? "Change File" : "Create"}
-                  </span>
-                </Button>
-              </label>
-              
-              <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="neon" className="cursor-pointer flex items-center gap-2">
-                    <Plus size={18} />
-                    Upload
+              {/* Create button triggers camera */}
+              {!file && (
+                <label htmlFor="file-create">
+                  <Button variant="neon" asChild className="cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <Paintbrush size={18} />
+                      Create
+                    </span>
                   </Button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="h-[90vh]">
-                  <SheetHeader>
-                    <SheetTitle>Select Video from Device</SheetTitle>
-                  </SheetHeader>
-                  
-                  <div className="mt-6">
-                    <Input
-                      type="file"
-                      accept="video/*"
-                      onChange={(e) => {
-                        handleFileSelect(e);
-                        setSheetOpen(false);
-                      }}
-                      className="w-full p-4 border-2 border-dashed border-border rounded-lg text-center cursor-pointer hover:border-primary transition-colors"
-                    />
-                    <p className="text-sm text-muted-foreground mt-2 text-center">
-                      Tap to browse your device for videos
-                    </p>
-                  </div>
-                </SheetContent>
-              </Sheet>
+                </label>
+              )}
+              {/* Upload/Change Video button triggers gallery, only show if not from camera */}
+              {!file || captureMode === 'gallery' ? (
+                <label htmlFor="file-upload">
+                  <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
+                    <span className="flex items-center gap-2">
+                      <Plus size={18} />
+                      {file ? 'Change Video' : 'Upload'}
+                    </span>
+                  </Button>
+                </label>
+              ) : null}
+              {/* Re-Capture button if video was captured from camera */}
+              {file && captureMode === 'camera' && (
+                <label htmlFor="file-create">
+                  <Button variant="outline" asChild className="cursor-pointer flex items-center gap-2">
+                    <span className="flex items-center gap-2">
+                      <RotateCcw size={18} />
+                      Re-Capture
+                    </span>
+                  </Button>
+                </label>
+              )}
             </div>
           </div>
         </Card>
@@ -417,6 +493,7 @@ const Upload = () => {
                     setPreview(null);
                     setTitle("");
                     setDescription("");
+                    setCaptureMode('none');
                   }}
                   disabled={uploading}
                 >
@@ -437,8 +514,12 @@ const Upload = () => {
 
         {/* Upload Tips */}
         <Card className="mt-6 p-4 bg-muted/50">
-          <h4 className="font-medium text-foreground mb-2">📝 Upload Tips</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
+          <h4 className="font-medium text-foreground mb-2 text-center">📝 Upload Tips</h4>
+          <ul className="text-sm text-muted-foreground space-y-4 text-center">
+            <li>• <b>Max video duration:</b> 5 minutes</li>
+            <li>• <b>Max file size:</b> 50 MB</li>
+            <li>• <b>Supported file types:</b> mp4, mov, webm, 3gp, ogg, mkv</li>
+            <li>• If your video is too large, use free apps like <b>CapCut</b>, <b>InShot</b>, or your phone's built-in editor to compress the video and maintain quality before uploading.</li>
             <li>• Keep videos under 60 seconds for best engagement</li>
             <li>• Use good lighting and clear audio</li>
             <li>• Add hashtags in your description to reach more viewers</li>

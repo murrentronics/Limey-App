@@ -8,9 +8,10 @@ import { ArrowLeft, Send, MoreVertical, Trash2, User, Copy, MessageSquare } from
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 import BottomNavigation from "@/components/BottomNavigation";
+import { useToast } from "@/hooks/use-toast";
 
 const Chat = () => {
-  const { chatId } = useParams();
+  const { chatId, userId: paramUserId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [messages, setMessages] = useState<any[]>([]);
@@ -31,34 +32,55 @@ const Chat = () => {
   const ajaxPollingRef = useRef<NodeJS.Timeout | null>(null);
   const lastMessageCountRef = useRef<number>(0);
   const [, setNow] = useState(Date.now());
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (chatId && user) {
-      console.log('Chat component mounted with chatId:', chatId, 'and user:', user.id);
-      fetchChat();
-      fetchMessages();
-      const cleanup = subscribeToMessages();
-      const typingCleanup = subscribeToTypingStatus();
-      
-      // Start AJAX polling for reliable message updates
-      startAjaxPolling();
-      
-      // Debug: Check all messages in the database
-      debugCheckMessages();
-      
-      // Cleanup function
-      return () => {
-        console.log('Chat component unmounting, cleaning up subscription and polling');
-        cleanup();
-        typingCleanup();
-        stopAjaxPolling();
-        // Clear typing timeout
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-        }
-      };
+    if (user) {
+      if (chatId) {
+        // Existing chat
+        fetchChat();
+        fetchMessages();
+        const cleanup = subscribeToMessages();
+        const typingCleanup = subscribeToTypingStatus();
+        startAjaxPolling();
+        debugCheckMessages();
+        return () => {
+          cleanup();
+          typingCleanup();
+          stopAjaxPolling();
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        };
+      } else if (paramUserId) {
+        // No chatId, but userId param present: start new chat
+        (async () => {
+          // Check if chat already exists between user and paramUserId
+          const { data: existingChats, error } = await supabase
+            .from('chats')
+            .select('*')
+            .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+          let chat = existingChats?.find(
+            c => (c.sender_id === user.id && c.receiver_id === paramUserId) ||
+                 (c.sender_id === paramUserId && c.receiver_id === user.id)
+          );
+          if (!chat) {
+            // Create new chat
+            const { data: newChat, error: createError } = await supabase
+              .from('chats')
+              .insert({ sender_id: user.id, receiver_id: paramUserId })
+              .select()
+              .single();
+            if (createError) {
+              toast({ title: 'Failed to start chat', description: createError.message, variant: 'destructive' });
+              return;
+            }
+            chat = newChat;
+          }
+          // Redirect to the new/existing chat
+          navigate(`/chat/${chat.id}`, { replace: true });
+        })();
+      }
     }
-  }, [chatId, user]);
+  }, [chatId, user, paramUserId]);
 
   useEffect(() => {
     // Disable automatic scrolling to prevent loops
@@ -131,7 +153,7 @@ const Chat = () => {
 
   const fetchMessages = async () => {
     try {
-      console.log('Fetching messages for chat ID:', chatId);
+      console.log('Fetching messages for chatId:', chatId);
       console.log('Current user ID:', user?.id);
       
       // First, let's check if the chat exists and we have access to it
@@ -166,6 +188,7 @@ const Chat = () => {
         .select('*')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
+      console.log('Fetched messages:', data);
 
       if (error) {
         console.error('Error fetching messages:', error);
@@ -262,7 +285,16 @@ const Chat = () => {
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !user || !chat) return;
+    if (!newMessage.trim() || !user || !chat) {
+      if (!chat) {
+        toast({
+          title: "Chat not loaded",
+          description: "Please wait for the chat to load before sending a message.",
+          variant: "destructive"
+        });
+      }
+      return;
+    }
 
     console.log('Sending message:', newMessage.trim());
     console.log('Current user ID:', user.id);
@@ -303,9 +335,10 @@ const Chat = () => {
       if (error) {
         console.error('Error sending message:', error);
       } else {
+        setNewMessage(""); // Clear input
+        await fetchMessages(); // Ensure sender sees their own message
         console.log('Message sent successfully:', data);
         console.log('Current messages count before update:', messages.length);
-        setNewMessage("");
         
         // Update chat's last message and timestamp
         await supabase
@@ -650,7 +683,7 @@ const Chat = () => {
       } catch (error) {
         console.error('AJAX polling error:', error);
       }
-    }, 5000); // Check every 5 seconds instead of 2
+    }, 2000); // Check every 2 seconds for more responsive updates
   };
 
   const stopAjaxPolling = () => {
@@ -681,12 +714,9 @@ const Chat = () => {
     }
   }, [messages]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-black flex justify-center items-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-      </div>
-    );
+  // Defensive: Only render chat UI if chatId and chat are loaded
+  if (!chatId || !chat) {
+    return <div className="min-h-screen flex items-center justify-center text-white">Loading chat...</div>;
   }
 
   const partner = getChatPartner();
@@ -781,24 +811,6 @@ const Chat = () => {
             {showChatMenu && (
               <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[120px]" data-dropdown>
                 <button
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
-                  onClick={() => {
-                    setShowChatMenu(false);
-                    debugCheckMessages();
-                  }}
-                >
-                  Debug Messages
-                </button>
-                <button
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
-                  onClick={() => {
-                    setShowChatMenu(false);
-                    testRealtime();
-                  }}
-                >
-                  Test Message
-                </button>
-                <button
                   className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
                   onClick={() => {
                     setShowChatMenu(false);
@@ -818,7 +830,7 @@ const Chat = () => {
         className="absolute left-0 right-0 overflow-y-auto px-4"
         style={{ top: '72px', bottom: '120px' }}
       >
-        {messages.length === 0 ? (
+        {messages.length === 0 && !loading ? (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl">💬</span>
@@ -957,7 +969,7 @@ const Chat = () => {
           />
           <Button
             onClick={sendMessage}
-            disabled={sending || !newMessage.trim()}
+            disabled={sending || !newMessage.trim() || !chat}
             className="bg-green-600 hover:bg-green-700"
           >
             <Send size={16} />

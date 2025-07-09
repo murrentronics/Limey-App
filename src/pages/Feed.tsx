@@ -155,7 +155,7 @@ const Feed = () => {
       .from('videos')
       .select(`*, profiles!inner(username, avatar_url)`)
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(100);
 
     if (searchTerm.startsWith('#')) {
       const tag = searchTerm.replace('#', '').toLowerCase();
@@ -221,7 +221,7 @@ const Feed = () => {
         .from('videos')
         .select(`*, profiles!inner(username, avatar_url)`)
         .order('created_at', { ascending: false })
-        .limit(50);
+        .limit(100);
       if (activeCategory !== "All") {
         query = query.eq('category', activeCategory);
       }
@@ -234,7 +234,7 @@ const Feed = () => {
           .from('videos')
           .select(`*`)
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(100);
         if (activeCategory !== "All") {
           fallbackQuery = fallbackQuery.eq('category', activeCategory);
         }
