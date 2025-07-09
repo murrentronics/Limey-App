@@ -19,6 +19,7 @@ import Inbox from "@/pages/Inbox";
 import Chat from "@/pages/Chat";
 import Message from "@/pages/Message";
 import NotFound from "./pages/NotFound";
+import CreateVideo from "./pages/CreateVideo";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/signup" element={<Signup />} />
             <Route path="/welcome" element={<Index />} />
             <Route path="/edit-profile" element={<EditProfile />} />
+            <Route path="/create-video" element={<ProtectedRoute><CreateVideo /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

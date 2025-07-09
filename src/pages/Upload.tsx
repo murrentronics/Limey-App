@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import BottomNavigation from "@/components/BottomNavigation";
+import { useNavigate } from 'react-router-dom';
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -19,6 +20,7 @@ const Upload = () => {
   // Thumbnail selection removed, handled by backend or default
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -249,6 +251,25 @@ const Upload = () => {
         {/* File Upload Area */}
         <Card className="p-8 border-2 border-dashed border-border hover:border-primary transition-colors">
           <div className="text-center">
+            {/* Button Row */}
+            <div className="flex justify-center gap-4 mb-4">
+              <label htmlFor="file-upload">
+                <Button variant="neon" asChild className="cursor-pointer">
+                  <span>{file ? "Change Video" : "Select Video"}</span>
+                </Button>
+              </label>
+              <Button variant="neon" onClick={() => navigate('/create-video')} className="flex items-center gap-1">
+                <span className="text-xl font-bold">+</span> Create
+              </Button>
+            </div>
+            <Input
+              type="file"
+              accept="video/*,image/*,audio/*"
+              onChange={handleFileSelect}
+              className="hidden"
+              id="file-upload"
+            />
+            {/* Preview Area */}
             {preview ? (
               <div className="mb-4">
                 {file?.type.startsWith('video/') ? (
@@ -279,19 +300,6 @@ const Upload = () => {
                 </p>
               </div>
             )}
-            
-            <Input
-              type="file"
-              accept="video/*,image/*,audio/*"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="file-upload"
-            />
-            <label htmlFor="file-upload">
-              <Button variant="neon" asChild className="cursor-pointer">
-                <span>{file ? "Change File" : "Select File"}</span>
-              </Button>
-            </label>
           </div>
         </Card>
 
