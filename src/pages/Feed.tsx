@@ -8,6 +8,81 @@ import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, S
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
+// --- AutoPlayVideo component ---
+const AutoPlayVideo = ({ src, className, globalMuted, ...props }) => {
+  const videoRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = globalMuted;
+    const observer = new window.IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          setIsVisible(true);
+          video.play();
+        } else {
+          setIsVisible(false);
+          video.pause();
+          video.currentTime = 0;
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(video);
+    return () => {
+      observer.unobserve(video);
+    };
+  }, [globalMuted]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = globalMuted;
+    }
+  }, [globalMuted]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    return () => {
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+    };
+  }, []);
+
+  return (
+    <div className="relative w-full h-full">
+      <video
+        ref={videoRef}
+        src={src}
+        loop
+        muted={globalMuted}
+        playsInline
+        className={className}
+        {...props}
+      />
+      {/* Only show play icon overlay if video is visible and paused */}
+      {isVisible && !isPlaying && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+          <button
+            className="w-16 h-16 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 text-white pointer-events-auto"
+            aria-label="Play"
+            style={{ pointerEvents: 'none' }}
+          >
+            <Play size={48} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Feed = () => {
   const [activeCategory, setActiveCategory] = useState("All");
   const [videos, setVideos] = useState<any[]>([]);
@@ -22,7 +97,7 @@ const Feed = () => {
   const [isMuted, setIsMuted] = useState<{ [key: string]: boolean }>({});
   const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
   const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
-  const [globalMuted, setGlobalMuted] = useState(false);
+  const [globalMuted, setGlobalMuted] = useState(false); // Start unmuted (sound ON)
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -63,119 +138,9 @@ const Feed = () => {
     }
   }, [showSearch]);
 
-  // Auto-play video when it becomes visible - TikTok style
+  // Play first video only after user interaction
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const videoId = entry.target.getAttribute('data-video-id');
-          if (!videoId) return;
-
-          const video = videoRefs.current[videoId];
-          if (!video) return;
-
-          if (entry.isIntersecting) {
-            // Only auto-play if the video isn't already playing
-            if (!video.paused) return;
-
-            // Pause ALL other videos first
-            Object.keys(videoRefs.current).forEach((id) => {
-              if (id !== videoId && videoRefs.current[id]) {
-                const otherVideo = videoRefs.current[id];
-                if (!otherVideo.paused) {
-                  otherVideo.pause();
-                  otherVideo.currentTime = 0;
-                  console.log(`Paused video ${id} because ${videoId} came into view`);
-                }
-              }
-            });
-
-            // Update state to pause all others
-            setIsPlaying(prev => {
-              const newState = { ...prev };
-              Object.keys(newState).forEach(id => {
-                if (id !== videoId) {
-                  newState[id] = false;
-                }
-              });
-              return newState;
-            });
-
-            // Start this video
-            video.muted = true;
-            video.currentTime = 0;
-
-            video.play().then(() => {
-              setIsPlaying(prev => ({ ...prev, [videoId]: true }));
-              console.log(`Started playing video ${videoId}`);
-              // Unmute after successful play if globalMuted is false
-              if (!globalMuted) {
-                video.muted = false;
-              }
-            }).catch((error) => {
-              console.log('Autoplay failed for video:', videoId, error);
-            });
-          } else {
-            // Video is no longer visible - pause it
-            if (!video.paused) {
-              video.pause();
-              video.currentTime = 0;
-              setIsPlaying(prev => ({ ...prev, [videoId]: false }));
-              console.log(`Paused video ${videoId} because it went out of view`);
-            }
-          }
-        });
-      },
-      { threshold: 0.5 }
-    );
-
-    // Observe all video containers
-    const videoContainers = document.querySelectorAll('[data-video-id]');
-    videoContainers.forEach(container => observer.observe(container));
-
-    return () => observer.disconnect();
-  }, [videos, searchResults, globalMuted]);
-
-  // Play first video when videos load
-  useEffect(() => {
-    if (videos.length > 0 && !loading) {
-      setTimeout(() => {
-        const firstVideoId = videos[0].id;
-        const video = videoRefs.current[firstVideoId];
-        if (video) {
-          // Pause ALL other videos first
-          Object.keys(videoRefs.current).forEach((id) => {
-            if (id !== firstVideoId && videoRefs.current[id]) {
-              const otherVideo = videoRefs.current[id];
-              if (!otherVideo.paused) {
-                otherVideo.pause();
-                otherVideo.currentTime = 0;
-                setIsPlaying(prev => ({ ...prev, [id]: false }));
-              }
-            }
-          });
-          
-          // Play the first video
-          video.currentTime = 0;
-          video.muted = true;
-
-          const playPromise = video.play();
-          if (playPromise !== undefined) {
-            playPromise
-              .then(() => {
-                setIsPlaying(prev => ({ ...prev, [firstVideoId]: true }));
-                if (!globalMuted) {
-                  video.muted = false;
-                }
-              })
-              .catch(() => {
-                // autoplay failed, keep muted
-                setIsPlaying(prev => ({ ...prev, [firstVideoId]: true }));
-              });
-          }
-        }
-      }, 100);
-    }
+    // This effect is no longer needed as videos auto-play with sound ON
   }, [videos, loading]);
 
   // Search function
@@ -618,7 +583,7 @@ const Feed = () => {
         <Button
           variant="ghost"
           size="icon"
-          onClick={toggleGlobalMute}
+          onClick={() => setGlobalMuted((m) => !m)}
           aria-label="Toggle Global Mute"
           className="w-12 h-12 rounded-full p-0 text-white hover:bg-white/10"
         >
@@ -682,19 +647,24 @@ const Feed = () => {
                   onClick={(e) => {
                     const target = e.target as HTMLElement;
                     const isControlButton = target.closest('button') || target.closest('[data-control]');
-                    if (!isControlButton) togglePlay(video.id);
+                    if (!isControlButton) {
+                      // Toggle play/pause for the visible video
+                      const videoEl = document.querySelector(`[data-video-id='${video.id}'] video`);
+                      if (videoEl instanceof HTMLVideoElement) {
+                        if (videoEl.paused) {
+                          videoEl.play();
+                        } else {
+                          videoEl.pause();
+                        }
+                      }
+                    }
                   }}
                 >
                   {/* Video */}
-                  <video
-                    ref={(el) => (videoRefs.current[video.id] = el)}
+                  <AutoPlayVideo
                     src={video.video_url}
                     className="w-full h-full object-cover"
-                    loop
-                    muted={globalMuted}
-                    playsInline
-                    onPlay={() => setIsPlaying(prev => ({ ...prev, [video.id]: true }))}
-                    onPause={() => setIsPlaying(prev => ({ ...prev, [video.id]: false }))}
+                    globalMuted={globalMuted}
                   />
 
                   {/* Video Info Overlay */}
@@ -802,23 +772,6 @@ const Feed = () => {
                       </div>
                     </div>
                   </div>
-
-                  {/* Play/Pause overlay */}
-                  {!isPlaying[video.id] && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <Button
-                        variant="ghost"
-                        className="w-16 h-16 rounded-full bg-white/20 hover:bg-white/30 text-white pointer-events-auto"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePlay(video.id);
-                        }}
-                        data-control
-                      >
-                        <Play size={32} className="ml-1" />
-                      </Button>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -855,19 +808,24 @@ const Feed = () => {
                     onClick={(e) => {
                       const target = e.target as HTMLElement;
                       const isControlButton = target.closest('button') || target.closest('[data-control]');
-                      if (!isControlButton) togglePlay(video.id);
+                      if (!isControlButton) {
+                        // Toggle play/pause for the visible video
+                        const videoEl = document.querySelector(`[data-video-id='${video.id}'] video`);
+                        if (videoEl instanceof HTMLVideoElement) {
+                          if (videoEl.paused) {
+                            videoEl.play();
+                          } else {
+                            videoEl.pause();
+                          }
+                        }
+                      }
                     }}
                   >
                     {/* Video */}
-                    <video
-                      ref={(el) => (videoRefs.current[video.id] = el)}
+                    <AutoPlayVideo
                       src={video.video_url}
                       className="w-full h-full object-cover"
-                      loop
-                      muted={globalMuted}
-                      playsInline
-                      onPlay={() => setIsPlaying(prev => ({ ...prev, [video.id]: true }))}
-                      onPause={() => setIsPlaying(prev => ({ ...prev, [video.id]: false }))}
+                      globalMuted={globalMuted}
                     />
 
                     {/* Overlay UI */}
@@ -975,23 +933,6 @@ const Feed = () => {
                         </div>
                       </div>
                     </div>
-
-                    {/* Play overlay */}
-                    {!isPlaying[video.id] && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <Button
-                          variant="ghost"
-                          className="w-16 h-16 rounded-full bg-white/20 hover:bg-white/30 text-white pointer-events-auto"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            togglePlay(video.id);
-                          }}
-                          data-control
-                        >
-                          <Play size={32} className="ml-1" />
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
