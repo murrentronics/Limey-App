@@ -281,7 +281,7 @@ const Inbox = () => {
                           className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2"
                           onClick={() => handleOpenChat(chat.id)}
                         >
-                          <MessageSquare size={14} />
+                          <span className="text-lg" role="img" aria-label="Messages">💬</span>
                           Open Chat
                         </button>
                         <button
