@@ -500,7 +500,7 @@ const Feed = () => {
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-2">
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-4">
         <div className="flex items-center justify-between">
           <span
             className="text-2xl font-black text-white tracking-wider logo-text-glow"
@@ -555,9 +555,8 @@ const Feed = () => {
               size="sm"
               onClick={() => navigate('/inbox')}
               className="text-white hover:bg-white/10"
-              aria-label="Messages"
             >
-              <span className="text-xl" role="img" aria-label="Messages">💬</span>
+              <MessageSquare size={16} />
             </Button>
             {/* Settings Button */}
             <Button
