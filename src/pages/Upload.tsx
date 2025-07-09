@@ -4,8 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Paintbrush, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,7 +16,6 @@ const Upload = () => {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [category, setCategory] = useState<string>('All');
-  const [sheetOpen, setSheetOpen] = useState(false);
   // Thumbnail selection removed, handled by backend or default
   const { toast } = useToast();
   const { user } = useAuth();
@@ -283,55 +280,18 @@ const Upload = () => {
               </div>
             )}
             
-            
             <Input
               type="file"
-              accept="video/*"
-              capture="environment"
+              accept="video/*,image/*,audio/*"
               onChange={handleFileSelect}
               className="hidden"
               id="file-upload"
             />
-            
-            <div className="flex gap-3 justify-center">
-              <label htmlFor="file-upload">
-                <Button variant="neon" asChild className="cursor-pointer">
-                  <span className="flex items-center gap-2">
-                    <Paintbrush size={18} />
-                    {file ? "Change File" : "Create"}
-                  </span>
-                </Button>
-              </label>
-              
-              <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="neon" className="cursor-pointer flex items-center gap-2">
-                    <Plus size={18} />
-                    Upload
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="bottom" className="h-[90vh]">
-                  <SheetHeader>
-                    <SheetTitle>Select Video from Device</SheetTitle>
-                  </SheetHeader>
-                  
-                  <div className="mt-6">
-                    <Input
-                      type="file"
-                      accept="video/*"
-                      onChange={(e) => {
-                        handleFileSelect(e);
-                        setSheetOpen(false);
-                      }}
-                      className="w-full p-4 border-2 border-dashed border-border rounded-lg text-center cursor-pointer hover:border-primary transition-colors"
-                    />
-                    <p className="text-sm text-muted-foreground mt-2 text-center">
-                      Tap to browse your device for videos
-                    </p>
-                  </div>
-                </SheetContent>
-              </Sheet>
-            </div>
+            <label htmlFor="file-upload">
+              <Button variant="neon" asChild className="cursor-pointer">
+                <span>{file ? "Change File" : "Select File"}</span>
+              </Button>
+            </label>
           </div>
         </Card>
 
