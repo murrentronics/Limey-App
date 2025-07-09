@@ -354,7 +354,7 @@ const Profile = () => {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border p-4">
+      <div className="sticky top-0 z-10 bg-background border-b border-border p-2">
         <div className="flex items-center justify-between">
           {!isOwnProfile && (
             <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
@@ -372,8 +372,14 @@ const Profile = () => {
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
               <>
-                <Button variant="ghost" size="sm" onClick={() => navigate('/inbox')}>
-                  <MessageSquare size={16} />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/inbox')}
+                  className="text-white hover:bg-white/10"
+                  aria-label="Messages"
+                >
+                  <span className="text-xl" role="img" aria-label="Messages">💬</span>
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
                   <Settings size={16} />
@@ -582,10 +588,13 @@ const Profile = () => {
                   )}
                 </div>
                 <Button 
-                  variant="neon"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => navigate(`/message/${profile?.username || user?.id}`)}
+                  className="text-white hover:bg-white/10"
+                  aria-label="Messages"
                 >
-                  Message
+                  <span className="text-xl" role="img" aria-label="Messages">💬</span>
                 </Button>
               </>
             )}
