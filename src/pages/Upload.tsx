@@ -282,7 +282,8 @@ const Upload = () => {
             
             <Input
               type="file"
-              accept="video/*,image/*,audio/*"
+              accept="video/*"
+              capture="environment"
               onChange={handleFileSelect}
               className="hidden"
               id="file-upload"
