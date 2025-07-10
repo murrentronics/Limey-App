@@ -35,14 +35,22 @@ const Chat = () => {
   } | null>(null);
 
   useEffect(() => {
+    console.log('=== CHAT USEFFECT RUNNING ===');
+    console.log('user:', user?.id);
+    console.log('chatId:', chatId);
+    console.log('paramUserId:', paramUserId);
+    
     if (user) {
       if (chatId) {
         // Existing chat
+        console.log('Setting up chat with chatId:', chatId);
         fetchChat();
         fetchMessages();
+        console.log('About to set up real-time subscription...');
         const cleanup = subscribeToMessages();
         const typingCleanup = subscribeToTypingStatus();
         return () => {
+          console.log('Cleaning up chat subscriptions');
           cleanup();
           typingCleanup();
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -50,6 +58,8 @@ const Chat = () => {
       } else if (paramUserId) {
         // No chatId, but userId param present: start new chat
         (async () => {
+          console.log('Starting new chat with user:', paramUserId);
+          
           // Check if chat already exists between user and paramUserId
           const { data: existingChats, error } = await supabase
             .from('chats')
@@ -62,11 +72,43 @@ const Chat = () => {
             return;
           }
           
-          let chat = existingChats?.find(
+          console.log('All existing chats found:', existingChats);
+          
+          // Check if there are any chats (including deleted ones) between these users
+          const anyExistingChat = existingChats?.find(
             c => (c.sender_id === user.id && c.receiver_id === paramUserId) ||
                  (c.sender_id === paramUserId && c.receiver_id === user.id)
           );
-          if (!chat) {
+          
+          // If there's an existing chat, check if it's deleted for the current user
+          let shouldCreateNewChat = true;
+          let chat = null;
+          
+          if (anyExistingChat) {
+            const isDeletedForUser = 
+              (anyExistingChat.sender_id === user.id && anyExistingChat.deleted_for_sender) ||
+              (anyExistingChat.receiver_id === user.id && anyExistingChat.deleted_for_receiver);
+            
+            console.log(`Existing chat found: ${anyExistingChat.id}, deleted_for_user: ${isDeletedForUser}`);
+            
+            if (!isDeletedForUser) {
+              // Chat exists and is not deleted for current user, reuse it
+              chat = anyExistingChat;
+              shouldCreateNewChat = false;
+              console.log('Reusing existing non-deleted chat:', chat);
+            } else {
+              // Chat exists but is deleted for current user, create new chat
+              console.log('Existing chat is deleted for current user, will create new chat');
+              shouldCreateNewChat = true;
+            }
+          } else {
+            console.log('No existing chat found, will create new chat');
+            shouldCreateNewChat = true;
+          }
+          
+          if (shouldCreateNewChat) {
+            console.log('Creating new chat');
+            
             // Create new chat
             const { data: newChat, error: createError } = await supabase
               .from('chats')
@@ -78,7 +120,9 @@ const Chat = () => {
               return;
             }
             chat = newChat;
+            console.log('New chat created:', chat);
           }
+          
           // Redirect to the new/existing chat
           navigate(`/chat/${chat.id}`, { replace: true });
         })();
@@ -88,6 +132,7 @@ const Chat = () => {
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
+    console.log('Messages state changed, count:', messages.length);
     if (messages.length > 0 && isAtBottom) {
       scrollToBottom();
     }
@@ -201,7 +246,28 @@ const Chat = () => {
     console.log('Setting up real-time subscription for chat:', chatId);
     
     const channelName = `messages_${chatId}_${Date.now()}`;
+    console.log('Channel name:', channelName);
     
+    // Also subscribe to all messages for debugging
+    const allMessagesSubscription = supabase
+      .channel(`all_messages_${Date.now()}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages'
+      }, (payload) => {
+        console.log('=== ALL MESSAGES SUBSCRIPTION ===');
+        console.log('New message received (all messages):', payload.new);
+        console.log('Message chat ID:', payload.new.chat_id);
+        console.log('Current chat ID:', chatId);
+        if (payload.new.chat_id === chatId) {
+          console.log('This message belongs to current chat!');
+        }
+      })
+      .subscribe((status) => {
+        console.log('All messages subscription status:', status);
+      });
+
     const subscription = supabase
       .channel(channelName)
       .on('postgres_changes', {
@@ -210,7 +276,11 @@ const Chat = () => {
         table: 'messages',
         filter: `chat_id=eq.${chatId}`
       }, (payload) => {
+        console.log('=== REAL-TIME MESSAGE RECEIVED ===');
         console.log('New message received via real-time:', payload.new);
+        console.log('Current messages count before adding:', messages.length);
+        console.log('Chat ID from subscription:', chatId);
+        console.log('Message chat ID:', payload.new.chat_id);
         setMessages(prev => {
           // Check if message already exists to avoid duplicates
           const exists = prev.some(msg => msg.id === payload.new.id);
@@ -218,7 +288,7 @@ const Chat = () => {
             console.log('Message already exists, skipping duplicate');
             return prev;
           }
-          console.log('Adding new message to state');
+          console.log('Adding new message to state, new count will be:', prev.length + 1);
           return [...prev, payload.new];
         });
       })
@@ -244,11 +314,19 @@ const Chat = () => {
       })
       .subscribe((status) => {
         console.log('Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to real-time messages for chat:', chatId);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Channel error for chat:', chatId);
+        } else if (status === 'TIMED_OUT') {
+          console.error('Subscription timed out for chat:', chatId);
+        }
       });
 
     return () => {
       console.log('Cleaning up subscription for chat:', chatId);
       subscription.unsubscribe();
+      allMessagesSubscription.unsubscribe();
     };
   };
 
@@ -327,9 +405,13 @@ const Chat = () => {
         });
       } else {
         console.log('Message sent successfully:', data);
+        console.log('Current messages count before adding:', messages.length);
         
         // Add the new message to local state immediately
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => {
+          console.log('Adding message to local state, new count will be:', prev.length + 1);
+          return [...prev, data];
+        });
         
         // Update chat's last message and timestamp
         await supabase
@@ -468,8 +550,14 @@ const Chat = () => {
     if (!window.confirm("Are you sure you want to delete this chat?")) return;
     
     try {
+      console.log('Deleting chat:', chatId);
+      console.log('Current user:', user?.id);
+      console.log('Chat sender_id:', chat?.sender_id);
+      console.log('Chat receiver_id:', chat?.receiver_id);
+      
       // Mark chat as deleted for the current user instead of actually deleting it
       const updateField = chat?.sender_id === user?.id ? 'deleted_for_sender' : 'deleted_for_receiver';
+      console.log('Setting field to true:', updateField);
       
       const { error } = await supabase
         .from('chats')
@@ -485,6 +573,22 @@ const Chat = () => {
         });
       } else {
         console.log('Chat marked as deleted for current user');
+        
+        // Verify the deletion worked by checking the database
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('chats')
+          .select('*')
+          .eq('id', chatId)
+          .single();
+        
+        if (verifyError) {
+          console.error('Error verifying deletion:', verifyError);
+        } else {
+          console.log('Verification - Chat after deletion:', verifyData);
+          console.log('deleted_for_sender:', verifyData.deleted_for_sender);
+          console.log('deleted_for_receiver:', verifyData.deleted_for_receiver);
+        }
+        
         toast({
           title: "Chat deleted",
           description: "The chat has been removed from your inbox.",
@@ -605,12 +709,19 @@ const Chat = () => {
     
     try {
       console.log('Testing real-time functionality...');
+      console.log('Current chatId:', chatId);
+      console.log('Current user:', user.id);
+      console.log('Chat data:', chat);
+      
+      const receiverId = chat?.sender_id === user.id ? chat?.receiver_id : chat?.sender_id;
+      console.log('Receiver ID:', receiverId);
+      
       const { data, error } = await supabase
         .from('messages')
         .insert({
           chat_id: chatId,
           sender_id: user.id,
-          receiver_id: chat?.sender_id === user.id ? chat?.receiver_id : chat?.sender_id,
+          receiver_id: receiverId,
           content: `Test message at ${new Date().toLocaleTimeString()}`
         })
         .select()
@@ -620,9 +731,50 @@ const Chat = () => {
         console.error('Test message error:', error);
       } else {
         console.log('Test message sent:', data);
+        console.log('This should trigger real-time subscription');
       }
     } catch (error) {
       console.error('Test realtime error:', error);
+    }
+  };
+
+  // Test function to check if real-time is enabled
+  const testRealtimeEnabled = async () => {
+    try {
+      console.log('=== TESTING REAL-TIME ENABLED ===');
+      
+      // Test if we can subscribe to any table changes
+      const testSubscription = supabase
+        .channel('test_realtime')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'messages'
+        }, (payload) => {
+          console.log('=== REAL-TIME TEST SUCCESS ===');
+          console.log('Received real-time event:', payload);
+        })
+        .subscribe((status) => {
+          console.log('Test subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('Real-time is working!');
+            // Send a test message to trigger the subscription
+            setTimeout(() => {
+              testRealtime();
+            }, 1000);
+          } else {
+            console.error('Real-time subscription failed:', status);
+          }
+        });
+
+      // Clean up after 5 seconds
+      setTimeout(() => {
+        testSubscription.unsubscribe();
+        console.log('Test subscription cleaned up');
+      }, 5000);
+      
+    } catch (error) {
+      console.error('Test real-time enabled error:', error);
     }
   };
 
@@ -883,8 +1035,8 @@ const Chat = () => {
       <div className="fixed bottom-12 left-0 right-0 p-4 bg-black/90 backdrop-blur-md border-t border-white/10 z-40">
         {/* Typing Indicator */}
         {otherUserTyping && (
-          <div className="mb-2 px-3 py-1">
-            <div className="flex items-center space-x-2">
+          <div className="mb-2 px-3 py-1 flex justify-center">
+            <div className="flex items-center space-x-2 bg-white/10 rounded-full px-3 py-1">
               <div className="flex space-x-1">
                 <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce"></div>
                 <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>

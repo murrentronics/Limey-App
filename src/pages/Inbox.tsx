@@ -129,6 +129,33 @@ const Inbox = () => {
             return prev;
           }
           
+          // Check if user already has an active chat with the same person
+          const otherUserId = payload.new.sender_id === user?.id ? payload.new.receiver_id : payload.new.sender_id;
+          const hasActiveChatWithSamePerson = prev.some(chat => {
+            const chatOtherUserId = chat.sender_id === user?.id ? chat.receiver_id : chat.sender_id;
+            return chatOtherUserId === otherUserId;
+          });
+          
+          if (hasActiveChatWithSamePerson) {
+            console.log('Not adding new chat - user already has active chat with same person:', payload.new.id);
+            return prev;
+          }
+          
+          // Special case: If this is a new chat and the current user is the receiver,
+          // and they have a non-deleted chat with the sender, don't add this new chat
+          // because the sender should be using the existing chat
+          if (payload.new.receiver_id === user?.id) {
+            const existingChatWithSender = prev.find(chat => {
+              const chatOtherUserId = chat.sender_id === user?.id ? chat.receiver_id : chat.sender_id;
+              return chatOtherUserId === payload.new.sender_id;
+            });
+            
+            if (existingChatWithSender) {
+              console.log('Not adding new chat - receiver already has active chat with sender:', payload.new.id);
+              return prev;
+            }
+          }
+          
           console.log('Adding new chat to inbox:', payload.new.id);
           return [payload.new, ...prev];
         });

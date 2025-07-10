@@ -115,10 +115,10 @@ const Message = () => {
       console.log('Using existing chat:', filteredExistingChat);
 
       let chatId;
-      let currentExistingChat = existingChats && existingChats.length > 0 ? existingChats[0] : null;
+      let currentExistingChat = filteredExistingChat;
       
       if (currentExistingChat) {
-        console.log('Found existing chat:', currentExistingChat.id);
+        console.log('Found existing non-deleted chat:', currentExistingChat.id);
         chatId = currentExistingChat.id;
         console.log('Using existing chat:', currentExistingChat.id);
         // Update chat's last message and timestamp
@@ -126,10 +126,7 @@ const Message = () => {
           .from('chats')
           .update({
             last_message: message.trim(),
-            updated_at: new Date().toISOString(),
-            // Reset deletion flags if chat was previously deleted
-            deleted_for_sender: false,
-            deleted_for_receiver: false
+            updated_at: new Date().toISOString()
           })
           .eq('id', chatId);
 
@@ -138,60 +135,28 @@ const Message = () => {
           throw updateError;
         }
       } else {
-        // Try to create new chat, but handle the case where it might already exist
+        // No non-deleted chat exists, create a completely new chat
         console.log('Creating new chat between', user.id, 'and', receiver.user_id);
         
-        // First, try to find any existing chat (including deleted ones)
-        const { data: allExistingChats } = await supabase
+        const { data: newChat, error: chatError } = await supabase
           .from('chats')
-          .select('*')
-          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${receiver.user_id}),and(sender_id.eq.${receiver.user_id},receiver_id.eq.${user.id})`);
-        
-        if (allExistingChats && allExistingChats.length > 0) {
-          // There's an existing chat (probably deleted), let's reactivate it
-          const deletedExistingChat = allExistingChats[0];
-          console.log('Found existing deleted chat, reactivating:', deletedExistingChat.id);
-          
-          // Reactivate the chat by clearing the deletion flags
-          const updateField = deletedExistingChat.sender_id === user.id ? 'deleted_for_sender' : 'deleted_for_receiver';
-          const { error: reactivateError } = await supabase
-            .from('chats')
-            .update({ 
-              [updateField]: false,
-              last_message: message.trim(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', deletedExistingChat.id);
-          
-          if (reactivateError) {
-            console.error('Error reactivating chat:', reactivateError);
-            alert('Failed to reactivate chat: ' + reactivateError.message);
-            return;
-          }
-          
-          chatId = deletedExistingChat.id;
-        } else {
-          // Create completely new chat
-          const { data: newChat, error: chatError } = await supabase
-            .from('chats')
-            .insert({
-              sender_id: user.id,
-              receiver_id: receiver.user_id,
-              last_message: message.trim(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .select()
-            .single();
+          .insert({
+            sender_id: user.id,
+            receiver_id: receiver.user_id,
+            last_message: message.trim(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
 
-          if (chatError) {
-            console.error('Error creating chat:', chatError);
-            alert('Failed to create chat: ' + chatError.message);
-            return;
-          }
-          console.log('Created new chat:', newChat);
-          chatId = newChat.id;
+        if (chatError) {
+          console.error('Error creating chat:', chatError);
+          alert('Failed to create chat: ' + chatError.message);
+          return;
         }
+        console.log('Created new chat:', newChat);
+        chatId = newChat.id;
       }
 
       // Send the message
