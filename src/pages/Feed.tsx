@@ -219,7 +219,7 @@ const Feed = () => {
       setError(null);
       let query = supabase
         .from('videos')
-        .select(`*, profiles!inner(username, avatar_url)`)
+        .select(`*`)
         .order('created_at', { ascending: false })
         .limit(100);
       if (activeCategory !== "All") {
@@ -228,51 +228,18 @@ const Feed = () => {
       const { data, error } = await query;
 
       if (error) {
-        console.error('Error fetching videos with profiles:', error);
-        // fallback without profiles
-        let fallbackQuery = supabase
-          .from('videos')
-          .select(`*`)
-          .order('created_at', { ascending: false })
-          .limit(100);
-        if (activeCategory !== "All") {
-          fallbackQuery = fallbackQuery.eq('category', activeCategory);
-        }
-        const { data: fallbackData, error: fallbackError } = await fallbackQuery;
-        if (fallbackError) {
-          console.error('Error fetching videos without profiles:', fallbackError);
-          setError('Failed to load videos. Please try again.');
-          return;
-        }
-        if (fallbackData && fallbackData.length > 0) {
-          const userIds = [...new Set(fallbackData.map(video => video.user_id))];
-          const { data: profilesData } = await supabase
-            .from('profiles')
-            .select('user_id, username, avatar_url')
-            .in('user_id', userIds);
-          const profilesMap = new Map();
-          if (profilesData) {
-            profilesData.forEach(p => profilesMap.set(p.user_id, p));
-          }
-          const videosWithProfiles = fallbackData.map(video => ({
-            ...video,
-            profiles: profilesMap.get(video.user_id) || null
-          }));
-          setVideos(videosWithProfiles);
-          await checkFollowStatus(videosWithProfiles);
-        } else {
-          setVideos(fallbackData || []);
-          await checkFollowStatus(fallbackData || []);
-        }
-      } else {
-        setVideos(data || []);
-        await checkFollowStatus(data || []);
+        console.error('Error fetching videos:', error);
+        setError('Failed to load videos. Please try again.');
+        return;
       }
+      
+      console.log('Videos fetched:', data);
+      setVideos(data || []);
+      await checkFollowStatus(data || []);
     } catch (error) {
-      console.error('Error fetching videos:', error);
+      console.error('Error in fetchVideos:', error);
       setError('Failed to load videos. Please try again.');
     } finally {
-      console.log("Feed - fetchVideos completed, loading set to false");
       setLoading(false);
     }
   };
@@ -416,7 +383,8 @@ const Feed = () => {
   };
 
   const getUsername = (video: any) => {
-    if (video.profiles?.username) return video.profiles.username;
+    // Use direct username field from videos table
+    if (video.username) return video.username;
     if (video.user_id) {
       const userId = video.user_id.replace(/[^a-zA-Z0-9]/g, "");
       return `user_${userId.slice(0, 8)}`;
@@ -676,7 +644,7 @@ const Feed = () => {
                         <div className="flex items-center space-x-3">
                           <div className="relative">
                             <Avatar className="w-12 h-12">
-                              <AvatarImage src={video.profiles?.avatar_url || undefined} alt={getUsername(video)} />
+                              <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
                               <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
                             </Avatar>
                             {/* Follow Button */}
@@ -837,7 +805,7 @@ const Feed = () => {
                           <div className="flex items-center space-x-3">
                             <div className="relative">
                               <Avatar className="w-12 h-12">
-                                <AvatarImage src={video.profiles?.avatar_url || undefined} alt={getUsername(video)} />
+                                <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
                                 <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
                               </Avatar>
                               {/* Follow Button */}

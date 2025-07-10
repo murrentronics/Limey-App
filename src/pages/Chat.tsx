@@ -328,6 +328,9 @@ const Chat = () => {
       } else {
         console.log('Message sent successfully:', data);
         
+        // Add the new message to local state immediately
+        setMessages(prev => [...prev, data]);
+        
         // Update chat's last message and timestamp
         await supabase
           .from('chats')
@@ -417,7 +420,13 @@ const Chat = () => {
         }
         
         console.log('Message deleted for everyone');
-        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+        setMessages(prev => {
+          const updatedMessages = prev.map(msg => 
+            msg.id === messageId ? { ...msg, deleted_for_everyone: true } : msg
+          );
+          console.log('Updated messages state (delete for everyone):', updatedMessages);
+          return updatedMessages;
+        });
         toast({ 
           title: 'Message deleted for everyone', 
           description: 'The message has been removed for all users.',
@@ -437,9 +446,13 @@ const Chat = () => {
         }
         
         console.log('Message marked as deleted for sender');
-        setMessages(prev => prev.map(msg => 
-          msg.id === messageId ? { ...msg, deleted_for_sender: true } : msg
-        ));
+        setMessages(prev => {
+          const updatedMessages = prev.map(msg => 
+            msg.id === messageId ? { ...msg, deleted_for_sender: true } : msg
+          );
+          console.log('Updated messages state:', updatedMessages);
+          return updatedMessages;
+        });
         toast({ title: 'Message deleted', description: 'The message has been removed from your view.' });
       }
     } catch (error) {
@@ -751,7 +764,7 @@ const Chat = () => {
       {/* Messages Container */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto px-4 pt-20 pb-32"
+        className="flex-1 overflow-y-auto px-4 pt-20 pb-40"
         onScroll={handleScroll}
       >
         {messages.length === 0 ? (
@@ -771,6 +784,17 @@ const Chat = () => {
               const isDeletedForSender = isOwnMessage && message.deleted_for_sender === true;
               const isDeletedForReceiver = !isOwnMessage && message.deleted_for_receiver === true;
               const isDeleted = isDeletedForEveryone || isDeletedForSender || isDeletedForReceiver;
+
+              // Debug logging
+              if (message.deleted_for_sender || message.deleted_for_everyone) {
+                console.log('Message deletion state:', {
+                  id: message.id,
+                  deleted_for_sender: message.deleted_for_sender,
+                  deleted_for_everyone: message.deleted_for_everyone,
+                  isOwnMessage,
+                  isDeleted
+                });
+              }
 
               if (isDeleted) {
                 return (
@@ -821,7 +845,10 @@ const Chat = () => {
                     
                     {/* Dropdown Menu */}
                     {showMessageMenu === message.id && isOwnMessage && (
-                      <div className="absolute top-0 right-0 mt-8 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] max-w-[200px]" data-dropdown>
+                      <div 
+                        className="absolute right-full mr-2 top-0 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] max-w-[200px]" 
+                        data-dropdown
+                      >
                         <button
                           className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2"
                           onClick={() => copyMessage(message.content)}
@@ -853,7 +880,7 @@ const Chat = () => {
       </div>
 
       {/* Message Input */}
-      <div className="fixed bottom-20 left-0 right-0 p-4 bg-black/90 backdrop-blur-md border-t border-white/10">
+      <div className="fixed bottom-12 left-0 right-0 p-4 bg-black/90 backdrop-blur-md border-t border-white/10 z-40">
         {/* Typing Indicator */}
         {otherUserTyping && (
           <div className="mb-2 px-3 py-1">
