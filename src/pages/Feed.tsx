@@ -467,15 +467,18 @@ const Feed = () => {
             >
               <TrendingUp size={20} />
             </Button>
-            {/* Messages Button */}
+            {/* Live Button */}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate('/inbox')}
+              onClick={() => navigate('/live')}
               className="text-white hover:bg-white/10"
-              aria-label="Messages"
+              aria-label="Live"
             >
-              <MessageSquare size={20} />
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium">LIVE</span>
+              </div>
             </Button>
             {/* Settings Button */}
             <Button
