@@ -373,32 +373,20 @@ const Inbox = () => {
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-md border-b border-white/10 p-4">
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-4">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
-            <ArrowLeft size={20} />
-          </Button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold">Messages</h1>
-            {Object.values(unreadCounts).reduce((total, count) => total + count, 0) > 0 && (
-              <div className="bg-red-500 text-white text-xs rounded-full min-w-[20px] h-[20px] flex items-center justify-center font-bold">
-                {Object.values(unreadCounts).reduce((total, count) => total + count, 0)}
-              </div>
-            )}
-          </div>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => {
-              console.log('=== DEBUG: Current chats state ===');
-              console.log('Chats:', chats);
-              console.log('User ID:', user?.id);
-              fetchChats(); // Refresh chats
+          <span
+            className="text-2xl font-black text-white tracking-wider logo-text-glow"
+            style={{
+              fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              fontWeight: '900',
+              letterSpacing: '0.15em',
+              filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
             }}
-            className="text-white/60 hover:text-white"
           >
-            🔄
-          </Button>
+            Messages
+          </span>
+          <div style={{ width: 40 }}></div>
         </div>
       </div>
 

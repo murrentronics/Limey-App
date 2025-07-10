@@ -354,37 +354,22 @@ const Profile = () => {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border p-2">
-        <div className="relative flex items-center justify-center">
-          {!isOwnProfile && (
-            <button
-              className="absolute left-0 top-1/2 -translate-y-1/2 p-2 text-green-600 hover:bg-green-100 rounded-full"
-              onClick={() => navigate(-1)}
-              aria-label="Go Back"
-            >
-              <ArrowLeft size={24} />
-            </button>
-          )}
-          <h1 className="text-2xl font-black text-primary tracking-wider logo-text-glow mx-auto" style={{
-            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            fontWeight: '900',
-            letterSpacing: '0.15em',
-            filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
-          }}>
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-4">
+        <div className="flex items-center justify-between">
+          <span
+            className="text-2xl font-black text-white tracking-wider logo-text-glow"
+            style={{
+              fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              fontWeight: '900',
+              letterSpacing: '0.15em',
+              filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
+            }}
+          >
             {isOwnProfile ? 'Profile' : 'Viewing...'}
-          </h1>
+          </span>
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate('/inbox')}
-                  className="text-white hover:bg-white/10"
-                  aria-label="Messages"
-                >
-                  <span className="text-xl" role="img" aria-label="Messages">💬</span>
-                </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
                   <Settings size={16} />
                 </Button>
