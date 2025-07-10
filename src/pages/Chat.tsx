@@ -6,7 +6,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Send, MoreVertical, Trash2, User, Copy, MessageSquare } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-
 import BottomNavigation from "@/components/BottomNavigation";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,6 +19,7 @@ const Chat = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [showMessageMenu, setShowMessageMenu] = useState<string | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<string | null>(null);
@@ -27,9 +27,6 @@ const Chat = () => {
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const ajaxPollingRef = useRef<NodeJS.Timeout | null>(null);
-  const lastMessageCountRef = useRef<number>(0);
-  const [, setNow] = useState(Date.now());
   const { toast } = useToast();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
@@ -45,12 +42,9 @@ const Chat = () => {
         fetchMessages();
         const cleanup = subscribeToMessages();
         const typingCleanup = subscribeToTypingStatus();
-        startAjaxPolling();
-        debugCheckMessages();
         return () => {
           cleanup();
           typingCleanup();
-          stopAjaxPolling();
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         };
       } else if (paramUserId) {
@@ -92,19 +86,12 @@ const Chat = () => {
     }
   }, [chatId, user, paramUserId]);
 
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    // Disable automatic scrolling to prevent loops
-    // User can scroll manually without interference
-  }, [messages]);
-
-  // Debug: Log when messages change
-  useEffect(() => {
-    console.log('Messages state updated, count:', messages.length);
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      setLastMessageTimestamp(lastMessage.created_at);
+    if (messages.length > 0 && isAtBottom) {
+      scrollToBottom();
     }
-  }, [messages]);
+  }, [messages, isAtBottom]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -163,7 +150,6 @@ const Chat = () => {
   const fetchMessages = async () => {
     try {
       console.log('Fetching messages for chatId:', chatId);
-      console.log('Current user ID:', user?.id);
       
       // First, let's check if the chat exists and we have access to it
       const { data: chatCheck, error: chatError } = await supabase
@@ -197,13 +183,11 @@ const Chat = () => {
         .select('*')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
-      console.log('Fetched messages:', data);
 
       if (error) {
         console.error('Error fetching messages:', error);
       } else {
         console.log('Messages data:', data);
-        console.log('Number of messages found:', data?.length || 0);
         setMessages(data || []);
       }
     } catch (error) {
@@ -216,7 +200,6 @@ const Chat = () => {
   const subscribeToMessages = () => {
     console.log('Setting up real-time subscription for chat:', chatId);
     
-    // Create a unique channel name for this chat
     const channelName = `messages_${chatId}_${Date.now()}`;
     
     const subscription = supabase
@@ -238,8 +221,6 @@ const Chat = () => {
           console.log('Adding new message to state');
           return [...prev, payload.new];
         });
-        // Auto-scroll to bottom when new message arrives (only if at bottom)
-        setTimeout(() => smartScrollToBottom(), 100);
       })
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -263,13 +244,6 @@ const Chat = () => {
       })
       .subscribe((status) => {
         console.log('Subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to real-time messages for chat:', chatId);
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('Channel error in real-time subscription');
-        } else if (status === 'TIMED_OUT') {
-          console.error('Subscription timed out');
-        }
       });
 
     return () => {
@@ -279,18 +253,16 @@ const Chat = () => {
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    // Disable scroll detection to prevent feedback loops
-    // User can scroll manually without interference
-  };
-
-  const smartScrollToBottom = () => {
-    // Completely disable automatic scrolling to prevent loops
-    console.log('Smart scroll called but disabled to prevent loops');
-    // Only allow manual user scrolling
+    const container = e.currentTarget;
+    const threshold = 100; // pixels from bottom
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    setIsAtBottom(isNearBottom);
   };
 
   const sendMessage = async () => {
@@ -306,13 +278,9 @@ const Chat = () => {
     }
 
     console.log('Sending message:', newMessage.trim());
-    console.log('Current user ID:', user.id);
-    console.log('Chat sender_id:', chat.sender_id);
-    console.log('Chat receiver_id:', chat.receiver_id);
     
     // Determine the correct receiver_id
     const receiverId = chat.sender_id === user.id ? chat.receiver_id : chat.sender_id;
-    console.log('Determined receiver_id:', receiverId);
     
     // Prevent sending message to yourself
     if (receiverId === user.id) {
@@ -328,6 +296,8 @@ const Chat = () => {
     }
     
     setSending(true);
+    const messageContent = newMessage.trim();
+    setNewMessage(""); // Clear input immediately for better UX
     
     try {
       console.log('Attempting to send message with data:', {
@@ -343,7 +313,7 @@ const Chat = () => {
           chat_id: chatId,
           sender_id: user.id,
           receiver_id: receiverId,
-          content: newMessage.trim()
+          content: messageContent
         })
         .select()
         .single();
@@ -356,21 +326,19 @@ const Chat = () => {
           variant: "destructive"
         });
       } else {
-        setNewMessage(""); // Clear input
-        await fetchMessages(); // Ensure sender sees their own message
         console.log('Message sent successfully:', data);
-        console.log('Current messages count before update:', messages.length);
         
         // Update chat's last message and timestamp
         await supabase
           .from('chats')
           .update({
-            last_message: newMessage.trim(),
+            last_message: messageContent,
             updated_at: new Date().toISOString()
           })
           .eq('id', chatId);
         
-        // Auto-scroll to bottom after sending (user always wants to see their message)
+        // Force scroll to bottom after sending
+        setIsAtBottom(true);
         setTimeout(() => scrollToBottom(), 100);
       }
     } catch (error) {
@@ -391,8 +359,6 @@ const Chat = () => {
       sendMessage();
     }
   };
-
-
 
   const copyMessage = async (content: string) => {
     try {
@@ -439,7 +405,6 @@ const Chat = () => {
       const deleteForEveryone = type === 'deleteForEveryone';
       
       if (deleteForEveryone) {
-        // Delete for everyone - mark as deleted for everyone instead of actually deleting
         const { error } = await supabase
           .from('messages')
           .update({ deleted_for_everyone: true })
@@ -527,9 +492,7 @@ const Chat = () => {
 
   const getChatPartner = () => {
     if (!chat || !user) return null;
-    // If current user is sender, partner is receiver; else, partner is sender
     if (chat.sender_id === user.id) {
-      // Defensive: if receiver is missing, fallback to sender
       return chat.receiver && chat.receiver.user_id !== user.id ? chat.receiver : null;
     } else if (chat.receiver_id === user.id) {
       return chat.sender && chat.sender.user_id !== user.id ? chat.sender : null;
@@ -546,7 +509,7 @@ const Chat = () => {
       return "now";
     } else if (diffInMinutes < 60) {
       return `${Math.floor(diffInMinutes)}m ago`;
-    } else if (diffInMinutes < 1440) { // less than 24 hours
+    } else if (diffInMinutes < 1440) {
       const hours = Math.floor(diffInMinutes / 60);
       return `${hours}h ago`;
     } else {
@@ -654,16 +617,13 @@ const Chat = () => {
   const handleTyping = () => {
     if (!isTyping) {
       setIsTyping(true);
-      // Broadcast typing status to other user
       broadcastTypingStatus(true);
     }
     
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
     
-    // Set timeout to stop typing indicator after 3 seconds of inactivity
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       broadcastTypingStatus(false);
@@ -671,10 +631,9 @@ const Chat = () => {
   };
 
   const broadcastTypingStatus = async (typing: boolean) => {
-    if (!user || !chatId) return;
+    if (!user || !chatId || !chat) return;
     
     try {
-      // Update typing status in the chat
       const { error } = await supabase
         .from('chats')
         .update({
@@ -704,10 +663,8 @@ const Chat = () => {
         const isCurrentUserSender = chat?.sender_id === user?.id;
         
         if (isCurrentUserSender) {
-          // Current user is sender, check if receiver is typing
           setOtherUserTyping(newChat.typing_receiver === true);
         } else {
-          // Current user is receiver, check if sender is typing
           setOtherUserTyping(newChat.typing_sender === true);
         }
       })
@@ -718,91 +675,27 @@ const Chat = () => {
     };
   };
 
-  // AJAX Polling Functions (WordPress-style reliable updates)
-  const startAjaxPolling = () => {
-    console.log('Starting AJAX polling for reliable message updates');
-    ajaxPollingRef.current = setInterval(async () => {
-      if (!chatId) return;
-      
-      try {
-        // Get the timestamp of the last message we have
-        const lastMessageTimestamp = messages.length > 0 ? messages[messages.length - 1].created_at : null;
-        
-        // Fetch only new messages since our last message
-        let query = supabase
-          .from('messages')
-          .select('*')
-          .eq('chat_id', chatId)
-          .order('created_at', { ascending: true });
-
-        if (lastMessageTimestamp) {
-          query = query.gt('created_at', lastMessageTimestamp);
-        }
-
-        const { data: newMessages, error } = await query;
-
-        if (error) {
-          console.error('AJAX polling error:', error);
-          return;
-        }
-
-        // Only update if we have new messages
-        if (newMessages && newMessages.length > 0) {
-          console.log('AJAX polling found new messages:', newMessages.length);
-          setMessages(prev => {
-            // Check for duplicates by message ID
-            const existingIds = new Set(prev.map(msg => msg.id));
-            const uniqueNewMessages = newMessages.filter(msg => !existingIds.has(msg.id));
-            
-            if (uniqueNewMessages.length > 0) {
-              console.log('Adding unique new messages:', uniqueNewMessages.length);
-              return [...prev, ...uniqueNewMessages];
-            } else {
-              console.log('All messages already exist, no duplicates added');
-              return prev;
-            }
-          });
-          // Only scroll if user is at bottom, with longer delay
-          setTimeout(() => smartScrollToBottom(), 200);
-        }
-        
-      } catch (error) {
-        console.error('AJAX polling error:', error);
-      }
-    }, 2000); // Check every 2 seconds for more responsive updates
-  };
-
-  const stopAjaxPolling = () => {
-    if (ajaxPollingRef.current) {
-      console.log('Stopping AJAX polling');
-      clearInterval(ajaxPollingRef.current);
-      ajaxPollingRef.current = null;
-    }
-  };
-
-  // Force re-render for time updates
+  // Initial scroll to bottom when component mounts
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 30000); // every 30s
-    return () => clearInterval(interval);
-  }, []);
-
-  // Scroll to bottom only on initial page load
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (!loading && messages.length > 0) {
+      setTimeout(() => scrollToBottom(), 100);
     }
-  }, []);
+  }, [loading]);
 
-  // After updating messages (real-time, polling, or manual refresh), always scroll to bottom
-  useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages]);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white">Loading chat...</div>
+      </div>
+    );
+  }
 
-  // Defensive: Only render chat UI if chatId and chat are loaded
   if (!chatId || !chat) {
-    return <div className="min-h-screen flex items-center justify-center text-white">Loading chat...</div>;
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white">Chat not found</div>
+      </div>
+    );
   }
 
   const partner = getChatPartner();
@@ -810,7 +703,7 @@ const Chat = () => {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-4">
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-md border-b border-white/10 p-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={() => navigate('/inbox')}>
             <ArrowLeft size={20} />
@@ -821,7 +714,6 @@ const Chat = () => {
                 <AvatarImage src={partner?.avatar_url} alt={partner?.username} />
                 <AvatarFallback>{partner?.username?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
               </Avatar>
-              {/* Online status indicator */}
               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-black"></div>
             </div>
             <div>
@@ -834,12 +726,10 @@ const Chat = () => {
               variant="ghost" 
               size="sm"
               onClick={() => setShowChatMenu(!showChatMenu)}
-              className="ml-2"
             >
               <MoreVertical size={20} />
             </Button>
             
-            {/* Chat Menu Dropdown */}
             {showChatMenu && (
               <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[120px]" data-dropdown>
                 <button
@@ -860,13 +750,14 @@ const Chat = () => {
 
       {/* Messages Container */}
       <div
-        className="absolute left-0 right-0 overflow-y-auto px-4"
-        style={{ top: '72px', bottom: '120px' }}
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto px-4 pt-20 pb-32"
+        onScroll={handleScroll}
       >
-        {messages.length === 0 && !loading ? (
+        {messages.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-2xl">💬</span>
+              <MessageSquare size={24} />
             </div>
             <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
             <p className="text-white/70">Start the conversation!</p>
@@ -916,8 +807,8 @@ const Chat = () => {
                           : 'bg-white/10 text-white'
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
-                      <div className="flex justify-center mt-1">
+                      <p className="text-sm break-words">{message.content}</p>
+                      <div className="flex justify-end mt-1">
                         <p className={`text-xs ${
                           formatTime(message.created_at) === "now" 
                             ? "text-green-400 font-medium" 
@@ -961,8 +852,8 @@ const Chat = () => {
         )}
       </div>
 
-      {/* Message Input - Fixed at bottom above bottom navigation */}
-      <div className="fixed bottom-20 left-0 right-0 p-4 bg-black/20 backdrop-blur-md border-t border-white/10">
+      {/* Message Input */}
+      <div className="fixed bottom-20 left-0 right-0 p-4 bg-black/90 backdrop-blur-md border-t border-white/10">
         {/* Typing Indicator */}
         {otherUserTyping && (
           <div className="mb-2 px-3 py-1">
@@ -989,11 +880,12 @@ const Chat = () => {
             onKeyPress={handleKeyPress}
             placeholder="Type a message..."
             className="flex-1 bg-white/10 border-white/20 text-white placeholder-white/50"
+            disabled={sending}
           />
           <Button
             onClick={sendMessage}
             disabled={sending || !newMessage.trim() || !chat}
-            className="bg-green-600 hover:bg-green-700"
+            className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
           >
             <Send size={16} />
           </Button>
@@ -1034,4 +926,4 @@ const Chat = () => {
   );
 };
 
-export default Chat; 
+export default Chat;
