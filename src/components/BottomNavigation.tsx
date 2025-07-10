@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Home, TrendingUp, Plus, Radio, CircleUser } from "lucide-react";
+import { Home, TrendingUp, Plus, MessageSquare, CircleUser } from "lucide-react";
 
 const BottomNavigation = () => {
   const navigate = useNavigate();
@@ -10,7 +10,7 @@ const BottomNavigation = () => {
     { path: '/', icon: Home },
     { path: '/trending', icon: TrendingUp },
     { path: '/upload', icon: Plus, isUpload: true },
-    { path: '/live', icon: Radio },
+    { path: '/inbox', icon: MessageSquare },
     { path: '/profile', icon: CircleUser }
   ];
 

@@ -482,15 +482,15 @@ const Feed = () => {
                 </svg>
               </div>
             </Button>
-            {/* Messenger Button */}
+            {/* Live Button */}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate('/inbox')}
+              onClick={() => navigate('/live')}
               className="text-white hover:bg-white/10"
-              aria-label="Messages"
+              aria-label="Live"
             >
-              <span className="text-xl" role="img" aria-label="Messages">💬</span>
+              <span className="text-xl" role="img" aria-label="Live">🔴</span>
             </Button>
             {/* Settings Button */}
             <Button

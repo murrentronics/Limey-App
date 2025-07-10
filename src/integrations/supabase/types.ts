@@ -94,6 +94,42 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_deletions: {
+        Row: {
+          chat_id: string
+          deleted_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          chat_id: string
+          deleted_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          chat_id?: string
+          deleted_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_deletions_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_deletions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       chats: {
         Row: {
           created_at: string | null
@@ -616,15 +652,7 @@ export type Database = {
           viewed_at?: string | null
           viewer_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "video_views_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "videos"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       videos: {
         Row: {
@@ -634,15 +662,14 @@ export type Database = {
           created_at: string | null
           description: string | null
           duration: number | null
-          filter: string | null
           id: string
           like_count: number | null
           tags: string[] | null
           thumbnail_url: string | null
           title: string
           updated_at: string | null
-          user_id: string | null
-          username: string
+          user_id: string
+          username: string | null
           video_url: string
           view_count: number | null
         }
@@ -653,15 +680,14 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           duration?: number | null
-          filter?: string | null
           id?: string
           like_count?: number | null
           tags?: string[] | null
           thumbnail_url?: string | null
           title: string
           updated_at?: string | null
-          user_id?: string | null
-          username: string
+          user_id: string
+          username?: string | null
           video_url: string
           view_count?: number | null
         }
@@ -672,19 +698,26 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           duration?: number | null
-          filter?: string | null
           id?: string
           like_count?: number | null
           tags?: string[] | null
           thumbnail_url?: string | null
           title?: string
           updated_at?: string | null
-          user_id?: string | null
-          username?: string
+          user_id?: string
+          username?: string | null
           video_url?: string
           view_count?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "videos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
     }
     Views: {
@@ -789,28 +822,6 @@ export type Database = {
           recent_comments: Json
         }[]
       }
-      get_videos_by_category: {
-        Args: { category_filter: string }
-        Returns: {
-          avatar_url: string | null
-          category: string | null
-          comment_count: number | null
-          created_at: string | null
-          description: string | null
-          duration: number | null
-          filter: string | null
-          id: string
-          like_count: number | null
-          tags: string[] | null
-          thumbnail_url: string | null
-          title: string
-          updated_at: string | null
-          user_id: string | null
-          username: string
-          video_url: string
-          view_count: number | null
-        }[]
-      }
       increment_comment_count: {
         Args: { video_id_input: string }
         Returns: undefined
@@ -865,6 +876,10 @@ export type Database = {
           created_at: string
           search_rank: number
         }[]
+      }
+      soft_delete_chat: {
+        Args: { chat_uuid: string; user_uuid: string }
+        Returns: undefined
       }
       update_profile: {
         Args:
