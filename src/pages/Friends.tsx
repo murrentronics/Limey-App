@@ -346,19 +346,28 @@ const Friends = () => {
             Friends
           </span>
           <div className="flex items-center space-x-2">
-            {/* Friends Icon */}
-            <div className="p-2">
-              <Users size={20} className="text-white" />
-            </div>
-            {/* Messages Button */}
+            {/* Trending Button */}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate('/inbox')}
+              onClick={() => navigate('/trending')}
               className="text-white hover:bg-white/10"
-              aria-label="Messages"
+              aria-label="Trending"
             >
-              <MessageSquare size={20} />
+              <TrendingUp size={20} />
+            </Button>
+            {/* Live Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/live')}
+              className="text-white hover:bg-white/10"
+              aria-label="Live"
+            >
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium">LIVE</span>
+              </div>
             </Button>
             {/* Settings Button */}
             <Button

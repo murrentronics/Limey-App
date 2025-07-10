@@ -27,7 +27,11 @@ const BottomNavigation = () => {
               onClick={() => navigate(item.path)}
               className={item.isUpload ? "px-3" : "p-3"}
             >
-              <IconComponent size={20} />
+              {item.path === '/inbox' ? (
+                <span className="text-xl" role="img" aria-label="Messages">💬</span>
+              ) : (
+                <IconComponent size={20} />
+              )}
             </Button>
           );
         })}
