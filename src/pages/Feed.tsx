@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
@@ -457,40 +457,25 @@ const Feed = () => {
             >
               <SearchIcon size={20} />
             </Button>
-            {/* Refresh Button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={fetchVideos}
-              disabled={loading}
-              aria-label="Refresh"
-              className="text-white hover:bg-white/10"
-            >
-              <div className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}>
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-              </div>
-            </Button>
-            {/* Live Button */}
+            {/* Trending Button */}
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate('/live')}
+              onClick={() => navigate('/trending')}
               className="text-white hover:bg-white/10"
-              aria-label="Live"
+              aria-label="Trending"
             >
-              <span className="text-xl" role="img" aria-label="Live">🔴</span>
+              <TrendingUp size={20} />
+            </Button>
+            {/* Messages Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/inbox')}
+              className="text-white hover:bg-white/10"
+              aria-label="Messages"
+            >
+              <MessageSquare size={20} />
             </Button>
             {/* Settings Button */}
             <Button

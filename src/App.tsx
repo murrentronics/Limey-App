@@ -15,6 +15,7 @@ import Profile from "./pages/Profile";
 import Upload from "./pages/Upload";
 import Settings from "./pages/Settings";
 import EditProfile from "@/pages/EditProfile";
+import Friends from "@/pages/Friends";
 import Inbox from "@/pages/Inbox";
 import Chat from "@/pages/Chat";
 import Message from "@/pages/Message";
@@ -32,6 +33,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
             <Route path="/trending" element={<ProtectedRoute><Trending /></ProtectedRoute>} />
+            <Route path="/friends" element={<ProtectedRoute><Friends /></ProtectedRoute>} />
             <Route path="/live" element={<ProtectedRoute><Live /></ProtectedRoute>} />
             <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
