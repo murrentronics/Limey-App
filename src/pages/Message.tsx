@@ -52,16 +52,37 @@ const Message = () => {
     setSending(true);
     try {
       // Check if chat already exists
-      const { data: existingChat } = await supabase
+      const { data: existingChats, error: chatCheckError } = await supabase
         .from('chats')
         .select('*')
-        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${receiver.user_id}),and(sender_id.eq.${receiver.user_id},receiver_id.eq.${user.id})`)
-        .single();
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${receiver.user_id}),and(sender_id.eq.${receiver.user_id},receiver_id.eq.${user.id})`);
+      
+      if (chatCheckError) {
+        console.error('Error checking for existing chat:', chatCheckError);
+        alert('Failed to check for existing chat: ' + chatCheckError.message);
+        return;
+      }
+      
+      // Filter out deleted chats when looking for existing chats
+      const nonDeletedChats = existingChats?.filter(chat => {
+        if (chat.sender_id === user.id) {
+          return !chat.deleted_for_sender;
+        } else {
+          return !chat.deleted_for_receiver;
+        }
+      }) || [];
+      
+      const existingChat = nonDeletedChats.length > 0 ? nonDeletedChats[0] : null;
+      
+      console.log('Found existing chats:', existingChats);
+      console.log('Non-deleted chats:', nonDeletedChats);
+      console.log('Using existing chat:', existingChat);
 
       let chatId;
       
       if (existingChat) {
         chatId = existingChat.id;
+        console.log('Using existing chat:', existingChat.id);
         // Update chat's last message and timestamp
         await supabase
           .from('chats')
@@ -71,24 +92,60 @@ const Message = () => {
           })
           .eq('id', chatId);
       } else {
-        // Create new chat
-        const { data: newChat, error: chatError } = await supabase
+        // Try to create new chat, but handle the case where it might already exist
+        console.log('Creating new chat between', user.id, 'and', receiver.user_id);
+        
+        // First, try to find any existing chat (including deleted ones)
+        const { data: allExistingChats } = await supabase
           .from('chats')
-          .insert({
-            sender_id: user.id,
-            receiver_id: receiver.user_id,
-            last_message: message.trim(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
+          .select('*')
+          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${receiver.user_id}),and(sender_id.eq.${receiver.user_id},receiver_id.eq.${user.id})`);
+        
+        if (allExistingChats && allExistingChats.length > 0) {
+          // There's an existing chat (probably deleted), let's reactivate it
+          const existingChat = allExistingChats[0];
+          console.log('Found existing deleted chat, reactivating:', existingChat.id);
+          
+          // Reactivate the chat by clearing the deletion flags
+          const updateField = existingChat.sender_id === user.id ? 'deleted_for_sender' : 'deleted_for_receiver';
+          const { error: reactivateError } = await supabase
+            .from('chats')
+            .update({ 
+              [updateField]: false,
+              last_message: message.trim(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingChat.id);
+          
+          if (reactivateError) {
+            console.error('Error reactivating chat:', reactivateError);
+            alert('Failed to reactivate chat: ' + reactivateError.message);
+            return;
+          }
+          
+          chatId = existingChat.id;
+        } else {
+          // Create completely new chat
+          const { data: newChat, error: chatError } = await supabase
+            .from('chats')
+            .insert({
+              sender_id: user.id,
+              receiver_id: receiver.user_id,
+              last_message: message.trim(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select()
+            .single();
 
-        if (chatError) {
-          console.error('Error creating chat:', chatError);
-          return;
+          if (chatError) {
+            console.error('Error creating chat:', chatError);
+            alert('Failed to create chat: ' + chatError.message);
+            return;
+          }
+          console.log('Created new chat:', newChat);
+          chatId = newChat.id;
         }
-        chatId = newChat.id;
       }
 
       // Send message
@@ -103,12 +160,15 @@ const Message = () => {
 
       if (messageError) {
         console.error('Error sending message:', messageError);
+        alert('Failed to send message: ' + messageError.message);
       } else {
+        console.log('Message sent successfully, navigating to chat:', chatId);
         // Navigate to the chat
         navigate(`/chat/${chatId}`);
       }
     } catch (error) {
       console.error('Error sending message:', error);
+      alert('Failed to send message: ' + (error instanceof Error ? error.message : 'An unexpected error occurred'));
     } finally {
       setSending(false);
     }

@@ -22,8 +22,6 @@ const Chat = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showMessageMenu, setShowMessageMenu] = useState<string | null>(null);
   const [showChatMenu, setShowChatMenu] = useState(false);
-  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
-  const [longPressedMessage, setLongPressedMessage] = useState<string | null>(null);
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
@@ -33,6 +31,11 @@ const Chat = () => {
   const lastMessageCountRef = useRef<number>(0);
   const [, setNow] = useState(Date.now());
   const { toast } = useToast();
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'deleteForMe' | 'deleteForEveryone';
+    messageId: string;
+  } | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -57,7 +60,14 @@ const Chat = () => {
           const { data: existingChats, error } = await supabase
             .from('chats')
             .select('*')
-            .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+            .or(`and(sender_id.eq.${user.id},receiver_id.eq.${paramUserId}),and(sender_id.eq.${paramUserId},receiver_id.eq.${user.id})`);
+          
+          if (error) {
+            console.error('Error checking for existing chat:', error);
+            toast({ title: 'Failed to check for existing chat', description: error.message, variant: 'destructive' });
+            return;
+          }
+          
           let chat = existingChats?.find(
             c => (c.sender_id === user.id && c.receiver_id === paramUserId) ||
                  (c.sender_id === paramUserId && c.receiver_id === user.id)
@@ -103,7 +113,6 @@ const Chat = () => {
       if (!target.closest('[data-dropdown]')) {
         setShowMessageMenu(null);
         setShowChatMenu(false);
-        setLongPressedMessage(null);
       }
     };
 
@@ -182,7 +191,7 @@ const Chat = () => {
       
       console.log('Chat access confirmed:', chatCheck);
       
-      // Now fetch messages
+      // Now fetch messages - include deleted messages to show "Message deleted" indicators
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -321,6 +330,13 @@ const Chat = () => {
     setSending(true);
     
     try {
+      console.log('Attempting to send message with data:', {
+        chat_id: chatId,
+        sender_id: user.id,
+        receiver_id: receiverId,
+        content: newMessage.trim()
+      });
+      
       const { data, error } = await supabase
         .from('messages')
         .insert({
@@ -334,6 +350,11 @@ const Chat = () => {
 
       if (error) {
         console.error('Error sending message:', error);
+        toast({
+          title: "Failed to send message",
+          description: error.message || "Please try again.",
+          variant: "destructive"
+        });
       } else {
         setNewMessage(""); // Clear input
         await fetchMessages(); // Ensure sender sees their own message
@@ -354,6 +375,11 @@ const Chat = () => {
       }
     } catch (error) {
       console.error('Error sending message:', error);
+      toast({
+        title: "Failed to send message",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        variant: "destructive"
+      });
     } finally {
       setSending(false);
     }
@@ -366,36 +392,14 @@ const Chat = () => {
     }
   };
 
-  const handleLongPress = (messageId: string) => {
-    const timer = setTimeout(() => {
-      setLongPressedMessage(messageId);
-      setShowMessageMenu(null);
-    }, 2000);
-    setLongPressTimer(timer);
-  };
 
-  const handleTouchStart = (messageId: string) => {
-    handleLongPress(messageId);
-  };
-
-  const handleTouchEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
-    }
-  };
 
   const copyMessage = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
       console.log('Message copied to clipboard:', content);
-      setLongPressedMessage(null);
-      // Show a brief success indicator
-      const originalText = document.title;
-      document.title = 'Copied!';
-      setTimeout(() => {
-        document.title = originalText;
-      }, 1000);
+      setShowMessageMenu(null);
+      toast({ title: 'Message copied', description: 'Message copied to clipboard.' });
     } catch (error) {
       console.error('Error copying message:', error);
       // Fallback for older browsers
@@ -406,16 +410,34 @@ const Chat = () => {
       try {
         document.execCommand('copy');
         console.log('Message copied to clipboard (fallback):', content);
-        setLongPressedMessage(null);
+        setShowMessageMenu(null);
+        toast({ title: 'Message copied', description: 'Message copied to clipboard.' });
       } catch (fallbackError) {
         console.error('Fallback copy failed:', fallbackError);
+        toast({ title: 'Failed to copy', description: 'Could not copy message to clipboard.', variant: 'destructive' });
       }
       document.body.removeChild(textArea);
     }
   };
 
   const deleteMessage = async (messageId: string, deleteForEveryone: boolean = false) => {
+    setShowMessageMenu(null);
+    
+    // Show confirmation dialog
+    setConfirmAction({
+      type: deleteForEveryone ? 'deleteForEveryone' : 'deleteForMe',
+      messageId
+    });
+    setShowConfirmDialog(true);
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!user || !confirmAction) return;
+    
     try {
+      const { messageId, type } = confirmAction;
+      const deleteForEveryone = type === 'deleteForEveryone';
+      
       if (deleteForEveryone) {
         // Delete for everyone - mark as deleted for everyone instead of actually deleting
         const { error } = await supabase
@@ -425,52 +447,81 @@ const Chat = () => {
         
         if (error) {
           console.error('Error deleting message for everyone:', error);
-        } else {
-          console.log('Message deleted for everyone');
-          setMessages(prev => prev.filter(msg => msg.id !== messageId));
+          toast({ title: 'Failed to delete message', description: error.message, variant: 'destructive' });
+          return;
         }
+        
+        console.log('Message deleted for everyone');
+        setMessages(prev => prev.filter(msg => msg.id !== messageId));
+        toast({ 
+          title: 'Message deleted for everyone', 
+          description: 'The message has been removed for all users.',
+          className: 'bg-green-600 text-white border-green-700'
+        });
       } else {
-        // Delete for me only - mark as deleted for everyone (no partial deletion support)
+        // Delete for me only - mark as deleted for sender
         const { error } = await supabase
           .from('messages')
-          .update({ deleted_for_everyone: true })
+          .update({ deleted_for_sender: true })
           .eq('id', messageId);
         
         if (error) {
           console.error('Error marking message as deleted for sender:', error);
-        } else {
-          console.log('Message marked as deleted for sender');
-          setMessages(prev => prev.map(msg => 
-            msg.id === messageId ? { ...msg, deleted_for_sender: true } : msg
-          ));
+          toast({ title: 'Failed to delete message', description: error.message, variant: 'destructive' });
+          return;
         }
+        
+        console.log('Message marked as deleted for sender');
+        setMessages(prev => prev.map(msg => 
+          msg.id === messageId ? { ...msg, deleted_for_sender: true } : msg
+        ));
+        toast({ title: 'Message deleted', description: 'The message has been removed from your view.' });
       }
     } catch (error) {
       console.error('Error deleting message:', error);
+      toast({ title: 'Failed to delete message', description: 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setShowConfirmDialog(false);
+      setConfirmAction(null);
     }
-    setShowMessageMenu(null);
-    setLongPressedMessage(null);
   };
 
   const deleteChat = async () => {
     if (!window.confirm("Are you sure you want to delete this chat?")) return;
     
     try {
-      // Actually delete the chat from the database
+      // Mark chat as deleted for the current user instead of actually deleting it
+      const updateField = chat?.sender_id === user?.id ? 'deleted_for_sender' : 'deleted_for_receiver';
+      
       const { error } = await supabase
         .from('chats')
-        .delete()
+        .update({ [updateField]: true })
         .eq('id', chatId);
       
       if (error) {
         console.error('Error deleting chat:', error);
+        toast({
+          title: "Failed to delete chat",
+          description: error.message || "Please try again.",
+          variant: "destructive"
+        });
       } else {
-        console.log('Chat deleted successfully from database');
-        // Reload the current chat page after deletion
-        window.location.reload();
+        console.log('Chat marked as deleted for current user');
+        toast({
+          title: "Chat deleted",
+          description: "The chat has been removed from your inbox.",
+          variant: "default"
+        });
+        // Navigate back to inbox
+        navigate('/inbox');
       }
     } catch (error) {
       console.error('Error deleting chat:', error);
+      toast({
+        title: "Failed to delete chat",
+        description: "An unexpected error occurred.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -517,20 +568,55 @@ const Chat = () => {
       if (error) {
         console.error('Debug error:', error);
       } else {
-        console.log('All messages in database:', allMessages);
+        console.log('Recent messages:', allMessages);
       }
       
-      console.log('=== DEBUG: Checking all chats in database ===');
-      const { data: allChats, error: chatError } = await supabase
+      // Also check current chat
+      console.log('=== DEBUG: Checking current chat ===');
+      const { data: currentChat, error: chatError } = await supabase
         .from('chats')
         .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(10);
+        .eq('id', chatId)
+        .single();
       
       if (chatError) {
-        console.error('Debug chat error:', chatError);
+        console.error('Chat debug error:', chatError);
       } else {
-        console.log('All chats in database:', allChats);
+        console.log('Current chat:', currentChat);
+      }
+      
+      // Test message insertion
+      console.log('=== DEBUG: Testing message insertion ===');
+      const testMessage = {
+        chat_id: chatId,
+        sender_id: user?.id,
+        receiver_id: getChatPartner()?.user_id,
+        content: 'TEST MESSAGE - ' + new Date().toISOString()
+      };
+      console.log('Test message data:', testMessage);
+      
+      const { data: testInsert, error: insertError } = await supabase
+        .from('messages')
+        .insert(testMessage)
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('Test insert error:', insertError);
+        console.error('Error details:', {
+          code: insertError.code,
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint
+        });
+            } else {
+        console.log('Test insert successful:', testInsert);
+        // Clean up test message
+        await supabase
+          .from('messages')
+          .delete()
+          .eq('id', testInsert.id);
+        console.log('Test message cleaned up');
       }
     } catch (error) {
       console.error('Debug function error:', error);
@@ -743,60 +829,6 @@ const Chat = () => {
             </div>
           </div>
           <div className="relative">
-            {/* Manual Refresh Button */}
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={async () => {
-                // Get the timestamp of the last message we have
-                const lastMessageTimestamp = messages.length > 0 ? messages[messages.length - 1].created_at : null;
-                
-                // Fetch only new messages since our last message
-                let query = supabase
-                  .from('messages')
-                  .select('*')
-                  .eq('chat_id', chatId)
-                  .order('created_at', { ascending: true });
-
-                if (lastMessageTimestamp) {
-                  query = query.gt('created_at', lastMessageTimestamp);
-                }
-
-                const { data: newMessages, error } = await query;
-
-                if (error) {
-                  console.error('Manual refresh error:', error);
-                  return;
-                }
-
-                // Only update if we have new messages
-                if (newMessages && newMessages.length > 0) {
-                  console.log('Manual refresh found new messages:', newMessages.length);
-                  setMessages(prev => {
-                    // Check for duplicates by message ID
-                    const existingIds = new Set(prev.map(msg => msg.id));
-                    const uniqueNewMessages = newMessages.filter(msg => !existingIds.has(msg.id));
-                    
-                    if (uniqueNewMessages.length > 0) {
-                      console.log('Adding unique new messages:', uniqueNewMessages.length);
-                      return [...prev, ...uniqueNewMessages];
-                    } else {
-                      console.log('All messages already exist, no duplicates added');
-                      return prev;
-                    }
-                  });
-                  setTimeout(() => smartScrollToBottom(), 100);
-                } else {
-                  console.log('No new messages found');
-                }
-              }}
-              className="text-white/60 hover:text-white mr-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </Button>
-            
             {/* Chat Menu Button */}
             <Button 
               variant="ghost" 
@@ -811,12 +843,13 @@ const Chat = () => {
             {showChatMenu && (
               <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[120px]" data-dropdown>
                 <button
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
                   onClick={() => {
                     setShowChatMenu(false);
                     deleteChat();
                   }}
                 >
+                  <Trash2 size={14} />
                   Delete Chat
                 </button>
               </div>
@@ -842,12 +875,15 @@ const Chat = () => {
           <div className="space-y-4">
             {messages.map((message) => {
               const isOwnMessage = message.sender_id === user?.id;
-              // Only hide messages that were deleted for everyone, not for sender only
-              const isDeleted = message.deleted_for_everyone === true;
+              // Hide messages that were deleted for everyone or deleted for the current user
+              const isDeletedForEveryone = message.deleted_for_everyone === true;
+              const isDeletedForSender = isOwnMessage && message.deleted_for_sender === true;
+              const isDeletedForReceiver = !isOwnMessage && message.deleted_for_receiver === true;
+              const isDeleted = isDeletedForEveryone || isDeletedForSender || isDeletedForReceiver;
 
               if (isDeleted) {
                 return (
-                  <div key={message.id} className="flex justify-center">
+                  <div key={message.id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                     <span className="text-xs text-white/40 italic">
                       Message deleted
                     </span>
@@ -859,13 +895,20 @@ const Chat = () => {
                 <div
                   key={message.id}
                   className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-                  onTouchStart={() => handleTouchStart(message.id)}
-                  onTouchEnd={handleTouchEnd}
-                  onMouseDown={() => handleLongPress(message.id)}
-                  onMouseUp={handleTouchEnd}
-                  onMouseLeave={handleTouchEnd}
                 >
-                  <div className="relative">
+                  <div className="relative flex items-start">
+                    {/* 3 Dots Menu for own messages */}
+                    {isOwnMessage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-6 h-6 p-0 mr-2 mt-1 text-white/60 hover:text-white"
+                        onClick={() => setShowMessageMenu(showMessageMenu === message.id ? null : message.id)}
+                      >
+                        <MoreVertical size={16} />
+                      </Button>
+                    )}
+                    
                     <div
                       className={`p-3 rounded-lg ${
                         isOwnMessage
@@ -885,33 +928,9 @@ const Chat = () => {
                       </div>
                     </div>
                     
-                    {/* Message Menu */}
-                    {isOwnMessage && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="absolute -top-2 -right-2 w-6 h-6 p-0 bg-black/50 rounded-full opacity-0 hover:opacity-100 transition-opacity"
-                        onClick={() => setShowMessageMenu(showMessageMenu === message.id ? null : message.id)}
-                      >
-                        <MoreVertical size={12} />
-                      </Button>
-                    )}
-                    
                     {/* Dropdown Menu */}
                     {showMessageMenu === message.id && isOwnMessage && (
-                      <div className="absolute top-0 right-0 mt-8 bg-black/90 rounded-lg shadow-lg z-10 min-w-[120px]" data-dropdown>
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
-                          onClick={() => deleteMessage(message.id, true)}
-                        >
-                          Delete for everyone
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Long Press Menu */}
-                    {longPressedMessage === message.id && (
-                      <div className="absolute top-0 right-0 mt-8 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px]" data-dropdown>
+                      <div className="absolute top-0 right-0 mt-8 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] max-w-[200px]" data-dropdown>
                         <button
                           className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2"
                           onClick={() => copyMessage(message.content)}
@@ -919,14 +938,18 @@ const Chat = () => {
                           <Copy size={14} />
                           Copy
                         </button>
-                        {isOwnMessage && (
-                          <button
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
-                            onClick={() => deleteMessage(message.id, true)}
-                          >
-                            Delete for everyone
-                          </button>
-                        )}
+                        <button
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
+                          onClick={() => deleteMessage(message.id, false)}
+                        >
+                          Delete for me
+                        </button>
+                        <button
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
+                          onClick={() => deleteMessage(message.id, true)}
+                        >
+                          Delete for everyone
+                        </button>
                       </div>
                     )}
                   </div>
@@ -976,6 +999,34 @@ const Chat = () => {
           </Button>
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
+          <div className="bg-black/90 rounded-lg p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4 text-center">Are you sure you want to delete this message?</h3>
+            <div className="flex space-x-3">
+              <Button
+                onClick={() => {
+                  setShowConfirmDialog(false);
+                  setConfirmAction(null);
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmDeleteMessage}
+                variant="destructive"
+                className="flex-1"
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Navigation */}
       <BottomNavigation />

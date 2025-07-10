@@ -355,6 +355,8 @@ export type Database = {
           content: string
           created_at: string
           deleted_for_everyone: boolean | null
+          deleted_for_receiver: boolean | null
+          deleted_for_sender: boolean | null
           id: string
           is_read: boolean | null
           receiver_id: string
@@ -366,6 +368,8 @@ export type Database = {
           content: string
           created_at?: string
           deleted_for_everyone?: boolean | null
+          deleted_for_receiver?: boolean | null
+          deleted_for_sender?: boolean | null
           id?: string
           is_read?: boolean | null
           receiver_id: string
@@ -377,6 +381,8 @@ export type Database = {
           content?: string
           created_at?: string
           deleted_for_everyone?: boolean | null
+          deleted_for_receiver?: boolean | null
+          deleted_for_sender?: boolean | null
           id?: string
           is_read?: boolean | null
           receiver_id?: string

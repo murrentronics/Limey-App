@@ -13,12 +13,29 @@ const Inbox = () => {
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState<string | null>(null);
+  const [unreadCounts, setUnreadCounts] = useState<{ [chatId: string]: number }>({});
+  const [lastChecked, setLastChecked] = useState<{ [chatId: string]: string }>({});
 
   useEffect(() => {
     if (user) {
       fetchChats();
       const cleanup = subscribeToChats();
-      return cleanup;
+      
+      // Start periodic checking for new messages
+      const interval = setInterval(() => {
+        checkForNewMessages();
+      }, 10000); // Check every 10 seconds
+      
+      // Initial check for unread messages after a short delay
+      const initialCheck = setTimeout(() => {
+        checkForNewMessages();
+      }, 2000);
+      
+      return () => {
+        cleanup();
+        clearInterval(interval);
+        clearTimeout(initialCheck);
+      };
     }
   }, [user]);
 
@@ -55,6 +72,7 @@ const Inbox = () => {
       if (error) {
         console.error('Error fetching chats:', error);
       } else {
+        console.log('Raw chats from database:', data);
         // Filter out chats that the current user has deleted
         const filteredChats = (data || []).filter(chat => {
           if (chat.sender_id === user?.id) {
@@ -63,6 +81,7 @@ const Inbox = () => {
             return !chat.deleted_for_receiver;
           }
         });
+        console.log('Filtered chats for inbox:', filteredChats);
         setChats(filteredChats);
       }
     } catch (error) {
@@ -86,6 +105,18 @@ const Inbox = () => {
           // Check if chat already exists to avoid duplicates
           const exists = prev.some(chat => chat.id === payload.new.id);
           if (exists) return prev;
+          
+          // Only add the chat if it's not deleted for the current user
+          const isDeletedForUser = 
+            (payload.new.sender_id === user?.id && payload.new.deleted_for_sender) ||
+            (payload.new.receiver_id === user?.id && payload.new.deleted_for_receiver);
+          
+          if (isDeletedForUser) {
+            console.log('Not adding deleted chat to inbox:', payload.new.id);
+            return prev;
+          }
+          
+          console.log('Adding new chat to inbox:', payload.new.id);
           return [payload.new, ...prev];
         });
       })
@@ -117,18 +148,22 @@ const Inbox = () => {
         });
       })
       .on('postgres_changes', {
-        event: 'DELETE',
+        event: 'INSERT',
         schema: 'public',
-        table: 'chats',
-        filter: `sender_id=eq.${user?.id} OR receiver_id=eq.${user?.id}`
+        table: 'messages',
+        filter: `receiver_id=eq.${user?.id}`
       }, (payload) => {
-        console.log('Chat deleted:', payload.old);
-        setChats(prev => prev.filter(chat => chat.id !== payload.old.id));
+        console.log('New message received:', payload.new);
+        // Increment unread count for this chat
+        setUnreadCounts(prev => ({
+          ...prev,
+          [payload.new.chat_id]: (prev[payload.new.chat_id] || 0) + 1
+        }));
       })
       .subscribe((status) => {
         console.log('Chats subscription status:', status);
         if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to real-time chats');
+          console.log('Successfully subscribed to real-time chats and messages');
         }
       });
 
@@ -184,18 +219,88 @@ const Inbox = () => {
       
       if (error) {
         console.error('Error deleting chat:', error);
+        alert('Failed to delete chat: ' + error.message);
       } else {
         setChats(chats.filter(chat => chat.id !== chatId));
+        // Show success feedback
+        const originalText = document.title;
+        document.title = 'Chat deleted!';
+        setTimeout(() => {
+          document.title = originalText;
+        }, 1000);
       }
     } catch (error) {
       console.error('Error deleting chat:', error);
+      alert('Failed to delete chat: An unexpected error occurred');
     }
     setShowMenu(null);
   };
 
   const handleOpenChat = (chatId: string) => {
+    // Clear unread count when opening chat
+    setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
+    setLastChecked(prev => ({ ...prev, [chatId]: new Date().toISOString() }));
     navigate(`/chat/${chatId}`);
     setShowMenu(null);
+  };
+
+  const checkForNewMessages = async () => {
+    if (!user || chats.length === 0) return;
+    
+    try {
+      const chatIds = chats.map(chat => chat.id);
+      
+      // Get the last message timestamp for each chat
+      const { data: lastMessages, error } = await supabase
+        .from('messages')
+        .select('chat_id, created_at')
+        .in('chat_id', chatIds)
+        .order('created_at', { ascending: false })
+        .limit(chatIds.length * 10); // Get recent messages for all chats
+      
+      if (error) {
+        console.error('Error checking for new messages:', error);
+        return;
+      }
+      
+      // Group messages by chat and find the latest message for each
+      const latestMessages = new Map();
+      lastMessages?.forEach(message => {
+        if (!latestMessages.has(message.chat_id) || 
+            new Date(message.created_at) > new Date(latestMessages.get(message.chat_id))) {
+          latestMessages.set(message.chat_id, message.created_at);
+        }
+      });
+      
+      // Update unread counts
+      const newUnreadCounts: { [chatId: string]: number } = {};
+      const newLastChecked: { [chatId: string]: string } = {};
+      
+      chats.forEach(chat => {
+        const lastMessageTime = latestMessages.get(chat.id);
+        const lastCheckedTime = lastChecked[chat.id];
+        
+        if (lastMessageTime && (!lastCheckedTime || new Date(lastMessageTime) > new Date(lastCheckedTime))) {
+          // Count unread messages since last check
+          const unreadCount = lastMessages?.filter(msg => 
+            msg.chat_id === chat.id && 
+            new Date(msg.created_at) > new Date(lastCheckedTime || '1970-01-01')
+          ).length || 0;
+          
+          newUnreadCounts[chat.id] = unreadCount;
+        } else {
+          newUnreadCounts[chat.id] = unreadCounts[chat.id] || 0;
+        }
+        
+        newLastChecked[chat.id] = lastMessageTime || lastCheckedTime || new Date().toISOString();
+      });
+      
+      setUnreadCounts(newUnreadCounts);
+      setLastChecked(newLastChecked);
+      
+    } catch (error) {
+      console.error('Error checking for new messages:', error);
+    }
   };
 
   return (
@@ -206,8 +311,27 @@ const Inbox = () => {
           <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
             <ArrowLeft size={20} />
           </Button>
-          <h1 className="text-xl font-bold">Messages</h1>
-          <div className="w-8"></div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold">Messages</h1>
+            {Object.values(unreadCounts).reduce((total, count) => total + count, 0) > 0 && (
+              <div className="bg-red-500 text-white text-xs rounded-full min-w-[20px] h-[20px] flex items-center justify-center font-bold">
+                {Object.values(unreadCounts).reduce((total, count) => total + count, 0)}
+              </div>
+            )}
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => {
+              console.log('=== DEBUG: Current chats state ===');
+              console.log('Chats:', chats);
+              console.log('User ID:', user?.id);
+              fetchChats(); // Refresh chats
+            }}
+            className="text-white/60 hover:text-white"
+          >
+            🔄
+          </Button>
         </div>
       </div>
 
@@ -243,6 +367,12 @@ const Inbox = () => {
                       <AvatarImage src={partner?.avatar_url} alt={partner?.username} />
                       <AvatarFallback>{partner?.username?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
                     </Avatar>
+                    {/* Unread message count badge */}
+                    {unreadCounts[chat.id] > 0 && (
+                      <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold">
+                        {unreadCounts[chat.id] > 99 ? '99+' : unreadCounts[chat.id]}
+                      </div>
+                    )}
                   </div>
 
                   {/* Chat Info */}
