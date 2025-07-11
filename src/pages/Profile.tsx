@@ -9,11 +9,13 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { MoreVertical, ChevronDown, X, Settings, MessageSquare, ArrowLeft, Send } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import VideoPlayer from "@/components/VideoPlayer";
+import { useToast } from "@/hooks/use-toast";
 
 const Profile = () => {
   const { user, signOut } = useAuth();
   const { username } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [userVideos, setUserVideos] = useState<any[]>([]);
@@ -181,7 +183,11 @@ const Profile = () => {
       const { error: dbError } = await supabase.from('videos').delete().eq('id', videoId);
       if (dbError) {
         console.error('Error deleting video from DB:', dbError);
-        alert('Failed to delete video from database.');
+        toast({
+          title: 'Failed to delete video from database.',
+          description: dbError.message,
+          variant: 'destructive',
+        });
         return;
       }
       
@@ -199,10 +205,18 @@ const Profile = () => {
       fetchUserVideos(profile.user_id);
       
       // Show success message
-      alert('Video deleted successfully!');
+      toast({
+        title: 'Delete Successful..!',
+        description: 'Your video has been removed from the feed also.',
+        className: 'bg-green-600 text-white border-green-700'
+      });
     } catch (error) {
       console.error('Error deleting video:', error);
-      alert('Failed to delete video. Please try again.');
+      toast({
+        title: 'Failed to delete video.',
+        description: 'Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setShowConfirmDialog(false);
       setConfirmAction(null);
