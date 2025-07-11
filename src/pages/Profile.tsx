@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical, ChevronDown, X, Settings, MessageSquare, ArrowLeft } from "lucide-react";
+import { MoreVertical, ChevronDown, X, Settings, MessageSquare, ArrowLeft, Send } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import VideoPlayer from "@/components/VideoPlayer";
 
@@ -549,25 +549,37 @@ const Profile = () => {
             ) : (
               <>
                 <div className="relative" ref={dropdownRef}>
-                  <Button
-                    variant={isFollowing ? "default" : "outline"}
-                    onClick={() => {
-                      if (isFollowing) {
-                        setShowDropdown((prev) => !prev);
-                      } else {
-                        handleFollowToggle();
-                      }
-                    }}
-                    className="flex items-center gap-2 min-w-[110px]"
-                  >
-                    {isFollowing ? (
-                      <>
-                        Following <ChevronDown size={16} />
-                      </>
-                    ) : (
-                      <>Follow</>
-                    )}
-                </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        if (isFollowing) {
+                          setShowDropdown((prev) => !prev);
+                        } else {
+                          handleFollowToggle();
+                        }
+                      }}
+                      className="flex items-center gap-2 min-w-[110px] h-10 font-semibold text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded shadow"
+                    >
+                      {isFollowing ? (
+                        <>
+                          Following <ChevronDown size={16} />
+                        </>
+                      ) : (
+                        <>Follow</>
+                      )}
+                    </Button>
+                    <Button 
+                      variant="primary"
+                      size="sm"
+                      onClick={() => navigate(`/message/${profile?.username || user?.id}`)}
+                      className="flex items-center gap-2 h-10 font-semibold text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded shadow"
+                      aria-label="Message"
+                    >
+                      Message
+                      <Send size={18} className="ml-2" />
+                    </Button>
+                  </div>
                   {isFollowing && showDropdown && (
                     <div className="absolute left-0 mt-2 w-full bg-red-600 text-white border-none rounded shadow z-10">
                       <button
@@ -579,15 +591,6 @@ const Profile = () => {
                     </div>
                   )}
                 </div>
-                <Button 
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigate(`/message/${profile?.username || user?.id}`)}
-                  className="text-white hover:bg-white/10"
-                  aria-label="Messages"
-                >
-                  <span className="text-xl" role="img" aria-label="Messages">💬</span>
-                </Button>
               </>
             )}
           </div>

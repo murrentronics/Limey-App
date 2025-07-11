@@ -61,16 +61,17 @@ const Inbox = () => {
     };
   }, []);
 
+  // Helper to get the last visible message for the current user
+  // Remove getLastVisibleMessage helper
+
+  // Revert fetchChats to only fetch last_message as before
   const fetchChats = async () => {
     try {
       setLoading(true);
-      console.log('Fetching chats for user:', user?.id);
-      
       // Fetch chats where current user is either sender or receiver
       const { data, error } = await supabase
         .from('chats')
-        .select(`
-          *,
+        .select(`*,
           sender:profiles!chats_sender_id_fkey(username, avatar_url),
           receiver:profiles!chats_receiver_id_fkey(username, avatar_url)
         `)
@@ -80,28 +81,59 @@ const Inbox = () => {
       if (error) {
         console.error('Error fetching chats:', error);
         toast({
-          title: "Error loading chats",
-          description: "Please try refreshing the page",
-          variant: "destructive"
+          title: 'Error loading chats',
+          description: 'Please try refreshing the page',
+          variant: 'destructive',
         });
       } else {
-        console.log('Raw chats from database:', data);
         // Filter out chats that the current user has deleted
         const filteredChats = (data || []).filter(chat => {
-          const isDeletedForUser = 
+          const isDeletedForUser =
             (chat.sender_id === user?.id && chat.deleted_for_sender) ||
             (chat.receiver_id === user?.id && chat.deleted_for_receiver);
           return !isDeletedForUser;
         });
-        console.log('Filtered chats for inbox:', filteredChats);
-        setChats(filteredChats);
+
+        // For each chat, fetch the latest visible message for the current user
+        const chatIds = filteredChats.map(chat => chat.id);
+        let lastMessages = [];
+        if (chatIds.length > 0) {
+          // Fetch up to 5 recent messages per chat (to handle edge cases)
+          const { data: messagesData, error: messagesError } = await supabase
+            .from('messages')
+            .select('*')
+            .in('chat_id', chatIds)
+            .order('created_at', { ascending: false })
+            .limit(chatIds.length * 5);
+          if (!messagesError && messagesData) {
+            lastMessages = messagesData;
+          }
+        }
+        // Attach last visible message to each chat
+        const chatsWithLastVisible = filteredChats.map(chat => {
+          // Find the latest message for this chat that is visible to the user
+          const messages = lastMessages.filter(m => m.chat_id === chat.id);
+          let lastVisible = null;
+          for (const msg of messages) {
+            const isOwn = msg.sender_id === user?.id;
+            const isDeletedForEveryone = msg.deleted_for_everyone === true;
+            const isDeletedForSender = isOwn && msg.deleted_for_sender === true;
+            const isDeletedForReceiver = !isOwn && msg.deleted_for_receiver === true;
+            if (!isDeletedForEveryone && !isDeletedForSender && !isDeletedForReceiver) {
+              lastVisible = msg;
+              break;
+            }
+          }
+          return { ...chat, last_visible_message: lastVisible };
+        });
+        setChats(chatsWithLastVisible);
       }
     } catch (error) {
       console.error('Error fetching chats:', error);
       toast({
-        title: "Error loading chats",
-        description: "Please try refreshing the page",
-        variant: "destructive"
+        title: 'Error loading chats',
+        description: 'Please try refreshing the page',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -229,16 +261,18 @@ const Inbox = () => {
   };
 
   const getLastMessage = (chat: any) => {
-    if (!chat.last_message) {
+    const msg = chat.last_visible_message;
+    if (!msg) {
       return "No messages yet";
     }
-    
-    // Truncate long messages
-    if (chat.last_message.length > 50) {
-      return chat.last_message.substring(0, 50) + "...";
+    if (msg.content === '' || msg.content == null) {
+      return "Message deleted";
     }
-    
-    return chat.last_message;
+    // Truncate long messages
+    if (msg.content.length > 50) {
+      return msg.content.substring(0, 50) + "...";
+    }
+    return msg.content;
   };
 
   const formatTime = (timestamp: string) => {
@@ -450,6 +484,11 @@ const Inbox = () => {
               const partner = getChatPartner(chat);
               if (!partner) return null;
               
+              // In the chat list rendering, use:
+              <p className="text-sm text-white/70 truncate">
+                {getLastMessage(chat)}
+              </p>
+
               return (
                 <div
                   key={chat.id}
