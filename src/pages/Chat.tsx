@@ -30,8 +30,9 @@ const Chat = () => {
   const { toast } = useToast();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'deleteForMe' | 'deleteForEveryone';
-    messageId: string;
+    type: 'deleteForMe' | 'deleteForEveryone' | 'deleteChat';
+    messageId?: string;
+    chatId?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -474,6 +475,20 @@ const Chat = () => {
   const deleteMessage = async (messageId: string, deleteForEveryone: boolean = false) => {
     setShowMessageMenu(null);
     
+    // Find the message to check its current state
+    const message = messages.find(msg => msg.id === messageId);
+    if (!message) return;
+    
+    // Check if message is already deleted for everyone
+    if (message.deleted_for_everyone) {
+      toast({
+        title: "Cannot delete",
+        description: "This message has already been deleted for everyone.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     // Show confirmation dialog
     setConfirmAction({
       type: deleteForEveryone ? 'deleteForEveryone' : 'deleteForMe',
@@ -486,56 +501,109 @@ const Chat = () => {
     if (!user || !confirmAction) return;
     
     try {
-      const { messageId, type } = confirmAction;
-      const deleteForEveryone = type === 'deleteForEveryone';
+      const { type, messageId, chatId } = confirmAction;
       
-      if (deleteForEveryone) {
-        const { error } = await supabase
-          .from('messages')
-          .update({ deleted_for_everyone: true })
-          .eq('id', messageId);
-        
-        if (error) {
-          console.error('Error deleting message for everyone:', error);
-          toast({ title: 'Failed to delete message', description: error.message, variant: 'destructive' });
+      if (type === 'deleteChat') {
+        // Handle chat deletion
+        if (chat?.sender_id !== user?.id) {
+          toast({
+            title: "Not allowed",
+            description: "Only the person who started the chat can delete it.",
+            variant: "destructive"
+          });
           return;
         }
         
-        console.log('Message deleted for everyone');
-        setMessages(prev => {
-          const updatedMessages = prev.map(msg => 
-            msg.id === messageId ? { ...msg, deleted_for_everyone: true } : msg
-          );
-          console.log('Updated messages state (delete for everyone):', updatedMessages);
-          return updatedMessages;
-        });
-        toast({ 
-          title: 'Message deleted for everyone', 
-          description: 'The message has been removed for all users.',
-          className: 'bg-green-600 text-white border-green-700'
-        });
+        console.log('Deleting chat for both users:', chatId);
+        const { error } = await supabase
+          .from('chats')
+          .update({ deleted_for_sender: true, deleted_for_receiver: true })
+          .eq('id', chatId);
+        
+        if (error) {
+          console.error('Error deleting chat:', error);
+          toast({
+            title: "Failed to delete chat",
+            description: error.message || "Please try again.",
+            variant: "destructive"
+          });
+        } else {
+          toast({
+            title: "Chat deleted",
+            description: "The chat has been removed from both inboxes.",
+            variant: "default"
+          });
+          navigate('/inbox');
+        }
       } else {
-        // Delete for me only - mark as deleted for sender
-        const { error } = await supabase
-          .from('messages')
-          .update({ deleted_for_sender: true })
-          .eq('id', messageId);
+        // Handle message deletion
+        const deleteForEveryone = type === 'deleteForEveryone';
         
-        if (error) {
-          console.error('Error marking message as deleted for sender:', error);
-          toast({ title: 'Failed to delete message', description: error.message, variant: 'destructive' });
+        // Find the message to check its current state
+        const message = messages.find(msg => msg.id === messageId);
+        if (!message) {
+          toast({ title: 'Message not found', description: 'The message could not be found.', variant: 'destructive' });
           return;
         }
         
-        console.log('Message marked as deleted for sender');
-        setMessages(prev => {
-          const updatedMessages = prev.map(msg => 
-            msg.id === messageId ? { ...msg, deleted_for_sender: true } : msg
-          );
-          console.log('Updated messages state:', updatedMessages);
-          return updatedMessages;
-        });
-        toast({ title: 'Message deleted', description: 'The message has been removed from your view.' });
+        // Check if message is already deleted for everyone
+        if (message.deleted_for_everyone) {
+          toast({
+            title: "Cannot delete",
+            description: "This message has already been deleted for everyone.",
+            variant: "destructive"
+          });
+          return;
+        }
+        
+        if (deleteForEveryone) {
+          const { error } = await supabase
+            .from('messages')
+            .update({ deleted_for_everyone: true })
+            .eq('id', messageId);
+          
+          if (error) {
+            console.error('Error deleting message for everyone:', error);
+            toast({ title: 'Failed to delete message', description: error.message, variant: 'destructive' });
+            return;
+          }
+          
+          console.log('Message deleted for everyone');
+          setMessages(prev => {
+            const updatedMessages = prev.map(msg => 
+              msg.id === messageId ? { ...msg, deleted_for_everyone: true } : msg
+            );
+            console.log('Updated messages state (delete for everyone):', updatedMessages);
+            return updatedMessages;
+          });
+          toast({ 
+            title: 'Message deleted for everyone', 
+            description: 'The message has been removed for all users.',
+            className: 'bg-green-600 text-white border-green-700'
+          });
+        } else {
+          // Delete for me only - mark as deleted for sender
+          const { error } = await supabase
+            .from('messages')
+            .update({ deleted_for_sender: true })
+            .eq('id', messageId);
+          
+          if (error) {
+            console.error('Error marking message as deleted for sender:', error);
+            toast({ title: 'Failed to delete message', description: error.message, variant: 'destructive' });
+            return;
+          }
+          
+          console.log('Message marked as deleted for sender');
+          setMessages(prev => {
+            const updatedMessages = prev.map(msg => 
+              msg.id === messageId ? { ...msg, deleted_for_sender: true } : msg
+            );
+            console.log('Updated messages state:', updatedMessages);
+            return updatedMessages;
+          });
+          toast({ title: 'Message deleted', description: 'The message has been removed from your view.' });
+        }
       }
     } catch (error) {
       console.error('Error deleting message:', error);
@@ -547,64 +615,21 @@ const Chat = () => {
   };
 
   const deleteChat = async () => {
-    if (!window.confirm("Are you sure you want to delete this chat?")) return;
-    
-    try {
-      console.log('Deleting chat:', chatId);
-      console.log('Current user:', user?.id);
-      console.log('Chat sender_id:', chat?.sender_id);
-      console.log('Chat receiver_id:', chat?.receiver_id);
-      
-      // Mark chat as deleted for the current user instead of actually deleting it
-      const updateField = chat?.sender_id === user?.id ? 'deleted_for_sender' : 'deleted_for_receiver';
-      console.log('Setting field to true:', updateField);
-      
-      const { error } = await supabase
-        .from('chats')
-        .update({ [updateField]: true })
-        .eq('id', chatId);
-      
-      if (error) {
-        console.error('Error deleting chat:', error);
-        toast({
-          title: "Failed to delete chat",
-          description: error.message || "Please try again.",
-          variant: "destructive"
-        });
-      } else {
-        console.log('Chat marked as deleted for current user');
-        
-        // Verify the deletion worked by checking the database
-        const { data: verifyData, error: verifyError } = await supabase
-          .from('chats')
-          .select('*')
-          .eq('id', chatId)
-          .single();
-        
-        if (verifyError) {
-          console.error('Error verifying deletion:', verifyError);
-        } else {
-          console.log('Verification - Chat after deletion:', verifyData);
-          console.log('deleted_for_sender:', verifyData.deleted_for_sender);
-          console.log('deleted_for_receiver:', verifyData.deleted_for_receiver);
-        }
-        
-        toast({
-          title: "Chat deleted",
-          description: "The chat has been removed from your inbox.",
-          variant: "default"
-        });
-        // Navigate back to inbox
-        navigate('/inbox');
-      }
-    } catch (error) {
-      console.error('Error deleting chat:', error);
+    if (chat?.sender_id !== user?.id) {
       toast({
-        title: "Failed to delete chat",
-        description: "An unexpected error occurred.",
+        title: "Not allowed",
+        description: "Only the person who started the chat can delete it.",
         variant: "destructive"
       });
+      return;
     }
+    
+    // Show confirmation dialog
+    setConfirmAction({
+      type: 'deleteChat',
+      chatId: chatId
+    });
+    setShowConfirmDialog(true);
   };
 
   const getChatPartner = () => {
@@ -886,16 +911,17 @@ const Chat = () => {
             </div>
           </div>
           <div className="relative">
-            {/* Chat Menu Button */}
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => setShowChatMenu(!showChatMenu)}
-            >
-              <MoreVertical size={20} />
-            </Button>
-            
-            {showChatMenu && (
+            {/* Chat Menu Button - only show for sender */}
+            {chat?.sender_id === user?.id && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowChatMenu(!showChatMenu)}
+              >
+                <MoreVertical size={20} />
+              </Button>
+            )}
+            {showChatMenu && chat?.sender_id === user?.id && (
               <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[120px]" data-dropdown>
                 <button
                   className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
@@ -965,7 +991,7 @@ const Chat = () => {
                 >
                   <div className="relative flex items-start">
                     {/* 3 Dots Menu for own messages */}
-                    {isOwnMessage && (
+                    {isOwnMessage && !message.deleted_for_everyone && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -996,7 +1022,7 @@ const Chat = () => {
                     </div>
                     
                     {/* Dropdown Menu */}
-                    {showMessageMenu === message.id && isOwnMessage && (
+                    {showMessageMenu === message.id && isOwnMessage && !message.deleted_for_everyone && (
                       <div 
                         className="absolute right-full mr-2 top-0 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] max-w-[200px]" 
                         data-dropdown
@@ -1075,7 +1101,12 @@ const Chat = () => {
       {showConfirmDialog && (
         <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
           <div className="bg-black/90 rounded-lg p-6 max-w-sm mx-4">
-            <h3 className="text-lg font-semibold text-white mb-4 text-center">Are you sure you want to delete this message?</h3>
+            <h3 className="text-lg font-semibold text-white mb-4 text-center">
+              {confirmAction?.type === 'deleteChat' 
+                ? 'Are you sure you want to delete this chat?' 
+                : 'Are you sure you want to delete this message?'
+              }
+            </h3>
             <div className="flex space-x-3">
               <Button
                 onClick={() => {

@@ -16,6 +16,11 @@ const Inbox = () => {
   const [showMenu, setShowMenu] = useState<string | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<{ [chatId: string]: number }>({});
   const [lastChecked, setLastChecked] = useState<{ [chatId: string]: string }>({});
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'deleteChat';
+    chatId: string;
+  } | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -112,53 +117,38 @@ const Inbox = () => {
         event: 'INSERT',
         schema: 'public',
         table: 'chats'
-      }, (payload) => {
+      }, async (payload) => {
         console.log('New chat created:', payload.new);
+        // Only add the chat if it's not deleted for the current user and not already in the list
         setChats(prev => {
-          // Check if chat already exists to avoid duplicates
           const exists = prev.some(chat => chat.id === payload.new.id);
           if (exists) return prev;
-          
-          // Only add the chat if it's not deleted for the current user
-          const isDeletedForUser = 
+          const isDeletedForUser =
             (payload.new.sender_id === user?.id && payload.new.deleted_for_sender) ||
             (payload.new.receiver_id === user?.id && payload.new.deleted_for_receiver);
-          
-          if (isDeletedForUser) {
-            console.log('Not adding deleted chat to inbox:', payload.new.id);
-            return prev;
-          }
-          
-          // Check if user already has an active chat with the same person
-          const otherUserId = payload.new.sender_id === user?.id ? payload.new.receiver_id : payload.new.sender_id;
-          const hasActiveChatWithSamePerson = prev.some(chat => {
-            const chatOtherUserId = chat.sender_id === user?.id ? chat.receiver_id : chat.sender_id;
-            return chatOtherUserId === otherUserId;
-          });
-          
-          if (hasActiveChatWithSamePerson) {
-            console.log('Not adding new chat - user already has active chat with same person:', payload.new.id);
-            return prev;
-          }
-          
-          // Special case: If this is a new chat and the current user is the receiver,
-          // and they have a non-deleted chat with the sender, don't add this new chat
-          // because the sender should be using the existing chat
-          if (payload.new.receiver_id === user?.id) {
-            const existingChatWithSender = prev.find(chat => {
-              const chatOtherUserId = chat.sender_id === user?.id ? chat.receiver_id : chat.sender_id;
-              return chatOtherUserId === payload.new.sender_id;
-            });
-            
-            if (existingChatWithSender) {
-              console.log('Not adding new chat - receiver already has active chat with sender:', payload.new.id);
-              return prev;
-            }
-          }
-          
-          console.log('Adding new chat to inbox:', payload.new.id);
+          if (isDeletedForUser) return prev;
+          // Add a placeholder while we fetch the full chat
           return [payload.new, ...prev];
         });
+
+        // Fetch the full chat with profile data
+        const { data: fullChat, error } = await supabase
+          .from('chats')
+          .select(`
+            *,
+            sender:profiles!chats_sender_id_fkey(username, avatar_url),
+            receiver:profiles!chats_receiver_id_fkey(username, avatar_url)
+          `)
+          .eq('id', payload.new.id)
+          .single();
+
+        if (fullChat) {
+          setChats(prev => {
+            // Replace the placeholder with the full chat object
+            const filtered = prev.filter(chat => chat.id !== fullChat.id);
+            return [fullChat, ...filtered];
+          });
+        }
       })
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -270,36 +260,25 @@ const Inbox = () => {
   };
 
   const handleDeleteChat = async (chatId: string) => {
-    if (!window.confirm("Are you sure you want to delete this chat?")) return;
-    
-    try {
-      // Find the chat to determine which field to update
-      const chat = chats.find(c => c.id === chatId);
-      if (!chat) return;
-      
-      // Mark chat as deleted for the current user instead of actually deleting it
-      const updateField = chat.sender_id === user?.id ? 'deleted_for_sender' : 'deleted_for_receiver';
-      const { error } = await supabase
-        .from('chats')
-        .update({ [updateField]: true })
-        .eq('id', chatId);
-      
-      if (error) {
-        console.error('Error deleting chat:', error);
-        alert('Failed to delete chat: ' + error.message);
-      } else {
-        setChats(chats.filter(chat => chat.id !== chatId));
-        // Show success feedback
-        const originalText = document.title;
-        document.title = 'Chat deleted!';
-        setTimeout(() => {
-          document.title = originalText;
-        }, 1000);
-      }
-    } catch (error) {
-      console.error('Error deleting chat:', error);
-      alert('Failed to delete chat: An unexpected error occurred');
+    // Find the chat to determine which field to update
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) return;
+    if (chat.sender_id !== user?.id) {
+      toast({
+        title: 'Not allowed',
+        description: 'Only the creator of the chat can delete.',
+        variant: 'destructive'
+      });
+      setShowMenu(null);
+      return;
     }
+    
+    // Show confirmation dialog
+    setConfirmAction({
+      type: 'deleteChat',
+      chatId: chatId
+    });
+    setShowConfirmDialog(true);
     setShowMenu(null);
   };
 
@@ -309,6 +288,58 @@ const Inbox = () => {
     setLastChecked(prev => ({ ...prev, [chatId]: new Date().toISOString() }));
     navigate(`/chat/${chatId}`);
     setShowMenu(null);
+  };
+
+  const confirmDeleteChat = async () => {
+    if (!user || !confirmAction) return;
+    
+    try {
+      const { chatId } = confirmAction;
+      
+      // Find the chat to determine which field to update
+      const chat = chats.find(c => c.id === chatId);
+      if (!chat) return;
+      if (chat.sender_id !== user?.id) {
+        toast({
+          title: 'Not allowed',
+          description: 'Only the creator of the chat can delete.',
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      // Sender deletes for both users
+      const { error } = await supabase
+        .from('chats')
+        .update({ deleted_for_sender: true, deleted_for_receiver: true })
+        .eq('id', chatId);
+      
+      if (error) {
+        console.error('Error deleting chat:', error);
+        toast({
+          title: 'Failed to delete chat',
+          description: error.message || 'Please try again.',
+          variant: 'destructive'
+        });
+      } else {
+        setChats(chats.filter(chat => chat.id !== chatId));
+        toast({
+          title: 'Chat deleted',
+          description: 'The chat has been removed from both inboxes.',
+          variant: 'default'
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      toast({
+        title: 'Failed to delete chat',
+        description: 'An unexpected error occurred.',
+        variant: 'destructive'
+      });
+    } finally {
+      setShowConfirmDialog(false);
+      setConfirmAction(null);
+    }
   };
 
   const checkForNewMessages = async () => {
@@ -483,6 +514,7 @@ const Inbox = () => {
                           <MessageSquare size={14} />
                           Open Chat
                         </button>
+                        {chat.sender_id === user?.id ? (
                         <button
                           className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
                           onClick={(e) => {
@@ -493,6 +525,23 @@ const Inbox = () => {
                           <Trash2 size={14} />
                           Delete Chat
                         </button>
+                        ) : (
+                        <button
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast({
+                              title: 'Not allowed',
+                              description: 'Only the creator of the chat can delete.',
+                              variant: 'destructive'
+                            });
+                            setShowMenu(null);
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          Delete Chat
+                        </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -502,6 +551,36 @@ const Inbox = () => {
           </div>
         )}
       </div>
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
+          <div className="bg-black/90 rounded-lg p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold text-white mb-4 text-center">
+              Are you sure you want to delete this chat?
+            </h3>
+            <div className="flex space-x-3">
+              <Button
+                onClick={() => {
+                  setShowConfirmDialog(false);
+                  setConfirmAction(null);
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmDeleteChat}
+                variant="destructive"
+                className="flex-1"
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Navigation */}
       <BottomNavigation />
