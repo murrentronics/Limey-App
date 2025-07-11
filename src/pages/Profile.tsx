@@ -28,6 +28,13 @@ const Profile = () => {
   const [loadingFollowList, setLoadingFollowList] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [currentVideoIndex, setCurrentVideoIndex] = useState<number | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'deleteVideo';
+    videoId: string;
+    videoUrl: string;
+    thumbnailUrl?: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -154,21 +161,52 @@ const Profile = () => {
       return;
     }
     
-    if (!window.confirm("Are you sure you want to delete this video? This cannot be undone.")) return;
+    // Show confirmation dialog instead of window.confirm
+    setConfirmAction({
+      type: 'deleteVideo',
+      videoId,
+      videoUrl,
+      thumbnailUrl
+    });
+    setShowConfirmDialog(true);
+  };
+
+  const confirmDeleteVideo = async () => {
+    if (!confirmAction || confirmAction.type !== 'deleteVideo') return;
     
-    // Remove from DB
-    const { error: dbError } = await supabase.from('videos').delete().eq('id', videoId);
-    // Remove from storage (limeytt-uploads)
-    if (videoUrl) {
-      const path = videoUrl.split('/limeytt-uploads/')[1];
-      if (path) await supabase.storage.from('limeytt-uploads').remove([path]);
+    try {
+      const { videoId, videoUrl, thumbnailUrl } = confirmAction;
+      
+      // Remove from DB
+      const { error: dbError } = await supabase.from('videos').delete().eq('id', videoId);
+      if (dbError) {
+        console.error('Error deleting video from DB:', dbError);
+        alert('Failed to delete video from database.');
+        return;
+      }
+      
+      // Remove from storage (limeytt-uploads)
+      if (videoUrl) {
+        const path = videoUrl.split('/limeytt-uploads/')[1];
+        if (path) await supabase.storage.from('limeytt-uploads').remove([path]);
+      }
+      if (thumbnailUrl) {
+        const thumbPath = thumbnailUrl.split('/limeytt-uploads/')[1];
+        if (thumbPath) await supabase.storage.from('limeytt-uploads').remove([thumbPath]);
+      }
+      
+      // Refresh list
+      fetchUserVideos(profile.user_id);
+      
+      // Show success message
+      alert('Video deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting video:', error);
+      alert('Failed to delete video. Please try again.');
+    } finally {
+      setShowConfirmDialog(false);
+      setConfirmAction(null);
     }
-    if (thumbnailUrl) {
-      const thumbPath = thumbnailUrl.split('/limeytt-uploads/')[1];
-      if (thumbPath) await supabase.storage.from('limeytt-uploads').remove([thumbPath]);
-    }
-    // Refresh list
-    fetchUserVideos(profile.user_id);
   };
 
   const handleFollowToggle = async () => {
@@ -679,6 +717,39 @@ const Profile = () => {
           onNext={() => setCurrentVideoIndex(i => (i !== null && i < userVideos.length - 1 ? i + 1 : i))}
           onPrevious={() => setCurrentVideoIndex(i => (i !== null && i > 0 ? i - 1 : i))}
         />
+      )}
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-black/90 rounded-lg p-6 max-w-sm mx-4 border border-white/10">
+            <h3 className="text-lg font-semibold text-white mb-4 text-center">
+              Are you sure you want to delete this video?
+            </h3>
+            <p className="text-white/70 text-sm mb-6 text-center">
+              This action cannot be undone.
+            </p>
+            <div className="flex space-x-3">
+              <Button
+                onClick={() => {
+                  setShowConfirmDialog(false);
+                  setConfirmAction(null);
+                }}
+                variant="outline"
+                className="flex-1 border-white/20 text-white hover:bg-white/10"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmDeleteVideo}
+                variant="destructive"
+                className="flex-1"
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Bottom Navigation */}

@@ -229,13 +229,16 @@ const Inbox = () => {
         schema: 'public',
         table: 'messages',
         filter: `receiver_id=eq.${user?.id}`
-      }, (payload) => {
+      }, async (payload) => {
         console.log('New message received:', payload.new);
         // Increment unread count for this chat
         setUnreadCounts(prev => ({
           ...prev,
           [payload.new.chat_id]: (prev[payload.new.chat_id] || 0) + 1
         }));
+        
+        // Update the last message for this chat
+        await updateLastMessageForChat(payload.new.chat_id);
       })
       .subscribe((status) => {
         console.log('Chats subscription status:', status);
@@ -248,6 +251,42 @@ const Inbox = () => {
       console.log('Cleaning up chats subscription');
       subscription.unsubscribe();
     };
+  };
+
+  const updateLastMessageForChat = async (chatId: string) => {
+    try {
+      // Fetch the latest visible message for this chat
+      const { data: messages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (error || !messages) return;
+      
+      // Find the latest visible message for the current user
+      let lastVisible = null;
+      for (const msg of messages) {
+        const isOwn = msg.sender_id === user?.id;
+        const isDeletedForEveryone = msg.deleted_for_everyone === true;
+        const isDeletedForSender = isOwn && msg.deleted_for_sender === true;
+        const isDeletedForReceiver = !isOwn && msg.deleted_for_receiver === true;
+        if (!isDeletedForEveryone && !isDeletedForSender && !isDeletedForReceiver) {
+          lastVisible = msg;
+          break;
+        }
+      }
+      
+      // Update the chat with the new last message
+      setChats(prev => prev.map(chat => 
+        chat.id === chatId 
+          ? { ...chat, last_visible_message: lastVisible }
+          : chat
+      ));
+    } catch (error) {
+      console.error('Error updating last message for chat:', error);
+    }
   };
 
   const getChatPartner = (chat: any) => {
@@ -398,38 +437,23 @@ const Inbox = () => {
       // Group messages by chat and find the latest message for each
       const latestMessages = new Map();
       lastMessages?.forEach(message => {
-        if (!latestMessages.has(message.chat_id) || 
-            new Date(message.created_at) > new Date(latestMessages.get(message.chat_id))) {
+        if (!latestMessages.has(message.chat_id)) {
           latestMessages.set(message.chat_id, message.created_at);
         }
       });
       
-      // Update unread counts
+      // Update unread counts based on last checked times
       const newUnreadCounts: { [chatId: string]: number } = {};
-      const newLastChecked: { [chatId: string]: string } = {};
-      
       chats.forEach(chat => {
         const lastMessageTime = latestMessages.get(chat.id);
         const lastCheckedTime = lastChecked[chat.id];
         
         if (lastMessageTime && (!lastCheckedTime || new Date(lastMessageTime) > new Date(lastCheckedTime))) {
-          // Count unread messages since last check
-          const unreadCount = lastMessages?.filter(msg => 
-            msg.chat_id === chat.id && 
-            new Date(msg.created_at) > new Date(lastCheckedTime || '1970-01-01')
-          ).length || 0;
-          
-          newUnreadCounts[chat.id] = unreadCount;
-        } else {
-          newUnreadCounts[chat.id] = unreadCounts[chat.id] || 0;
+          newUnreadCounts[chat.id] = (unreadCounts[chat.id] || 0) + 1;
         }
-        
-        newLastChecked[chat.id] = lastMessageTime || lastCheckedTime || new Date().toISOString();
       });
       
-      setUnreadCounts(newUnreadCounts);
-      setLastChecked(newLastChecked);
-      
+      setUnreadCounts(prev => ({ ...prev, ...newUnreadCounts }));
     } catch (error) {
       console.error('Error checking for new messages:', error);
     }
