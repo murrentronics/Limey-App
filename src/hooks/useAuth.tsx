@@ -68,7 +68,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       toast({
         title: "Check your email",
-        description: "We sent you a confirmation link to complete your sign up."
+        description: "We sent you a confirmation link to complete your sign up.",
+        className: "bg-green-600 text-white border-green-700"
       });
     }
 
@@ -108,7 +109,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(null);
         toast({
           title: "Signed out successfully",
-          description: "You have been signed out"
+          description: "You have been signed out",
+          className: "bg-green-600 text-white border-green-700"
         });
       }
     } catch (error) {
@@ -118,7 +120,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(null);
       toast({
         title: "Signed out",
-        description: "You have been signed out (local session cleared)"
+        description: "You have been signed out (local session cleared)",
+        className: "bg-green-600 text-white border-green-700"
       });
     }
   };

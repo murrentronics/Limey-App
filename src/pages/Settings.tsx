@@ -99,7 +99,8 @@ const Settings = () => {
       setSettings(newSettings);
       toast({
         title: "Settings updated",
-        description: "Your settings have been saved successfully"
+        description: "Your settings have been saved successfully",
+        className: "bg-green-600 text-white border-green-700"
       });
     } catch (error) {
       toast({
@@ -127,7 +128,8 @@ const Settings = () => {
       setDeletionCountdown(deleteDate);
       toast({
         title: "Account deletion scheduled",
-        description: "Your account will be deleted in 7 days"
+        description: "Your account will be deleted in 7 days",
+        className: "bg-green-600 text-white border-green-700"
       });
     } catch (error) {
       toast({
@@ -152,7 +154,8 @@ const Settings = () => {
       setDeletionCountdown(null);
       toast({
         title: "Account deletion cancelled",
-        description: "Your account will not be deleted"
+        description: "Your account will not be deleted",
+        className: "bg-green-600 text-white border-green-700"
       });
     } catch (error) {
       toast({

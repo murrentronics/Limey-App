@@ -247,7 +247,8 @@ const Upload = () => {
 
       toast({
         title: "Upload Successful! 🎉",
-        description: "Your content has been uploaded to Limey"
+        description: "Your content has been uploaded to Limey",
+        className: "bg-green-600 text-white border-green-700"
       });
 
       // Reset form

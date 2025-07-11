@@ -602,7 +602,11 @@ const Chat = () => {
             console.log('Updated messages state:', updatedMessages);
             return updatedMessages;
           });
-          toast({ title: 'Message deleted', description: 'The message has been removed from your view.' });
+          toast({ 
+            title: 'Message deleted', 
+            description: 'The message has been removed from your view.',
+            className: 'bg-green-600 text-white border-green-700'
+          });
         }
       }
     } catch (error) {
