@@ -809,11 +809,11 @@ const Chat = () => {
       setIsTyping(true);
       broadcastTypingStatus(true);
     }
-    
+
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-    
+
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       broadcastTypingStatus(false);
@@ -822,19 +822,16 @@ const Chat = () => {
 
   const broadcastTypingStatus = async (typing: boolean) => {
     if (!user || !chatId || !chat) return;
-    
+    // Use the new columns for per-user typing
+    const isCurrentUserSender = chat.sender_id === user.id;
+    const updateObj = isCurrentUserSender
+      ? { typing_sender: typing }
+      : { typing_receiver: typing };
     try {
-      const { error } = await supabase
+      await supabase
         .from('chats')
-        .update({
-          [`typing_${chat.sender_id === user.id ? 'sender' : 'receiver'}`]: typing,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateObj)
         .eq('id', chatId);
-      
-      if (error) {
-        console.error('Error updating typing status:', error);
-      }
     } catch (error) {
       console.error('Error broadcasting typing status:', error);
     }
@@ -850,8 +847,8 @@ const Chat = () => {
         filter: `id=eq.${chatId}`
       }, (payload) => {
         const newChat = payload.new;
-        const isCurrentUserSender = chat?.sender_id === user?.id;
-        
+        // Use the latest sender_id from the payload, not the possibly stale chat object
+        const isCurrentUserSender = newChat.sender_id === user?.id;
         if (isCurrentUserSender) {
           setOtherUserTyping(newChat.typing_receiver === true);
         } else {

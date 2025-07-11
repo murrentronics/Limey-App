@@ -208,11 +208,11 @@ const Profile = () => {
 
   const fetchFollowingList = async () => {
     setLoadingFollowList(true);
-    // Step 1: Get following IDs
+    // Use profile.user_id instead of user.id
     const { data: follows, error: followsError } = await supabase
       .from('follows')
       .select('following_id')
-      .eq('follower_id', user.id);
+      .eq('follower_id', profile.user_id);
     if (followsError) {
       setFollowingList([]);
       setLoadingFollowList(false);
@@ -244,11 +244,11 @@ const Profile = () => {
   };
   const fetchFollowersList = async () => {
     setLoadingFollowList(true);
-    // Step 1: Get follower IDs
+    // Use profile.user_id instead of user.id
     const { data: follows, error: followsError } = await supabase
       .from('follows')
       .select('follower_id')
-      .eq('following_id', user.id);
+      .eq('following_id', profile.user_id);
     if (followsError) {
       setFollowersList([]);
       setLoadingFollowList(false);
@@ -285,32 +285,35 @@ const Profile = () => {
     else fetchFollowersList();
   };
   const handleRemoveUser = async (targetUserId: string, type: "following" | "followers") => {
+    let deleteResult;
     if (type === "following") {
       // Remove from follows table: you unfollow someone
-      await supabase
+      deleteResult = await supabase
         .from('follows')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('follower_id', user.id)
         .eq('following_id', targetUserId);
-      // Update counts in DB
-      await supabase.from('profiles').update({ following_count: (profile.following_count || 1) - 1 }).eq('user_id', user.id);
-      await supabase.from('profiles').update({ follower_count: (profile.follower_count || 1) - 1 }).eq('user_id', targetUserId);
-      // Update UI
-      setFollowingList((prev) => prev.filter((f) => f.following_id !== targetUserId));
-      setProfile((prev: any) => ({ ...prev, following_count: (prev.following_count || 1) - 1 }));
+
+      if (!deleteResult.error && deleteResult.count > 0) {
+        // Only decrement if a row was actually deleted
+        await supabase.from('profiles').update({ following_count: Math.max(0, (profile.following_count || 0) - 1) }).eq('user_id', user.id);
+        await supabase.from('profiles').update({ follower_count: Math.max(0, (profile.follower_count || 0) - 1) }).eq('user_id', targetUserId);
+      }
+      // Always refresh the list
+      fetchFollowingList();
     } else if (type === "followers") {
       // Remove from follows table: remove a follower (block)
-      await supabase
+      deleteResult = await supabase
         .from('follows')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('follower_id', targetUserId)
         .eq('following_id', user.id);
-      // Update counts in DB
-      await supabase.from('profiles').update({ follower_count: (profile.follower_count || 1) - 1 }).eq('user_id', user.id);
-      await supabase.from('profiles').update({ following_count: (profile.following_count || 1) - 1 }).eq('user_id', targetUserId);
-      // Update UI
-      setFollowersList((prev) => prev.filter((f) => f.follower_id !== targetUserId));
-      setProfile((prev: any) => ({ ...prev, follower_count: (prev.follower_count || 1) - 1 }));
+
+      if (!deleteResult.error && deleteResult.count > 0) {
+        await supabase.from('profiles').update({ follower_count: Math.max(0, (profile.follower_count || 0) - 1) }).eq('user_id', user.id);
+        await supabase.from('profiles').update({ following_count: Math.max(0, (profile.following_count || 0) - 1) }).eq('user_id', targetUserId);
+      }
+      fetchFollowersList();
     }
   };
 

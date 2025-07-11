@@ -364,6 +364,9 @@ const Feed = () => {
           .eq('follower_id', user.id)
           .eq('following_id', targetUserId);
         setFollowStatus(prev => ({ ...prev, [targetUserId]: false }));
+        // Decrement counts atomically
+        await supabase.from('profiles').update({ following_count: supabase.rpc('increment', { x: -1 }) }).eq('user_id', user.id);
+        await supabase.from('profiles').update({ follower_count: supabase.rpc('increment', { x: -1 }) }).eq('user_id', targetUserId);
         return false; // now unfollowed
       } else {
         // Follow
@@ -374,6 +377,9 @@ const Feed = () => {
             following_id: targetUserId
           });
         setFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
+        // Increment counts atomically
+        await supabase.from('profiles').update({ following_count: supabase.rpc('increment', { x: 1 }) }).eq('user_id', user.id);
+        await supabase.from('profiles').update({ follower_count: supabase.rpc('increment', { x: 1 }) }).eq('user_id', targetUserId);
         return true; // now following
       }
     } catch (error) {
