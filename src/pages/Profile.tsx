@@ -721,29 +721,40 @@ const Profile = () => {
 
       {/* Confirmation Dialog */}
       {showConfirmDialog && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-black/90 rounded-lg p-6 max-w-sm mx-4 border border-white/10">
-            <h3 className="text-lg font-semibold text-white mb-4 text-center">
-              Are you sure you want to delete this video?
+        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+          <div className="flex justify-end p-4">
+            <button 
+              className="text-white text-lg font-bold" 
+              onClick={() => {
+                setShowConfirmDialog(false);
+                setConfirmAction(null);
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center px-4 pb-8">
+            <h3 className="text-2xl font-bold mb-6 text-primary logo-text-glow text-center">
+              Delete Video
             </h3>
-            <p className="text-white/70 text-sm mb-6 text-center">
-              This action cannot be undone.
+            <p className="text-white/70 text-lg mb-8 text-center max-w-md">
+              Are you sure you want to delete this video? This action cannot be undone.
             </p>
-            <div className="flex space-x-3">
+            <div className="flex space-x-4 w-full max-w-sm">
               <Button
                 onClick={() => {
                   setShowConfirmDialog(false);
                   setConfirmAction(null);
                 }}
                 variant="outline"
-                className="flex-1 border-white/20 text-white hover:bg-white/10"
+                className="flex-1 border-white/20 text-white hover:bg-white/10 h-12 text-lg"
               >
                 Cancel
               </Button>
               <Button
                 onClick={confirmDeleteVideo}
                 variant="destructive"
-                className="flex-1"
+                className="flex-1 h-12 text-lg"
               >
                 Delete
               </Button>
