@@ -1057,7 +1057,7 @@ const Chat = () => {
       {/* Message Input */}
       <div className="fixed bottom-12 left-0 right-0 p-4 bg-black/90 backdrop-blur-md border-t border-white/10 z-40">
         {/* Typing Indicator */}
-        {otherUserTyping && partner?.username !== user?.username && (
+        {otherUserTyping && (
           <div className="mb-2 px-3 py-1 flex justify-center">
             <div className="flex items-center space-x-2 bg-white/10 rounded-full px-3 py-1">
               <div className="flex space-x-1">
