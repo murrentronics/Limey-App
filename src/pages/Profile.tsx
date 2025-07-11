@@ -589,7 +589,7 @@ const Profile = () => {
                 <div className="relative" ref={dropdownRef}>
                   <div className="flex gap-2">
                     <Button
-                      variant="primary"
+                      variant="default"
                       onClick={() => {
                         if (isFollowing) {
                           setShowDropdown((prev) => !prev);
@@ -608,7 +608,7 @@ const Profile = () => {
                       )}
                     </Button>
                     <Button 
-                      variant="primary"
+                      variant="default"
                       size="sm"
                       onClick={() => navigate(`/message/${profile?.username || user?.id}`)}
                       className="flex items-center gap-2 h-10 font-semibold text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded shadow"
