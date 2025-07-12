@@ -38,6 +38,43 @@ const Profile = () => {
     thumbnailUrl?: string;
   } | null>(null);
 
+  // Real-time subscription for video updates
+  useEffect(() => {
+    if (!profile?.user_id) return;
+
+    // Subscribe to video updates for this user
+    const channel = supabase
+      .channel(`videos-${profile.user_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'videos',
+          filter: `user_id=eq.${profile.user_id}`
+        },
+        (payload) => {
+          console.log('Video update received:', payload);
+          if (payload.eventType === 'UPDATE') {
+            setUserVideos(prev => 
+              prev.map(video => 
+                video.id === payload.new.id ? { ...video, ...payload.new } : video
+              )
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setUserVideos(prev => prev.filter(video => video.id !== payload.old.id));
+          } else if (payload.eventType === 'INSERT') {
+            setUserVideos(prev => [payload.new, ...prev]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.user_id]);
+
   useEffect(() => {
     fetchProfile();
   }, [username, user]);
@@ -147,7 +184,7 @@ const Profile = () => {
     try {
       const { data: dbVideos, error: dbError } = await supabase
         .from('videos')
-        .select('*')
+        .select('*, profiles!inner(username, avatar_url)')
         .eq('user_id', targetUserId)
         .order('created_at', { ascending: false });
       setUserVideos(dbVideos || []);
@@ -691,6 +728,11 @@ const Profile = () => {
                   <div className="absolute bottom-2 left-2">
                     <div className="text-white text-xs">
                       👁️ {video.view_count || 0}
+                    </div>
+                  </div>
+                  <div className="absolute top-2 left-2">
+                    <div className="text-white text-xs">
+                      ❤️ {video.like_count || 0}
                     </div>
                   </div>
                 </Card>

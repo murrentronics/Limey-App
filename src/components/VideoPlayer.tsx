@@ -249,7 +249,6 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
     }
   };
 
-  // Restore togglePlay and toggleMute
   const togglePlay = () => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -257,7 +256,6 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
       } else {
         videoRef.current.play();
       }
-      setIsPlaying(!isPlaying);
     }
   };
 
@@ -268,49 +266,27 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
     }
   };
 
-  // Fallbacks for missing metadata
-  const displayTitle = video.title || (video.video_url ? video.video_url.split('/').pop() : 'Untitled');
-  const displayDescription = video.description || 'No description available.';
-  const displayDuration = video.duration ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}` : '--:--';
-  const displayUsername = video.profiles?.username || 'unknown';
-  const displayAvatar = video.profiles?.avatar_url || '';
-
-  // Helper function to get username with fallback
   const getUsername = (video: any) => {
-    // First try to get username from profiles
-    if (video.profiles?.username) {
-      return video.profiles.username;
-    }
-    
-    // If no username in profiles, create a fallback from user_id
+    // Use direct username field from videos table
+    if (video.username) return video.username;
     if (video.user_id) {
-      // Create a more user-friendly fallback username
-      const userId = video.user_id.replace(/[^a-zA-Z0-9]/g, '');
+      const userId = video.user_id.replace(/[^a-zA-Z0-9]/g, "");
       return `user_${userId.slice(0, 8)}`;
     }
-    
-    // Last resort fallback
     return 'unknown_user';
   };
 
-  // Helper function to get profile URL for navigation
   const getProfileUrl = (video: any) => {
     const username = getUsername(video);
-    // If this is the current user's video, navigate to their own profile
     if (user && video.user_id === user.id) {
       return '/profile';
     }
     return `/profile/${username}`;
   };
 
-  const navigate = useNavigate();
-
-  // Follow function
   const handleFollow = async (targetUserId: string, targetUsername: string) => {
     if (!user) return;
-    
     try {
-      // Check if already following
       const { data: existingFollow } = await supabase
         .from('follows')
         .select('*')
@@ -325,10 +301,8 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', targetUserId);
-        
-        // Update local state
         setFollowStatus(prev => ({ ...prev, [targetUserId]: false }));
-        return false; // Now not following
+        return false; // now unfollowed
       } else {
         // Follow
         await supabase
@@ -337,259 +311,407 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
             follower_id: user.id,
             following_id: targetUserId
           });
-        
-        // Update local state
         setFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
-        return true; // Now following
+        return true; // now following
       }
     } catch (error) {
       console.error('Error following/unfollowing:', error);
-      return followStatus[targetUserId] || false; // Return current status on error
+      return followStatus[targetUserId] || false;
     }
   };
 
-  // Check follow status for the current video
   const checkFollowStatus = async () => {
-    if (!user || video.user_id === user.id) return;
-    
+    if (!user) return;
     try {
-      const { data: existingFollow } = await supabase
+      const { data: follows } = await supabase
         .from('follows')
-        .select('*')
+        .select('following_id')
         .eq('follower_id', user.id)
-        .eq('following_id', video.user_id)
-        .single();
-      
-      setFollowStatus(prev => ({ ...prev, [video.user_id]: !!existingFollow }));
+        .eq('following_id', video.user_id);
+      setFollowStatus(prev => ({ ...prev, [video.user_id]: !!follows }));
     } catch (error) {
       console.error('Error checking follow status:', error);
-      setFollowStatus(prev => ({ ...prev, [video.user_id]: false }));
     }
   };
 
-  // Check follow status when video changes
+  const checkLikeStatus = async () => {
+    if (!user) return;
+    try {
+      const { data } = await supabase
+        .from('video_likes')
+        .select('*')
+        .eq('video_id', video.id)
+        .eq('user_id', user.id)
+        .single();
+      setIsLiked(!!data);
+    } catch (error) {
+      setIsLiked(false);
+    }
+  };
+
   useEffect(() => {
     checkFollowStatus();
-  }, [video.user_id, user]);
+    checkLikeStatus();
+  }, [video.id, user]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+    };
+
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
+  }, []);
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    const newTime = percentage * video.duration;
+    video.currentTime = newTime;
+  };
 
   return (
-    <div 
-      ref={containerRef}
-      className="fixed inset-0 bg-black z-50"
-      style={{ 
-        top: '64px', // Account for top header
-        bottom: '80px' // Account for bottom navigation
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onClick={e => {
-        // Only trigger play/pause if not clicking on a control (close or mute)
-        const controlSelectors = ['button[data-control]'];
-        let el: HTMLElement | null = e.target as HTMLElement;
-        while (el && el !== e.currentTarget) {
-          if (controlSelectors.some(sel => el.matches(sel))) {
-            return;
-          }
-          el = el.parentElement;
-        }
-        togglePlay();
-      }}
-    >
-      <div className="relative w-full h-full">
-        {/* Video */}
+    <div className="fixed inset-0 z-50 bg-black">
+      {/* Header */}
+      <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/50 to-transparent p-4">
+        <div className="flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="text-white hover:bg-white/10"
+          >
+            <X size={24} />
+          </Button>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleMute}
+              className="text-white hover:bg-white/10"
+            >
+              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Video Container */}
+      <div 
+        className="relative w-full h-full flex items-center justify-center"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <video
           ref={videoRef}
           src={video.video_url}
-          poster={video.thumbnail_url || undefined}
-          className="w-full h-full object-cover"
-          loop
-          autoPlay
-          muted={true}
-          playsInline
-          onPlay={() => {
-            setIsPlaying(true);
-            // Unmute after successful play
-            if (videoRef.current) {
-              videoRef.current.muted = false;
-              setIsMuted(false);
-            }
-          }}
-          onPause={() => setIsPlaying(false)}
+          className="w-full h-full object-contain"
           onTimeUpdate={handleTimeUpdate}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onClick={togglePlay}
         />
 
-        {/* Top Controls */}
-        <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
+        {/* Play/Pause Overlay */}
+        {!isPlaying && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={togglePlay}
+              className="w-16 h-16 rounded-full bg-white/20 hover:bg-white/30 text-white"
+            >
+              <Play size={32} />
+            </Button>
+          </div>
+        )}
+
+        {/* Progress Bar */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-4">
+          <div 
+            className="w-full h-1 bg-white/30 rounded cursor-pointer"
+            onClick={handleSeek}
+          >
+            <div 
+              className="h-full bg-white rounded"
+              style={{ width: `${(currentTime / duration) * 100}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-white text-sm mt-2">
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+
+        {/* Navigation Buttons */}
+        <div className="absolute inset-0 flex items-center justify-between p-4 pointer-events-none">
           <Button
             variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="text-white p-2 bg-black/30 hover:bg-black/50 rounded-full"
-            data-control
+            size="icon"
+            onClick={onPrevious}
+            disabled={currentIndex === 0}
+            className="text-white hover:bg-white/10 pointer-events-auto"
           >
-            <X size={20} />
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
           </Button>
-          
-          {/* Mute Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onNext}
+            disabled={currentIndex === videos.length - 1}
+            className="text-white hover:bg-white/10 pointer-events-auto"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Button>
+        </div>
+      </div>
+
+      {/* Side Actions */}
+      <div className="absolute right-4 bottom-20 flex flex-col items-center space-y-6">
+        {/* Like Button */}
+        <div className="flex flex-col items-center">
           <Button
             variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              toggleMute();
+              handleLike();
             }}
-            className="text-white p-2 bg-black/30 hover:bg-black/50 rounded-full"
+            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
             data-control
           >
-            {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            <Heart 
+              size={28} 
+              className={`${isLiked ? "fill-red-500 text-red-500" : "text-white"} transition-colors`} 
+            />
+          </Button>
+          <span className="text-white text-xs font-semibold mt-1">
+            {video.like_count || 0}
+          </span>
+        </div>
+
+        {/* Comment Button */}
+        <div className="flex flex-col items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+            data-control
+          >
+            <MessageCircle size={28} className="text-white" />
+          </Button>
+          <span className="text-white text-xs font-semibold mt-1">
+            {video.comment_count || 0}
+          </span>
+        </div>
+
+        {/* Share Button */}
+        <div className="flex flex-col items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleShare();
+            }}
+            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+            data-control
+          >
+            <Share size={28} className="text-white" />
           </Button>
         </div>
+      </div>
 
-        {/* Center Play Button - Only show when paused */}
-        {!isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center z-10">
-            <Button
-              variant="ghost"
-              className="w-16 h-16 rounded-full bg-white/20 hover:bg-white/30 text-white"
+      {/* Video Info */}
+      <div className="absolute bottom-20 left-4 right-20 text-white">
+        <div className="flex items-center space-x-3 mb-2">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center">
+              <span className="text-white font-semibold">
+                {getUsername(video).charAt(0).toUpperCase()}
+              </span>
+            </div>
+            {user && video.user_id !== user.id && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await handleFollow(video.user_id, getUsername(video));
+                }}
+                className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-600 rounded-full flex items-center justify-center"
+              >
+                {followStatus[video.user_id] ? (
+                  <span className="text-white text-xs">✓</span>
+                ) : (
+                  <Plus size={10} className="text-white" />
+                )}
+              </button>
+            )}
+          </div>
+          <div>
+            <button
               onClick={(e) => {
                 e.stopPropagation();
-                togglePlay();
+                navigate(getProfileUrl(video));
               }}
-              data-control
+              className="text-white font-semibold hover:text-white/80 transition-colors"
             >
-              <Play size={32} className="ml-1" />
-            </Button>
+              @{getUsername(video)}
+            </button>
           </div>
+        </div>
+        <h3 className="text-lg font-semibold mb-1">{video.title}</h3>
+        {video.description && (
+          <p className="text-white/90 text-sm">{video.description}</p>
         )}
+      </div>
 
-        {/* Bottom Content - TikTok Style */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
-          <div className="flex justify-between items-end">
-            {/* Left Side - User Info and Caption */}
-            <div className="flex-1 mr-4 space-y-3">
-              {/* User Profile - Raised like TikTok */}
-              <div className="flex items-center space-x-3">
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-red-500 p-0.5">
-                    <div className="w-full h-full rounded-full bg-black flex items-center justify-center">
-                      {displayAvatar ? (
-                        <img 
-                          src={displayAvatar} 
-                          alt="Profile" 
-                          className="w-full h-full rounded-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-white font-bold text-lg">
-                          {getUsername(video).charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {/* Follow button - only show if not the current user */}
-                  {user && video.user_id !== user.id && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        await handleFollow(video.user_id, getUsername(video));
-                      }}
-                      className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-lg hover:bg-gray-100 transition-colors"
-                      data-control
-                    >
-                      {followStatus[video.user_id] ? (
-                        <span className="text-green-600 font-bold text-sm">✓</span>
-                      ) : (
-                        <Plus size={12} className="text-black" />
-                      )}
-                    </button>
-                  )}
-                </div>
-                <div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(getProfileUrl(video));
-                    }}
-                    className="text-white font-semibold text-lg hover:text-white/80 transition-colors"
-                  >
-                    @{getUsername(video)}
-                  </button>
-                </div>
-              </div>
-
-              {/* Video Caption */}
-              <div className="space-y-2">
-                <h3 className="text-white font-semibold text-base leading-tight">
-                  {displayTitle}
-                </h3>
-                {displayDescription && (
-                  <p className="text-white/90 text-sm leading-relaxed">
-                    {displayDescription}
-                  </p>
-                )}
-              </div>
+      {/* Comments Section */}
+      {showComments && (
+        <div className="absolute inset-0 bg-black/90 z-20">
+          <div className="flex flex-col h-full">
+            {/* Comments Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/20">
+              <h3 className="text-white font-semibold">Comments</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowComments(false)}
+                className="text-white hover:bg-white/10"
+              >
+                <X size={20} />
+              </Button>
             </div>
 
-            {/* Right Side Actions - TikTok Style Vertical */}
-            <div className="flex flex-col items-center space-y-6">
-              {/* Like Button */}
-              <div className="flex flex-col items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleLike();
-                  }}
-                  className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                  data-control
-                >
-                  <Heart 
-                    size={28} 
-                    className={`${isLiked ? "fill-red-500 text-red-500" : "text-white"} transition-colors`} 
-                  />
-                </Button>
-                <span className="text-white text-xs font-semibold mt-1">
-                  {video.like_count || 0}
-                </span>
-              </div>
+            {/* Comments List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {comments.map((comment) => (
+                <div key={comment.id} className="flex space-x-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-sm font-semibold">
+                      {comment.profiles?.username?.charAt(0).toUpperCase() || 'U'}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <span className="text-white font-semibold text-sm">
+                        @{comment.profiles?.username || 'unknown'}
+                      </span>
+                      <span className="text-white/60 text-xs">
+                        {new Date(comment.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {editingComment === comment.id ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          className="w-full p-2 bg-white/10 text-white rounded resize-none"
+                          rows={2}
+                        />
+                        <div className="flex space-x-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveEdit(comment.id)}
+                            className="bg-white text-black hover:bg-white/90"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelEdit}
+                            className="text-white border-white/20 hover:bg-white/10"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between">
+                        <p className="text-white text-sm">{comment.content}</p>
+                        {user && comment.user_id === user.id && (
+                          <div className="flex space-x-1 ml-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingComment(comment.id);
+                                setEditText(comment.content);
+                              }}
+                              className="text-white/60 hover:text-white text-xs"
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="text-red-400 hover:text-red-300 text-xs"
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-              {/* Comment Button */}
-              <div className="flex flex-col items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                  data-control
-                >
-                  <MessageCircle size={28} className="text-white" />
-                </Button>
-                <span className="text-white text-xs font-semibold mt-1">
-                  {video.comment_count || 0}
-                </span>
-              </div>
-
-              {/* Share Button */}
-              <div className="flex flex-col items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleShare();
+            {/* Add Comment */}
+            <div className="p-4 border-t border-white/20">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="flex-1 p-2 bg-white/10 text-white rounded placeholder-white/50"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddComment();
+                    }
                   }}
-                  className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                  data-control
+                />
+                <Button
+                  onClick={handleAddComment}
+                  disabled={!newComment.trim()}
+                  className="bg-white text-black hover:bg-white/90"
                 >
-                  <Share size={28} className="text-white" />
+                  Post
                 </Button>
-                <span className="text-white text-xs font-semibold mt-1">
-                  Share
-                </span>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

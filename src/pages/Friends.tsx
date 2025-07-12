@@ -56,6 +56,16 @@ const AutoPlayVideo = ({ src, className, globalMuted, ...props }) => {
     };
   }, []);
 
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+    }
+  };
+
   return (
     <div className="relative w-full h-full">
       <video
@@ -67,16 +77,20 @@ const AutoPlayVideo = ({ src, className, globalMuted, ...props }) => {
         className={className}
         {...props}
       />
-      {/* Only show play icon overlay if video is visible and paused */}
+      {/* Center Play Button - Only show when paused */}
       {isVisible && !isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-          <button
-            className="w-16 h-16 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 text-white pointer-events-auto"
-            aria-label="Play"
-            style={{ pointerEvents: 'none' }}
+        <div className="absolute inset-0 flex items-center justify-center z-20">
+          <Button
+            variant="ghost"
+            className="w-16 h-16 rounded-full bg-white/20 hover:bg-white/30 text-white"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+            data-control
           >
-            <Play size={48} />
-          </button>
+            <Play size={32} className="ml-1" />
+          </Button>
         </div>
       )}
     </div>
@@ -115,6 +129,58 @@ const Friends = () => {
   useEffect(() => {
     console.log("Friends - fetching videos from followed users");
     fetchFriendsVideos();
+  }, [user]);
+
+  // Real-time subscriptions for likes and video updates
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to video_likes changes (for heart color)
+    const likesChannel = supabase
+      .channel('video-likes-friends')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'video_likes'
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new.user_id === user.id) {
+            setIsLiked(prev => ({ ...prev, [payload.new.video_id]: true }));
+          } else if (payload.eventType === 'DELETE' && payload.old.user_id === user.id) {
+            setIsLiked(prev => ({ ...prev, [payload.old.video_id]: false }));
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to videos table changes (for like counts)
+    const videosChannel = supabase
+      .channel('videos-friends')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'videos'
+        },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            setVideos(prev =>
+              prev.map(video =>
+                video.id === payload.new.id ? { ...video, like_count: payload.new.like_count } : video
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(likesChannel);
+      supabase.removeChannel(videosChannel);
+    };
   }, [user]);
 
   const fetchFriendsVideos = async () => {
@@ -162,6 +228,7 @@ const Friends = () => {
       console.log('Friends videos fetched:', data);
       setVideos(data || []);
       await checkFollowStatus(data || []);
+      await checkLikeStatus(data || []);
     } catch (error) {
       console.error('Error in fetchFriendsVideos:', error);
       setError('Failed to load videos from friends. Please try again.');
@@ -230,9 +297,76 @@ const Friends = () => {
   };
 
   const handleLike = async (videoId: string) => {
-    // Toggle like state
-    setIsLiked(prev => ({ ...prev, [videoId]: !isLiked[videoId] }));
-    // TODO: Implement actual like functionality with database
+    if (!user) return;
+    
+    try {
+      // Check if user has already liked this video
+      const { data: existingLike } = await supabase
+        .from('video_likes')
+        .select('*')
+        .eq('video_id', videoId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingLike) {
+        // Unlike - remove from video_likes table
+        await supabase
+          .from('video_likes')
+          .delete()
+          .eq('video_id', videoId)
+          .eq('user_id', user.id);
+        
+        // Update local state immediately
+        setIsLiked(prev => ({ ...prev, [videoId]: false }));
+        
+        // Update like count in videos table
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+          
+          // Update local state
+          setVideos(prev => 
+            prev.map(video => 
+              video.id === videoId ? { ...video, like_count: newLikeCount } : video
+            )
+          );
+        }
+      } else {
+        // Like - add to video_likes table
+        await supabase
+          .from('video_likes')
+          .insert({
+            video_id: videoId,
+            user_id: user.id
+          });
+        
+        // Update local state immediately
+        setIsLiked(prev => ({ ...prev, [videoId]: true }));
+        
+        // Update like count in videos table
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = (currentVideo.like_count || 0) + 1;
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+          
+          // Update local state
+          setVideos(prev => 
+            prev.map(video => 
+              video.id === videoId ? { ...video, like_count: newLikeCount } : video
+            )
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error updating like status:', error);
+    }
   };
 
   const handleShare = async (video: any) => {
@@ -326,6 +460,30 @@ const Friends = () => {
       setFollowStatus(prev => ({ ...prev, ...newFollowStatus }));
     } catch (error) {
       console.error('Error checking follow status:', error);
+    }
+  };
+
+  // Check like status for all videos
+  const checkLikeStatus = async (videosArr: any[]) => {
+    if (!user) return;
+    try {
+      const videoIds = videosArr.map(video => video.id);
+      if (videoIds.length === 0) return;
+      
+      const { data: likes } = await supabase
+        .from('video_likes')
+        .select('video_id')
+        .eq('user_id', user.id)
+        .in('video_id', videoIds);
+      
+      const likedVideoIds = new Set(likes?.map(like => like.video_id) || []);
+      const newLikeStatus: { [key: string]: boolean } = {};
+      videosArr.forEach(video => {
+        newLikeStatus[video.id] = likedVideoIds.has(video.id);
+      });
+      setIsLiked(prev => ({ ...prev, ...newLikeStatus }));
+    } catch (error) {
+      console.error('Error checking like status:', error);
     }
   };
 
@@ -441,18 +599,23 @@ const Friends = () => {
                 key={video.id}
                 data-video-id={video.id}
                 className="relative h-screen snap-start snap-always flex items-center justify-center"
-                onClick={(e) => {
-                  const target = e.target as HTMLElement;
-                  const isControlButton = target.closest('button') || target.closest('[data-control]');
-                  if (!isControlButton) {
-                    // Toggle play/pause for the visible video
-                    const videoEl = document.querySelector(`[data-video-id='${video.id}'] video`);
-                    if (videoEl instanceof HTMLVideoElement) {
-                      if (videoEl.paused) {
-                        videoEl.play();
-                      } else {
-                        videoEl.pause();
-                      }
+                onClick={e => {
+                  // Only trigger play/pause if not clicking on a control
+                  const controlSelectors = ['button[data-control]'];
+                  let el = e.target as HTMLElement;
+                  while (el && el !== e.currentTarget) {
+                    if (controlSelectors.some(sel => el.matches(sel))) {
+                      return;
+                    }
+                    el = el.parentElement;
+                  }
+                  // Find the video element and toggle play/pause
+                  const videoElement = e.currentTarget.querySelector('video');
+                  if (videoElement) {
+                    if (videoElement.paused) {
+                      videoElement.play();
+                    } else {
+                      videoElement.pause();
                     }
                   }
                 }}

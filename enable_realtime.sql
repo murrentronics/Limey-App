@@ -14,6 +14,15 @@ ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 -- Also enable real-time for chats table
 ALTER PUBLICATION supabase_realtime ADD TABLE chats;
 
+-- Enable real-time for videos table
+ALTER PUBLICATION supabase_realtime ADD TABLE videos;
+
+-- Enable real-time for video_likes table
+ALTER PUBLICATION supabase_realtime ADD TABLE video_likes;
+
+-- Enable real-time for video_views table
+ALTER PUBLICATION supabase_realtime ADD TABLE video_views;
+
 -- Check what tables are in the real-time publication
 SELECT 
   schemaname,
