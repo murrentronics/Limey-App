@@ -61,13 +61,28 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onView
   // Record view when video is watched for sufficient time
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !isVisible || !isPlaying || hasRecordedView || !user || !videoId || !creatorId) return;
+    if (!video || !isVisible || !isPlaying || hasRecordedView || !user || !videoId || !creatorId) {
+      console.log('View recording conditions not met:', { 
+        hasVideo: !!video, 
+        isVisible, 
+        isPlaying, 
+        hasRecordedView, 
+        hasUser: !!user, 
+        hasVideoId: !!videoId, 
+        hasCreatorId: !!creatorId 
+      });
+      return;
+    }
     
     // Don't record views for own videos
-    if (user.id === creatorId) return;
+    if (user.id === creatorId) {
+      console.log('Skipping view recording - user is creator');
+      return;
+    }
 
     const checkViewTime = () => {
       if (video.currentTime >= 10 && !hasRecordedView) {
+        console.log('Recording view - video watched for 10+ seconds:', { videoId, creatorId, currentTime: video.currentTime });
         setHasRecordedView(true);
         onViewRecorded?.(videoId, creatorId);
       }
@@ -152,13 +167,26 @@ const Feed = () => {
 
   // Record video view (only for other users' videos)
   const recordVideoView = async (videoId: string, creatorId: string) => {
-    if (!user || user.id === creatorId) return;
+    if (!user || user.id === creatorId) {
+      console.log('Skipping view recording:', { 
+        hasUser: !!user, 
+        userId: user?.id, 
+        creatorId, 
+        isCreator: user?.id === creatorId 
+      });
+      return;
+    }
+    
+    console.log('Attempting to record video view:', { videoId, creatorId, userId: user.id });
+    
     try {
       const { error } = await supabase.rpc('record_video_view', {
         video_uuid: videoId
       });
       if (error) {
         console.error('Error recording video view:', error);
+      } else {
+        console.log('Successfully recorded video view for:', videoId);
       }
     } catch (error) {
       console.error('Error recording video view:', error);
@@ -399,7 +427,7 @@ const Feed = () => {
 
   const handleLike = async (videoId: string) => {
     if (!user) return;
-    
+
     try {
       // Check if user has already liked this video
       const { data: existingLike } = await supabase
@@ -410,61 +438,27 @@ const Feed = () => {
         .single();
 
       if (existingLike) {
-        // Unlike - remove from video_likes table
+        // Unlike
         await supabase
           .from('video_likes')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
-        
-        // Update local state immediately
         setIsLiked(prev => ({ ...prev, [videoId]: false }));
-        
-        // Update like count in videos table
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-          
-          // Update local state
-          setVideos(prev => 
-            prev.map(video => 
-              video.id === videoId ? { ...video, like_count: newLikeCount } : video
-            )
-          );
-        }
       } else {
-        // Like - add to video_likes table
+        // Like
         await supabase
           .from('video_likes')
           .insert({
             video_id: videoId,
             user_id: user.id
           });
-        
-        // Update local state immediately
         setIsLiked(prev => ({ ...prev, [videoId]: true }));
-        
-        // Update like count in videos table
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = (currentVideo.like_count || 0) + 1;
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-          
-          // Update local state
-          setVideos(prev => 
-            prev.map(video => 
-              video.id === videoId ? { ...video, like_count: newLikeCount } : video
-            )
-          );
-        }
       }
+
+      // Re-fetch videos to get the correct like count from backend
+      fetchVideos();
+
     } catch (error) {
       console.error('Error updating like status:', error);
     }

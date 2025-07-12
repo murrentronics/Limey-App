@@ -474,7 +474,6 @@ const Chat = () => {
 
   const deleteMessage = async (messageId: string, deleteForEveryone: boolean = false) => {
     setShowMessageMenu(null);
-    
     // Find the message to check its current state
     const message = messages.find(msg => msg.id === messageId);
     if (!message) return;
@@ -1022,31 +1021,33 @@ const Chat = () => {
                       </div>
                     </div>
                     
-                    {/* Dropdown Menu */}
+                    {/* Centered Modal 3 Dots Menu */}
                     {showMessageMenu === message.id && isOwnMessage && !message.deleted_for_everyone && (
                       <div 
-                        className="absolute right-full mr-2 top-0 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] max-w-[200px]" 
+                        className="fixed inset-0 z-50 flex items-center justify-center" 
                         data-dropdown
                       >
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2"
-                          onClick={() => copyMessage(message.content)}
-                        >
-                          <Copy size={14} />
-                          Copy
-                        </button>
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
-                          onClick={() => deleteMessage(message.id, false)}
-                        >
-                          Delete for me
-                        </button>
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400"
-                          onClick={() => deleteMessage(message.id, true)}
-                        >
-                          Delete for everyone
-                        </button>
+                        <div className="bg-black/90 rounded-lg shadow-lg min-w-[140px] max-w-[90vw] p-4">
+                          <button
+                            className="w-full px-3 py-2 text-sm hover:bg-white/10 flex flex-row items-center gap-2 rounded text-center justify-center"
+                            onClick={() => copyMessage(message.content)}
+                          >
+                            <Copy size={16} />
+                            Copy
+                          </button>
+                          <button
+                            className="w-full px-3 py-2 text-sm hover:bg-white/10 text-red-400 rounded text-center"
+                            onClick={() => deleteMessage(message.id, false)}
+                          >
+                            Delete for me
+                          </button>
+                          <button
+                            className="w-full px-3 py-2 text-sm hover:bg-white/10 text-red-400 rounded text-center"
+                            onClick={() => deleteMessage(message.id, true)}
+                          >
+                            Delete for everyone
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1105,8 +1106,7 @@ const Chat = () => {
             <h3 className="text-lg font-semibold text-white mb-4 text-center">
               {confirmAction?.type === 'deleteChat' 
                 ? 'Are you sure you want to delete this chat?' 
-                : 'Are you sure you want to delete this message?'
-              }
+                : 'Are you sure you want to delete this message?'}
             </h3>
             <div className="flex space-x-3">
               <Button

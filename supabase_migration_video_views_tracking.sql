@@ -26,6 +26,9 @@ DECLARE
   video_creator_id UUID;
   current_user_id UUID;
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+
   -- Get current user ID
   current_user_id := auth.uid();
   
@@ -49,6 +52,9 @@ RETURNS INTEGER AS $$
 DECLARE
   view_count INTEGER;
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+
   SELECT COUNT(*) INTO view_count
   FROM public.video_views
   WHERE video_id = video_uuid;
@@ -61,6 +67,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION update_video_view_count()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+
   -- Update the view_count in videos table with genuine count
   UPDATE public.videos 
   SET view_count = get_genuine_view_count(NEW.video_id)
