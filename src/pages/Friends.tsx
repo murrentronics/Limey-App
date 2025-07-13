@@ -298,9 +298,8 @@ const Friends = () => {
 
   const handleLike = async (videoId: string) => {
     if (!user) return;
-    
+
     try {
-      // Check if user has already liked this video
       const { data: existingLike } = await supabase
         .from('video_likes')
         .select('*')
@@ -309,17 +308,14 @@ const Friends = () => {
         .single();
 
       if (existingLike) {
-        // Unlike - remove from video_likes table
         await supabase
           .from('video_likes')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
-        
-        // Update local state immediately
+
         setIsLiked(prev => ({ ...prev, [videoId]: false }));
-        
-        // Update like count in videos table
+
         const currentVideo = videos.find(v => v.id === videoId);
         if (currentVideo) {
           const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
@@ -327,27 +323,23 @@ const Friends = () => {
             .from('videos')
             .update({ like_count: newLikeCount })
             .eq('id', videoId);
-          
-          // Update local state
-          setVideos(prev => 
-            prev.map(video => 
+
+          setVideos(prev =>
+            prev.map(video =>
               video.id === videoId ? { ...video, like_count: newLikeCount } : video
             )
           );
         }
       } else {
-        // Like - add to video_likes table
         await supabase
           .from('video_likes')
           .insert({
             video_id: videoId,
             user_id: user.id
           });
-        
-        // Update local state immediately
+
         setIsLiked(prev => ({ ...prev, [videoId]: true }));
-        
-        // Update like count in videos table
+
         const currentVideo = videos.find(v => v.id === videoId);
         if (currentVideo) {
           const newLikeCount = (currentVideo.like_count || 0) + 1;
@@ -355,10 +347,9 @@ const Friends = () => {
             .from('videos')
             .update({ like_count: newLikeCount })
             .eq('id', videoId);
-          
-          // Update local state
-          setVideos(prev => 
-            prev.map(video => 
+
+          setVideos(prev =>
+            prev.map(video =>
               video.id === videoId ? { ...video, like_count: newLikeCount } : video
             )
           );

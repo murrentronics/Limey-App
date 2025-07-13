@@ -31,6 +31,7 @@ interface Video {
 interface VideoPlayerProps {
   video: Video;
   videos: Video[];
+  setVideos: React.Dispatch<React.SetStateAction<any[]>>;
   currentIndex: number;
   onClose: () => void;
   onNext: () => void;
@@ -38,7 +39,7 @@ interface VideoPlayerProps {
 }
 
 // ...existing code...
-const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious }: VideoPlayerProps) => {
+const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, onPrevious }: VideoPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
@@ -219,33 +220,67 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
   };
 
   // Like/unlike logic (revert to previous working version)
-  const handleLike = async () => {
+  const handleLike = async (videoId: string) => {
     if (!user) return;
+
     try {
-      if (isLiked) {
-        // Unlike
+      const { data: existingLike } = await supabase
+        .from('video_likes')
+        .select('*')
+        .eq('video_id', videoId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingLike) {
         await supabase
           .from('video_likes')
           .delete()
-          .eq('video_id', video.id)
+          .eq('video_id', videoId)
           .eq('user_id', user.id);
+
         setIsLiked(false);
+
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+
+          setVideos(prev =>
+            prev.map(v =>
+              v.id === videoId ? { ...v, like_count: newLikeCount } : v
+            )
+          );
+        }
       } else {
-        // Like
         await supabase
           .from('video_likes')
           .insert({
-            video_id: video.id,
+            video_id: videoId,
             user_id: user.id
           });
+
         setIsLiked(true);
+
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = (currentVideo.like_count || 0) + 1;
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+
+          setVideos(prev =>
+            prev.map(v =>
+              v.id === videoId ? { ...v, like_count: newLikeCount } : v
+            )
+          );
+        }
       }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update like status",
-        variant: "destructive"
-      });
+      console.error('Error updating like status:', error);
     }
   };
 
@@ -501,7 +536,7 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              handleLike();
+              handleLike(video.id);
             }}
             className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
             data-control
@@ -577,6 +612,7 @@ const VideoPlayer = ({ video, videos, currentIndex, onClose, onNext, onPrevious 
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                const navigate = useNavigate();
                 navigate(getProfileUrl(video));
               }}
               className="text-white font-semibold hover:text-white/80 transition-colors"

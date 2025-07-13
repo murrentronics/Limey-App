@@ -427,9 +427,8 @@ const Feed = () => {
 
   const handleLike = async (videoId: string) => {
     if (!user) return;
-
+    
     try {
-      // Check if user has already liked this video
       const { data: existingLike } = await supabase
         .from('video_likes')
         .select('*')
@@ -438,27 +437,53 @@ const Feed = () => {
         .single();
 
       if (existingLike) {
-        // Unlike
         await supabase
           .from('video_likes')
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
+        
         setIsLiked(prev => ({ ...prev, [videoId]: false }));
+        
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+          
+          setVideos(prev => 
+            prev.map(video => 
+              video.id === videoId ? { ...video, like_count: newLikeCount } : video
+            )
+          );
+        }
       } else {
-        // Like
         await supabase
           .from('video_likes')
           .insert({
             video_id: videoId,
             user_id: user.id
           });
+        
         setIsLiked(prev => ({ ...prev, [videoId]: true }));
+        
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = (currentVideo.like_count || 0) + 1;
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+          
+          setVideos(prev => 
+            prev.map(video => 
+              video.id === videoId ? { ...video, like_count: newLikeCount } : video
+            )
+          );
+        }
       }
-
-      // Re-fetch videos to get the correct like count from backend
-      fetchVideos();
-
     } catch (error) {
       console.error('Error updating like status:', error);
     }

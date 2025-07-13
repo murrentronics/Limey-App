@@ -768,6 +768,7 @@ const Profile = () => {
         <VideoPlayer
           video={userVideos[currentVideoIndex]}
           videos={userVideos}
+          setVideos={setUserVideos}
           currentIndex={currentVideoIndex}
           onClose={() => setShowVideoModal(false)}
           onNext={() => setCurrentVideoIndex(i => (i !== null && i < userVideos.length - 1 ? i + 1 : i))}
