@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { linkWallet, getUserLimits } from "@/lib/ttpaypalApi";
+import { linkWallet as linkTTPaypalWallet, getUserLimits } from "@/lib/ttpaypalApi";
 import { wpLogin, storeWpToken, clearWpToken } from "@/lib/jwtAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { linkWallet as linkSupabaseWallet, getLinkedWallet } from "@/integrations/supabase/client";
 
 export default function LinkAccount() {
   const [wpEmail, setWpEmail] = useState("");
@@ -16,6 +17,25 @@ export default function LinkAccount() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [alreadyLinked, setAlreadyLinked] = useState(false);
+  const [linkedEmail, setLinkedEmail] = useState("");
+
+  // Check if user already has a wallet link
+  useEffect(() => {
+    const checkWalletLink = async () => {
+      if (user?.id) {
+        const { data } = await getLinkedWallet(user.id);
+        if (data && data.wallet_email) {
+          setAlreadyLinked(true);
+          setLinkedEmail(data.wallet_email);
+        } else {
+          setAlreadyLinked(false);
+          setLinkedEmail("");
+        }
+      }
+    };
+    checkWalletLink();
+  }, [user]);
 
   // Email validation function
   const isValidEmail = (email: string) => {
@@ -41,11 +61,11 @@ export default function LinkAccount() {
       storeWpToken(wpRes.token);
 
       // 2. Call wallet link API (no passcode)
-      await linkWallet({ email: wpEmail, password: wpPassword });
+      await linkTTPaypalWallet({ email: wpEmail, password: wpPassword });
 
       // 3. Insert wallet link into Supabase wallet_links table
       if (user?.id) {
-        const { error: walletLinkError } = await import('@/integrations/supabase/client').then(m => m.linkWallet(user.id, wpEmail));
+        const { error: walletLinkError } = await linkSupabaseWallet(user.id, wpEmail);
         if (walletLinkError) {
           if (walletLinkError.code === '23505' || (walletLinkError.message && walletLinkError.message.includes('duplicate key')) ) {
             setError('This wallet email is already linked to another account.');
@@ -82,6 +102,19 @@ export default function LinkAccount() {
       setLoading(false);
     }
   };
+
+  if (alreadyLinked) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10 text-center text-white">
+          <h2 className="text-lg font-bold mb-4">Wallet Already Linked</h2>
+          <div className="mb-4">Your account is already linked to TTPayPal with email:</div>
+          <div className="mb-4 font-semibold">{linkedEmail}</div>
+          <Button className="w-full" onClick={() => navigate('/profile')}>Back to Profile</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center">

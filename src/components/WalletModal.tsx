@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { getWalletStatus, unlinkWallet, getTrincreditsBalance } from "@/lib/ttpaypalApi";
 import { supabase } from "@/integrations/supabase/client";
+import { getLinkedWallet } from '@/integrations/supabase/client';
 
 export default function WalletModal({ open, onClose, refreshKey }: { open: boolean; onClose: () => void; refreshKey?: number }) {
   const [loading, setLoading] = useState(true);
@@ -19,16 +20,15 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
     if (open && user) {
       setLoading(true);
       setError(null);
-      
-      // Get wallet status and TriniCredits balance
+      // Get wallet link status from Supabase and TriniCredits balance
       Promise.all([
-        getWalletStatus(),
+        getLinkedWallet(user.id),
         getTrincreditsBalance(user.id)
       ])
         .then(([walletRes, triniCreditsBalance]) => {
-          setLinked(walletRes.linked);
+          setLinked(!!(walletRes.data && walletRes.data.wallet_email));
           setBalance(triniCreditsBalance);
-          setLinkedElsewhere(!!walletRes.linked_elsewhere);
+          setLinkedElsewhere(false); // Not needed with Supabase-only logic
         })
         .catch((err) => {
           setError(err.message || 'Failed to fetch wallet status');

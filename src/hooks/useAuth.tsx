@@ -124,17 +124,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const { error } = await supabase.auth.signOut();
       localStorage.removeItem('wp_jwt_token');
+      setUser(null);
+      setSession(null);
       if (error) {
-        console.error('Sign out error:', error);
         toast({
-          title: "Sign out failed",
-          description: error.message,
-          variant: "destructive"
+          title: "Signed out",
+          description: "You have been signed out (session was already missing).",
+          className: "bg-green-600 text-white border-green-700"
         });
       } else {
-        // Clear local state even if server signout fails
-        setUser(null);
-        setSession(null);
         toast({
           title: "Signed out successfully",
           description: "You have been signed out",
@@ -142,8 +140,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
       }
     } catch (error) {
-      console.error('Sign out exception:', error);
-      // Clear local state even if there's an error
       setUser(null);
       setSession(null);
       toast({
