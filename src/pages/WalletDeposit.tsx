@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { depositToApp, getWalletStatus, recordTrincreditsTransaction, getTrincreditsBalance, getUserLimits } from "@/lib/ttpaypalApi";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { getLinkedWallet } from '@/integrations/supabase/client';
 
 export default function WalletDeposit() {
   const [amount, setAmount] = useState("");
@@ -26,6 +27,7 @@ export default function WalletDeposit() {
     user_role: 'customer'
   });
   const [walletLinked, setWalletLinked] = useState<boolean | null>(null);
+  const [linkedWalletEmail, setLinkedWalletEmail] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
@@ -61,30 +63,27 @@ export default function WalletDeposit() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Get wallet status from TTPayPal
-        const walletRes = await getWalletStatus();
-        if (typeof walletRes.linked === 'boolean') {
-          setWalletLinked(walletRes.linked);
-        } else {
-          setWalletLinked(false);
+        // Get wallet link status from Supabase
+        if (user?.id) {
+          const { data, error } = await getLinkedWallet(user.id);
+          if (data && data.wallet_email) {
+            setWalletLinked(true);
+            setLinkedWalletEmail(data.wallet_email);
+          } else {
+            setWalletLinked(false);
+            setLinkedWalletEmail(null);
+          }
         }
-        setWalletBalance(typeof walletRes.balance === 'number' ? walletRes.balance : null);
-        setTTPaypalEmail(walletRes.email || null);
-        setTTPaypalUsername(walletRes.username || null);
-
         // Fetch fresh limits from TTPayPal
         await fetchLimits();
-
         // Fetch balance from transactions table
         if (user?.id) {
           await fetchBalance();
         }
       } catch (err) {
         setWalletLinked(false);
-        console.error('Error fetching data:', err);
+        setLinkedWalletEmail(null);
         setWalletBalance(null);
-        setTTPaypalEmail(null);
-        setTTPaypalUsername(null);
         setTriniCredits(0);
       }
     };
@@ -164,7 +163,7 @@ export default function WalletDeposit() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10 mt-20 text-center text-white">
           <div className="mb-4">Your account is not linked to TTPayPal.</div>
-          <Button onClick={() => navigate('/link-account')}>Link TTPayPal Account</Button>
+          <Button onClick={() => navigate('/wallet/link')}>Link TTPayPal Account</Button>
         </div>
       </div>
     );
@@ -194,8 +193,8 @@ export default function WalletDeposit() {
 
       <form onSubmit={handleSubmit} className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10 mt-20">
         <div className="text-center text-white text-sm mb-4">
-          {ttPaypalEmail && (
-            <div className="mb-1">TTPayPal Email: <span className="font-semibold">{ttPaypalEmail}</span></div>
+          {linkedWalletEmail && (
+            <div className="mb-1">TTPayPal Email: <span className="font-semibold">{linkedWalletEmail}</span></div>
           )}
           {ttPaypalUsername && (
             <div className="mb-2">TTPayPal Username: <span className="font-semibold">{ttPaypalUsername}</span></div>

@@ -43,8 +43,21 @@ export default function LinkAccount() {
       // 2. Call wallet link API (no passcode)
       await linkWallet({ email: wpEmail, password: wpPassword });
 
-      // 3. Fetch user limits from TTPayPal
-      // No need to update Supabase profile, ttpaypal_limits column does not exist
+      // 3. Insert wallet link into Supabase wallet_links table
+      if (user?.id) {
+        const { error: walletLinkError } = await import('@/integrations/supabase/client').then(m => m.linkWallet(user.id, wpEmail));
+        if (walletLinkError) {
+          if (walletLinkError.code === '23505' || (walletLinkError.message && walletLinkError.message.includes('duplicate key')) ) {
+            setError('This wallet email is already linked to another account.');
+            setLoading(false);
+            return;
+          } else {
+            setError(walletLinkError.message || 'Failed to link wallet in database');
+            setLoading(false);
+            return;
+          }
+        }
+      }
 
       toast({
         title: "Wallet linked successfully!",

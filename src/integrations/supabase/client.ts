@@ -15,3 +15,21 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// Function to link wallet
+export async function linkWallet(userId: string, walletEmail: string) {
+  const { data, error } = await supabase
+    .from('wallet_links')
+    .insert([{ user_id: userId, wallet_email: walletEmail }]);
+  return { data, error };
+}
+
+// Function to get linked wallet for a user
+export async function getLinkedWallet(userId: string) {
+  const { data, error } = await supabase
+    .from('wallet_links')
+    .select('wallet_email')
+    .eq('user_id', userId)
+    .single();
+  return { data, error };
+}
