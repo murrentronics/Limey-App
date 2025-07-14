@@ -76,11 +76,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return { error };
   };
 
+  // Add this function to fetch and store the WordPress JWT token
+  async function fetchWpJwtToken(email: string, password: string) {
+    try {
+      const res = await fetch('https://ttpaypal.com/wp-json/jwt-auth/v1/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: email, password })
+      });
+      const data = await res.json();
+      if (data.token) {
+        localStorage.setItem('wp_jwt_token', data.token);
+        console.log('WordPress JWT token set:', data.token);
+      } else {
+        localStorage.removeItem('wp_jwt_token');
+        console.error('No WordPress JWT token received:', data);
+      }
+    } catch (err) {
+      localStorage.removeItem('wp_jwt_token');
+      console.error('Error fetching WordPress JWT token:', err);
+    }
+  }
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password
     });
+
+    if (!error) {
+      // Fetch and store the WordPress JWT token after successful Supabase login
+      await fetchWpJwtToken(email, password);
+    }
 
     if (error) {
       toast({
@@ -96,6 +123,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signOut = async () => {
     try {
       const { error } = await supabase.auth.signOut();
+      localStorage.removeItem('wp_jwt_token');
       if (error) {
         console.error('Sign out error:', error);
         toast({

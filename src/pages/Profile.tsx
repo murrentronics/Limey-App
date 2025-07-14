@@ -6,10 +6,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical, ChevronDown, X, Settings, MessageSquare, ArrowLeft, Send } from "lucide-react";
-import { useParams, useNavigate } from "react-router-dom";
+import { MoreVertical, ChevronDown, X, Settings, MessageSquare, ArrowLeft, Send, Wallet } from "lucide-react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import VideoPlayer from "@/components/VideoPlayer";
 import { useToast } from "@/hooks/use-toast";
+import WalletModal from "@/components/WalletModal";
+import LinkAccount from "@/pages/LinkAccount";
+import { getTrincreditsBalance } from "@/lib/ttpaypalApi";
 
 const Profile = () => {
   const { user, signOut } = useAuth();
@@ -37,6 +40,19 @@ const Profile = () => {
     videoUrl: string;
     thumbnailUrl?: string;
   } | null>(null);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname === "/profile" && showWalletModal) {
+      setRefreshKey((k) => k + 1);
+      setShowWalletModal(false); // Optionally close modal after refresh
+    }
+    // eslint-disable-next-line
+  }, [location.pathname]);
 
   // Real-time subscription for video updates
   useEffect(() => {
@@ -92,6 +108,14 @@ const Profile = () => {
     }
     setFollowerCount(profile?.follower_count || 0);
   }, [profile, user, isOwnProfile]);
+
+  useEffect(() => {
+    if (isOwnProfile) {
+      getTrincreditsBalance(user?.id || '').then(balance => {
+        setWalletBalance(balance);
+      }).catch(() => setWalletBalance(0));
+    }
+  }, [isOwnProfile, user?.id]);
 
   useEffect(() => {
     if (!showDropdown) return;
@@ -462,6 +486,9 @@ const Profile = () => {
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
               <>
+                <Button variant="ghost" size="sm" onClick={() => setShowWalletModal(true)}>
+                  <Wallet size={16} />
+                </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
                   <Settings size={16} />
                 </Button>
@@ -601,12 +628,12 @@ const Profile = () => {
             </Badge>
           )}
 
-          {/* Trini Credits - Only show for own profile */}
+          {/* TriniCredits Balance - Only show for own profile */}
           {isOwnProfile && (
             <div className="flex items-center space-x-2 mb-6">
               <span className="text-sm text-muted-foreground">TriniCredits:</span>
-              <Badge variant="secondary" className="bg-primary/10 text-primary">
-                💰 {profile?.trini_credits || 0}
+              <Badge variant="secondary" className="bg-green-900 text-green-400">
+                TT${walletBalance !== null ? walletBalance.toFixed(2) : '0.00'}
               </Badge>
             </div>
           )}
@@ -822,6 +849,7 @@ const Profile = () => {
 
       {/* Bottom Navigation */}
       <BottomNavigation />
+      <WalletModal open={showWalletModal} onClose={() => setShowWalletModal(false)} refreshKey={refreshKey} />
     </div>
   );
 };

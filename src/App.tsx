@@ -20,6 +20,9 @@ import Inbox from "@/pages/Inbox";
 import Chat from "@/pages/Chat";
 import Message from "@/pages/Message";
 import NotFound from "./pages/NotFound";
+import LinkAccount from "@/pages/LinkAccount";
+import WalletDeposit from "@/pages/WalletDeposit";
+import WalletWithdraw from "@/pages/WalletWithdraw";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +49,9 @@ const App = () => (
             <Route path="/signup" element={<Signup />} />
             <Route path="/welcome" element={<Index />} />
             <Route path="/edit-profile" element={<EditProfile />} />
+            <Route path="/wallet/link" element={<ProtectedRoute><LinkAccount /></ProtectedRoute>} />
+            <Route path="/wallet/deposit" element={<ProtectedRoute><WalletDeposit /></ProtectedRoute>} />
+            <Route path="/wallet/withdraw" element={<ProtectedRoute><WalletWithdraw /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
