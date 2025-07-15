@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
-import { X, Circle, Video, RefreshCw, Zap, User, Check } from 'lucide-react';
+import { X, Circle, Video, RefreshCw, Zap, User, Check, Music, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 // Placeholder filter list (to be replaced with real filter logic)
 const FILTERS = [
@@ -95,6 +96,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filterListRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // When modal opens, trigger device camera
   useEffect(() => {
@@ -193,6 +195,14 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
     setFilterIdx((idx) => (idx === FILTERS.length - 1 ? 0 : idx + 1));
   };
 
+  // Handler for confirm (tick) button
+  const handleConfirmEdits = () => {
+    if (videoFile && videoUrl) {
+      // Navigate to upload page, passing video file and preview URL via state
+      navigate('/upload', { state: { file: videoFile, preview: videoUrl } });
+    }
+  };
+
   if (!open) return null;
 
   return createPortal(
@@ -209,10 +219,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2 w-full absolute top-0 left-0 z-20">
         <button className="text-white" onClick={onClose}><X size={28} /></button>
-        <button className="bg-black/60 px-6 py-2 rounded-full text-white font-semibold text-base flex items-center gap-2">
-          <span className="inline-block"><svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14.5A6.5 6.5 0 1110 3.5a6.5 6.5 0 010 13z"/><path d="M13.5 10a.75.75 0 01-.75.75H10.75v2a.75.75 0 01-1.5 0v-2H7.25a.75.75 0 010-1.5h2.5a.75.75 0 01.75.75z"/></svg></span>
-          Add sound
-        </button>
+        {/* Removed Add Sound button from here */}
         <div className="flex gap-3">
           <button className="text-white"><RefreshCw size={22} /></button>
           <button className="text-white"><Zap size={22} /></button>
@@ -280,7 +287,11 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
         {/* Right-side vertical icons */}
         <div className="absolute right-4 top-32 flex flex-col gap-4 z-10">
           <button className="bg-black/40 rounded-full p-2 text-white"><User size={22} /></button>
-          <button className="bg-black/40 rounded-full p-2 text-white"><Check size={22} /></button>
+          <button className="bg-black/40 rounded-full p-2 text-white" onClick={handleConfirmEdits}><Check size={22} /></button>
+          <button className="bg-black/40 rounded-full p-2 text-white flex items-center justify-center">
+            <Music size={22} />
+            <Plus size={16} style={{ marginLeft: '-8px', marginTop: '-8px' }} />
+          </button>
         </div>
       </div>
       {/* Controls on black padding at bottom */}
