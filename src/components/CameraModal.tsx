@@ -7,16 +7,16 @@ import { useNavigate } from 'react-router-dom';
 
 // Placeholder filter list (to be replaced with real filter logic)
 const FILTERS = [
+  { name: '', style: 'blank' },
+  { name: '', style: 'blank' },
+  { name: '', style: 'blank' },
+  { name: 'None', style: 'none', icon: '/filters/none.png' },
   { name: 'Dream', style: 'dreamglow', icon: '/filters/dream.png' },
   { name: 'Peach', style: 'peachypop', icon: '/filters/peach.png' },
   { name: 'Frost', style: 'frostedglass', icon: '/filters/frost.png' },
   { name: 'Neon', style: 'neonmuse', icon: '/filters/neon.png' },
   { name: 'Retro', style: 'retrovibe', icon: '/filters/retro.png' },
   { name: 'Blush', style: 'blushbloom', icon: '/filters/blush.png' },
-  { name: '', style: 'blank' },
-  { name: '', style: 'blank' },
-  { name: '', style: 'blank' },
-  { name: 'None', style: 'none', icon: '/filters/none.png' },
   { name: 'Sun', style: 'sunkissed', icon: '/filters/sun.png' },
   { name: 'Urban', style: 'urbanfade', icon: '/filters/urban.png' },
   { name: 'Cosmic', style: 'cosmicaura', icon: '/filters/cosmic.png' },
@@ -254,14 +254,14 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
             <div className="flex items-center justify-center w-full pointer-events-auto" style={{height: 60, margin: 0, paddingTop: 0, paddingBottom: 0}}>
               <div
                 ref={filterListRef}
-                className="flex overflow-x-auto gap-3 px-2 w-full justify-center relative no-scrollbar"
-                style={{ pointerEvents: 'auto', scrollSnapType: 'x mandatory', paddingLeft: 'calc(60vw - 44px)', paddingRight: 'calc(50vw - 44px)' }}
+                className="flex overflow-x-auto gap-3 px-2 min-w-max justify-center relative no-scrollbar"
+                style={{ pointerEvents: 'auto', scrollSnapType: 'x mandatory', paddingLeft: 24, paddingRight: 24 }}
                 onScroll={handleFilterScroll}
               >
                 {FILTERS.map((filter, idx) => (
                   <div
                     key={filter.name + idx}
-                    className={`flex flex-col items-center transition-transform duration-200 px-1 ${idx === filterIdx ? 'scale-125 z-20' : 'opacity-60 z-10'}`}
+                    className={`flex flex-col items-center transition-transform duration-200 px-1 flex-shrink-0 ${idx === filterIdx ? 'scale-125 z-20' : 'opacity-60 z-10'}`}
                     style={{ minWidth: 60, scrollSnapAlign: 'center', paddingTop: 9, paddingBottom: 8 }}
                   >
                     <div
