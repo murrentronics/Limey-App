@@ -17,6 +17,7 @@ const FILTERS = [
   { name: '', style: 'blank' },
   { name: '', style: 'blank' },
   { name: '', style: 'blank' },
+  { name: 'None', style: 'none', icon: '/filters/none.png' },
   { name: 'Sun', style: 'sunkissed', icon: '/filters/sun.png' },
   { name: 'Honey', style: 'honeyhaze', icon: '/filters/honey.png' },
   { name: 'Velvet', style: 'velvetskin', icon: '/filters/velvet.png' },
@@ -44,6 +45,7 @@ const MODES = [
 
 // Add more advanced CSS filter effects for demo
 const FILTER_CSS: Record<string, string> = {
+  none: '',
   dreamglow: 'contrast(1.2) brightness(1.1) saturate(1.3) drop-shadow(0 0 8px #fff)',
   peachypop: 'sepia(0.3) hue-rotate(-10deg) brightness(1.1) saturate(1.2)',
   frostedglass: 'blur(2px) brightness(1.2)',
