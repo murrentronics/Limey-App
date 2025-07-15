@@ -43,15 +43,35 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
     try {
       // Unlink from TTPayPal
       await unlinkWallet();
-      
-      // No need to update Supabase profile, ttpaypal_limits column does not exist
-      
+
+      // Remove wallet link from Supabase wallet_links table
+      if (user?.id) {
+        const { error: dbError } = await supabase
+          .from('wallet_links')
+          .delete()
+          .eq('user_id', user.id);
+        if (dbError) {
+          setError(dbError.message || 'Failed to remove wallet link from database');
+          setUnlinking(false);
+          return;
+        }
+      }
+
       // Update local state
       setLinked(false);
       setBalance(null);
       setLinkedElsewhere(false);
       setUnlinking(false);
-      
+
+      // Show success toast
+      if (typeof window !== 'undefined' && window.toast) {
+        window.toast({
+          title: 'Wallet unlinked',
+          description: 'Your wallet has been successfully unlinked.',
+          className: 'bg-green-600 text-white border-green-700'
+        });
+      }
+
       // Close the modal
       onClose();
     } catch (err: any) {
@@ -96,9 +116,16 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
             </Button>
           </>
         ) : (
-          <Button onClick={() => { onClose(); navigate('/wallet/link'); }} className="w-full">
-            Link Account
-          </Button>
+          <>
+            <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3 mb-4">
+              <p className="text-yellow-400 text-sm text-center">
+                <strong>Important:</strong> To link your Wallet, make sure you use the exact same email and password from your Limey account to create your TTPayPal Wallet account. If not go to the TTPayPal App and create a new account with your Limey email and password then come back and Link Wallet.
+              </p>
+            </div>
+            <Button onClick={() => { onClose(); navigate('/wallet/link'); }} className="w-full">
+              Link Account
+            </Button>
+          </>
         )}
         {displayError && <div className="text-red-400 text-center mt-2">{displayError}</div>}
         <Button onClick={onClose} className="w-full mt-4" variant="ghost">

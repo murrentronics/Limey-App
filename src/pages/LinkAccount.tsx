@@ -6,8 +6,11 @@ import { useToast } from "@/hooks/use-toast";
 import { linkWallet as linkTTPaypalWallet, getUserLimits } from "@/lib/ttpaypalApi";
 import { wpLogin, storeWpToken, clearWpToken } from "@/lib/jwtAuth";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { linkWallet as linkSupabaseWallet, getLinkedWallet } from "@/integrations/supabase/client";
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export default function LinkAccount() {
   const [wpEmail, setWpEmail] = useState("");
@@ -20,48 +23,44 @@ export default function LinkAccount() {
   const [alreadyLinked, setAlreadyLinked] = useState(false);
   const [linkedEmail, setLinkedEmail] = useState("");
 
-  // Check if user already has a wallet link
   useEffect(() => {
     const checkWalletLink = async () => {
       if (user?.id) {
         const { data } = await getLinkedWallet(user.id);
-        if (data && data.wallet_email) {
+        if (
+          data &&
+          typeof data === 'object' &&
+          !Array.isArray(data) &&
+          !('code' in (data as object)) &&
+          typeof (data as any).wallet_email === 'string' &&
+          Boolean((data as any).wallet_email)
+        ) {
           setAlreadyLinked(true);
-          setLinkedEmail(data.wallet_email);
+          setLinkedEmail((data as any).wallet_email);
         } else {
           setAlreadyLinked(false);
           setLinkedEmail("");
         }
+      } else {
+        setAlreadyLinked(false);
+        setLinkedEmail("");
       }
     };
     checkWalletLink();
   }, [user]);
-
-  // Email validation function
-  const isValidEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    // Validate email format
-    if (!isValidEmail(wpEmail)) {
-      setError("Please enter a valid email address");
-      setLoading(false);
-      return;
-    }
-
     try {
       // 1. Login to WordPress, get JWT
       const wpRes = await wpLogin(wpEmail, wpPassword);
       storeWpToken(wpRes.token);
 
-      // 2. Call wallet link API (no passcode)
-      await linkTTPaypalWallet({ email: wpEmail, password: wpPassword });
+      // 2. Call wallet link API (requires passcode)
+      await linkTTPaypalWallet({ email: wpEmail, password: wpPassword, passcode: "" });
 
       // 3. Insert wallet link into Supabase wallet_links table
       if (user?.id) {

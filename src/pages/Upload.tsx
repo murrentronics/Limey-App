@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useNavigate } from "react-router-dom";
+import CameraModal from "@/components/CameraModal";
 
 const Upload = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -25,6 +26,7 @@ const Upload = () => {
   const { user } = useAuth();
   const [captureMode, setCaptureMode] = useState<'none' | 'camera' | 'gallery'>('none');
   const navigate = useNavigate();
+  const [showCameraModal, setShowCameraModal] = useState(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, mode: 'camera' | 'gallery') => {
     const selectedFile = e.target.files?.[0];
@@ -67,6 +69,18 @@ const Upload = () => {
       }
       setCaptureMode(mode);
     }
+  };
+
+  const handleCameraVideo = (videoFile: File, previewUrl: string) => {
+    setFile(videoFile);
+    setPreview(previewUrl);
+    setTitle("");
+    setDescription("");
+    setCaptureMode('camera');
+    setShowCameraModal(false);
+    // Optionally: auto-generate title from filename
+    const name = videoFile.name.split('.')[0];
+    setTitle(name.charAt(0).toUpperCase() + name.slice(1));
   };
 
   // Utility to extract video duration only
@@ -344,9 +358,9 @@ const Upload = () => {
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">📁</span>
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Upload Your Content</h3>
+                <h3 className="text-lg font-semibold mb-2">Create or Upload Your Content</h3>
                 <p className="text-muted-foreground mb-4">
-                  Select videos, images, or audio files to share with the Limey community
+                  Use the Create button to record a new video, or Upload to select an existing video or image to share with the Limey community.
                 </p>
               </div>
             )}
@@ -371,16 +385,15 @@ const Upload = () => {
             />
             {/* The Upload/Change Video button triggers the regular input (no capture) */}
             <div className="flex gap-3 justify-center">
-              {/* Create button triggers camera */}
+              {/* Create button triggers CameraModal */}
               {!file && (
-                <label htmlFor="file-create">
-                  <Button variant="neon" asChild className="cursor-pointer">
-                    <span className="flex items-center gap-2">
-                      <Paintbrush size={18} />
-                      Create
-                    </span>
+                <>
+                  <Button variant="neon" className="flex items-center gap-2" onClick={() => setShowCameraModal(true)}>
+                    <Paintbrush size={18} />
+                    Create
                   </Button>
-                </label>
+                  <CameraModal open={showCameraModal} onClose={() => setShowCameraModal(false)} onVideoCaptured={handleCameraVideo} />
+                </>
               )}
               {/* Upload/Change Video button triggers gallery, only show if not from camera */}
               {!file || captureMode === 'gallery' ? (
@@ -395,14 +408,10 @@ const Upload = () => {
               ) : null}
               {/* Re-Capture button if video was captured from camera */}
               {file && captureMode === 'camera' && (
-                <label htmlFor="file-create">
-                  <Button variant="outline" asChild className="cursor-pointer flex items-center gap-2">
-                    <span className="flex items-center gap-2">
-                      <RotateCcw size={18} />
-                      Re-Capture
-                    </span>
-                  </Button>
-                </label>
+                <Button variant="outline" className="flex items-center gap-2" onClick={() => setShowCameraModal(true)}>
+                  <RotateCcw size={18} />
+                  Re-Capture
+                </Button>
               )}
             </div>
           </div>
