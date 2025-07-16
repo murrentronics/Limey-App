@@ -7,9 +7,6 @@ import { useNavigate } from 'react-router-dom';
 
 // Placeholder filter list (to be replaced with real filter logic)
 const FILTERS = [
-  { name: '', style: 'blank' },
-  { name: '', style: 'blank' },
-  { name: '', style: 'blank' },
   { name: 'None', style: 'none', icon: '/filters/none.png' },
   { name: 'Dream', style: 'dreamglow', icon: '/filters/dream.png' },
   { name: 'Peach', style: 'peachypop', icon: '/filters/peach.png' },
@@ -263,6 +260,9 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
                     key={filter.name + idx}
                     className={`flex flex-col items-center transition-transform duration-200 px-1 flex-shrink-0 ${idx === filterIdx ? 'scale-125 z-20' : 'opacity-60 z-10'}`}
                     style={{ minWidth: 60, scrollSnapAlign: 'center', paddingTop: 9, paddingBottom: 8 }}
+                    onClick={() => setFilterIdx(idx)}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div
                       className="w-12 h-12 rounded-full flex items-center justify-center mb-1"
