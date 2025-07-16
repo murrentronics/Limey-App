@@ -251,10 +251,10 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
         {/* Filter Carousel - floating above video, just above bottom nav, no overlay */}
         {videoUrl && (
           <div className="fixed left-0 right-0 z-[99999] flex items-center justify-center pointer-events-none" style={{bottom: '70px'}}>
-            <div className="flex items-center justify-center w-full pointer-events-auto" style={{height: 60, margin: 0, paddingTop: 0, paddingBottom: 0}}>
+            <div className="w-full overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
               <div
                 ref={filterListRef}
-                className="flex overflow-x-auto min-w-max relative no-scrollbar scrollbar-thin scrollbar-thumb-gray-500"
+                className="flex gap-3 px-2 min-w-max relative scrollbar-thin scrollbar-thumb-gray-500"
                 style={{ pointerEvents: 'auto', scrollSnapType: 'x mandatory', paddingLeft: 24, paddingRight: 24 }}
                 onScroll={handleFilterScroll}
               >
@@ -265,8 +265,11 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
                     style={{ minWidth: 60, scrollSnapAlign: 'center', paddingTop: 9, paddingBottom: 8 }}
                   >
                     <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center mb-1`}
-                      style={filter.style === 'blank' ? { background: '#000', border: '2px solid #000' } : { background: 'rgba(255,255,255,0.1)', border: idx === filterIdx ? '2px solid var(--primary)' : '2px solid rgba(255,255,255,0.2)' }}
+                      className="w-12 h-12 rounded-full flex items-center justify-center mb-1"
+                      style={filter.style === 'blank'
+                        ? { background: '#000', border: '2px solid #000' }
+                        : { background: 'rgba(255,255,255,0.1)', border: idx === filterIdx ? '2px solid var(--primary)' : '2px solid rgba(255,255,255,0.2)' }
+                      }
                     >
                       {filter.style !== 'blank' && (
                         <img src={filter.icon || FILTER_THUMB_PLACEHOLDER} alt={filter.name} className="w-full h-full object-cover" />
@@ -274,7 +277,10 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
                     </div>
                     <span
                       className="text-xs whitespace-nowrap"
-                      style={filter.style === 'blank' ? { color: '#000' } : { color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)', background: 'rgba(0,0,0,0.3)', borderRadius: 4, padding: '0 4px' }}
+                      style={filter.style === 'blank'
+                        ? { color: '#000' }
+                        : { color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)', background: 'rgba(0,0,0,0.3)', borderRadius: 4, padding: '0 4px' }
+                      }
                     >
                       {filter.name}
                     </span>
