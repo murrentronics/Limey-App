@@ -16,20 +16,27 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
   const [globalMuted, setGlobalMuted] = useState(false);
   const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
   const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
+  const [modalVideos, setModalVideos] = useState(videos);
 
+  // Only update modalVideos when videos prop changes
   useEffect(() => {
+    setModalVideos(videos);
+  }, [videos]);
+
+  // Only update currentIndex and scroll when startIndex changes
+  useEffect(() => {
+    setCurrentIndex(startIndex);
     if (containerRef.current) {
       const child = containerRef.current.children[startIndex] as HTMLElement;
       if (child) child.scrollIntoView({ behavior: "auto" });
     }
-    setCurrentIndex(startIndex);
   }, [startIndex]);
 
   // Like/follow status check
   useEffect(() => {
     if (!user) return;
-    const videoIds = videos.map((v) => v.id);
-    const userIds = videos.map((v) => v.user_id).filter((id) => id !== user.id);
+    const videoIds = modalVideos.map((v) => v.id);
+    const userIds = modalVideos.map((v) => v.user_id).filter((id) => id !== user.id);
     const checkLikeStatus = async () => {
       const { data: likes } = await supabase
         .from('video_likes')
@@ -38,7 +45,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
         .in('video_id', videoIds);
       const likedVideoIds = new Set(likes?.map(like => like.video_id) || []);
       const newLikeStatus: { [key: string]: boolean } = {};
-      videos.forEach(video => {
+      modalVideos.forEach(video => {
         newLikeStatus[video.id] = likedVideoIds.has(video.id);
       });
       setIsLiked(newLikeStatus);
@@ -52,7 +59,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
         .in('following_id', userIds);
       const followingSet = new Set(follows?.map(f => f.following_id) || []);
       const newFollowStatus: { [key: string]: boolean } = {};
-      videos.forEach(video => {
+      modalVideos.forEach(video => {
         if (video.user_id !== user.id) {
           newFollowStatus[video.user_id] = followingSet.has(video.user_id);
         }
@@ -61,7 +68,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
     };
     checkLikeStatus();
     checkFollowStatus();
-  }, [user, videos]);
+  }, [user, modalVideos]);
 
   const handleLike = async (video) => {
     if (!user) return;
@@ -73,11 +80,13 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
         .eq('video_id', video.id)
         .eq('user_id', user.id);
       setIsLiked((prev) => ({ ...prev, [video.id]: false }));
+      // Do NOT update like_count here; let DB update propagate
     } else {
       await supabase
         .from('video_likes')
         .insert({ video_id: video.id, user_id: user.id });
       setIsLiked((prev) => ({ ...prev, [video.id]: true }));
+      // Do NOT update like_count here; let DB update propagate
     }
   };
 
@@ -150,7 +159,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
         className="flex-1 overflow-y-auto snap-y snap-mandatory"
         style={{ scrollSnapType: "y mandatory" }}
       >
-        {videos.map((video, idx) => (
+        {modalVideos.map((video, idx) => (
           <div
             key={video.id}
             className="relative h-screen flex items-center justify-center snap-start"

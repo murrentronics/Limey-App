@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp, ArrowLeft } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import React from "react";
@@ -765,14 +765,15 @@ const Feed = () => {
             {showBackButton && (
               <div className="flex justify-start mb-2">
                 <Button
-                  variant="outline"
-                  className="text-white border-white/20 hover:bg-white/10"
+                  variant="ghost"
+                  className="bg-black/70 text-white rounded-full px-4 py-2 flex items-center gap-2 shadow-lg hover:bg-black/80 border-none"
                   onClick={() => {
                     setActiveHashtag(null);
                     setActiveCategory("All");
                   }}
                 >
-                  ← Back to All Videos
+                  <ArrowLeft size={20} className="text-white" />
+                  <span className="font-semibold">All Videos</span>
                 </Button>
               </div>
             )}
@@ -801,14 +802,15 @@ const Feed = () => {
       {showBackButton && !showSearch && (
         <div className="fixed top-16 left-4 z-50">
           <Button
-            variant="outline"
-            className="text-white border-white/20 hover:bg-white/10"
+            variant="ghost"
+            className="bg-black/70 text-white rounded-full px-4 py-2 flex items-center gap-2 shadow-lg hover:bg-black/80 border-none"
             onClick={() => {
               setActiveHashtag(null);
               setActiveCategory("All");
             }}
           >
-            ← Back to All Videos
+            <ArrowLeft size={20} className="text-white" />
+            <span className="font-semibold">All Videos</span>
           </Button>
         </div>
       )}
