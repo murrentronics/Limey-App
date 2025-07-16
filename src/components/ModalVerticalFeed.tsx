@@ -128,7 +128,8 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
     // Optionally: show toast
   };
 
-  const getUsername = (video) => video.username || (video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown');
+  const getUsername = (video) => video.profiles?.username || video.username || (video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown');
+  const getAvatarUrl = (video) => video.profiles?.avatar_url || video.avatar_url || undefined;
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -203,7 +204,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
                   <div className="flex items-center space-x-3">
                     <div className="relative">
                       <Avatar className="w-12 h-12">
-                        <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
+                        <AvatarImage src={getAvatarUrl(video)} alt={getUsername(video)} />
                         <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       {/* Follow Button */}
@@ -235,28 +236,14 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
                         @{getUsername(video)}
                       </button>
                     </div>
-                    {/* Vertical Menu */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="ml-2" data-control>
-                          <MoreVertical size={22} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {user && video.user_id === user.id ? (
-                          <DropdownMenuItem onClick={() => handleDelete(video)} className="text-red-600">Delete Video</DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem onClick={() => {}}>Report Video</DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {/* Vertical Menu removed */}
                   </div>
                   {/* Caption */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 mt-2">
                     <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
-                    {video.description && (
-                      <p className="text-white/90 text-sm leading-relaxed">{video.description}</p>
-                    )}
+                    <p className="text-white/90 text-sm leading-relaxed break-words">
+                      {video.description || <span className="text-white/50 italic">No description</span>}
+                    </p>
                   </div>
                 </div>
                 {/* Actions */}

@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const Trending = () => {
   const navigate = useNavigate();
@@ -144,17 +145,20 @@ const [modalIndex, setModalIndex] = useState<number | null>(null);
   {(showSearch && searchResults ? searchResults : trendingVideos).map((video, index) => (
     <Card
       key={video.id}
-      className="relative aspect-[9/16] cursor-pointer group overflow-hidden"
+      className="relative aspect-[9/16] cursor-pointer group overflow-hidden bg-black/10"
       onClick={() => {
         setModalIndex(index);
         setShowModal(true);
       }}
     >
+      {/* Top left: Creator avatar */}
       <div className="absolute top-2 left-2 z-10">
-        <Badge variant="secondary" className="text-xs font-bold">
-          #{index + 1}
-        </Badge>
+        <Avatar className="w-8 h-8 border-2 border-white shadow">
+          <AvatarImage src={video.profiles?.avatar_url || undefined} alt={video.profiles?.username || video.user_id} />
+          <AvatarFallback>{(video.profiles?.username || video.user_id)?.charAt(0).toUpperCase()}</AvatarFallback>
+        </Avatar>
       </div>
+      {/* Video thumbnail or video preview */}
       <div className="w-full h-full">
         <AutoPlayVideo
           src={video.video_url}
@@ -164,16 +168,18 @@ const [modalIndex, setModalIndex] = useState<number | null>(null);
           creatorId={video.user_id}
         />
       </div>
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-        <h3 className="font-semibold text-white text-sm line-clamp-2 mb-1">
-          {video.title}
-        </h3>
-        <div className="flex items-center justify-between text-xs text-white/80">
-          <span className="font-medium">{video.profiles?.username || video.user_id}</span>
-          <span>{video.view_count || 0} views</span>
-          <span>{video.duration ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}` : '--:--'}</span>
-        </div>
+      {/* Bottom left: Views */}
+      <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 rounded-full px-2 py-1 text-xs text-white">
+        <span role="img" aria-label="views">👁️</span> {video.view_count || 0}
       </div>
+      {/* Bottom right: Duration */}
+      <div className="absolute bottom-2 right-2 bg-black/60 rounded-full px-2 py-1 text-xs text-white">
+        {video.duration ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}` : '0:00'}
+      </div>
+      {/* Title overlay (optional, can be removed for cleaner look) */}
+      {/* <div className="absolute bottom-10 left-2 right-2 bg-gradient-to-t from-black/60 to-transparent p-1 rounded">
+        <h3 className="font-semibold text-white text-xs line-clamp-2">{video.title}</h3>
+      </div> */}
     </Card>
   ))}
 </div>
