@@ -254,7 +254,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
             <div className="flex items-center justify-center w-full pointer-events-auto" style={{height: 60, margin: 0, paddingTop: 0, paddingBottom: 0}}>
               <div
                 ref={filterListRef}
-                className="flex overflow-x-auto gap-3 px-2 min-w-max justify-center relative no-scrollbar"
+                className="flex overflow-x-auto min-w-max relative no-scrollbar scrollbar-thin scrollbar-thumb-gray-500"
                 style={{ pointerEvents: 'auto', scrollSnapType: 'x mandatory', paddingLeft: 24, paddingRight: 24 }}
                 onScroll={handleFilterScroll}
               >
