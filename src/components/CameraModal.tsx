@@ -108,6 +108,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
   const [category, setCategory] = useState('All');
+  const [hasTriggeredInput, setHasTriggeredInput] = useState(false);
 
   const handleUpload = async () => {
     if (!videoFile || !user || !title.trim()) {
@@ -192,13 +193,15 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
 
   // When modal opens, trigger device camera
   useEffect(() => {
-    if (open && !videoFile && fileInputRef.current) {
+    if (open && !videoFile && fileInputRef.current && !hasTriggeredInput) {
       fileInputRef.current.value = '';
       fileInputRef.current.click();
+      setHasTriggeredInput(true);
     }
     if (!open) {
       setVideoFile(null);
       setVideoUrl(null);
+      setHasTriggeredInput(false);
     }
   }, [open]);
 
@@ -280,13 +283,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
     mediaRecorderRef.current?.stop();
   };
 
-  const handlePrevFilter = () => {
-    setFilterIdx((idx) => (idx === 0 ? FILTERS.length - 1 : idx - 1));
-  };
-  const handleNextFilter = () => {
-    setFilterIdx((idx) => (idx === FILTERS.length - 1 ? 0 : idx + 1));
-  };
-
   // Handler for confirm (tick) button
   const handleConfirmEdits = () => {
     if (videoFile && videoUrl) {
@@ -327,7 +323,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
             autoPlay
             loop
             className="w-full h-full object-cover transition-all duration-300"
-            style={{ filter: FILTER_CSS[FILTERS[filterIdx].style] || 'none', zIndex: 1 }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-black text-white text-lg">
@@ -340,7 +335,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
             {FILTERS[filterIdx].name}
           </div>
         )}
-        {/* Duration Selector and Mode Switcher - REMOVE THIS SECTION */}
         {/* Filter Carousel - floating above video, just above bottom nav, no overlay */}
         {videoUrl && (
           <div className="fixed left-0 right-0 z-[99999] flex items-center justify-center pointer-events-none" style={{bottom: '70px'}}>
@@ -389,11 +383,20 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
         {/* Right-side vertical icons */}
         <div className="absolute right-4 top-32 flex flex-col gap-4 z-10">
           <button className="bg-black/40 rounded-full p-2 text-white"><User size={22} /></button>
-          {/* 2. Remove the tick (confirm) button from the right-side vertical menu */}
           <button className="bg-black/40 rounded-full p-2 text-white flex items-center justify-center">
             <Music size={22} />
             <Plus size={16} style={{ marginLeft: '-8px', marginTop: '-8px' }} />
           </button>
+          {videoUrl && (
+            <button
+              className="bg-green-600 hover:bg-green-700 rounded-full p-2 text-white flex items-center justify-center shadow-lg border-2 border-white"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
+              onClick={handleConfirmEdits}
+              title="Confirm and continue"
+            >
+              <Check size={28} />
+            </button>
+          )}
         </div>
       </div>
       {/* Controls on black padding at bottom */}
@@ -407,86 +410,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
           </div>
           {error && <div className="text-red-400 mt-2 text-center absolute bottom-24 w-full">{error}</div>}
         </div>
-      )}
-      {/* 3. Add the upload form below the filter carousel and video preview */}
-      {videoUrl && (
-        <Card className="mt-6 p-6 max-w-md mx-auto">
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">
-                Title *
-              </label>
-              <Input
-                placeholder="Give your content a catchy title..."
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={100}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {title.length}/100 characters
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">
-                Category
-              </label>
-              <select
-                className="w-full border rounded px-3 py-2 bg-background text-foreground"
-                value={category || 'All'}
-                onChange={e => setCategory(e.target.value)}
-                required
-              >
-                <option value="All">All</option>
-                <option value="Soca">Soca</option>
-                <option value="Dancehall">Dancehall</option>
-                <option value="Carnival">Carnival</option>
-                <option value="Comedy">Comedy</option>
-                <option value="Dance">Dance</option>
-                <option value="Music">Music</option>
-                <option value="Local News">Local News</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground mb-2 block">
-                Description
-              </label>
-              <Textarea
-                placeholder="Tell viewers about your content..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={500}
-                rows={4}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {description.length}/500 characters
-              </p>
-            </div>
-            <div className="flex space-x-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setVideoFile(null);
-                  setVideoUrl(null);
-                  setTitle("");
-                  setDescription("");
-                  setCategory('All');
-                  onClose();
-                }}
-                disabled={uploading}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="neon"
-                onClick={handleConfirmEdits}
-                disabled={uploading || !title.trim()}
-                className="flex-1"
-              >
-                {uploading ? "Uploading..." : "Share to Limey 🚀"}
-              </Button>
-            </div>
-          </div>
-        </Card>
       )}
     </div>,
     document.body

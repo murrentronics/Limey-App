@@ -9,53 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useLocation, useNavigate } from "react-router-dom";
 
-const FILTERS = [
-  { name: 'None', style: 'none', icon: '/filters/none.png' },
-  { name: 'Dream', style: 'dreamglow', icon: '/filters/dream.png' },
-  { name: 'Peach', style: 'peachypop', icon: '/filters/peach.png' },
-  { name: 'Frost', style: 'frostedglass', icon: '/filters/frost.png' },
-  { name: 'Neon', style: 'neonmuse', icon: '/filters/neon.png' },
-  { name: 'Retro', style: 'retrovibe', icon: '/filters/retro.png' },
-  { name: 'Blush', style: 'blushbloom', icon: '/filters/blush.png' },
-  { name: 'Sun', style: 'sunkissed', icon: '/filters/sun.png' },
-  { name: 'Urban', style: 'urbanfade', icon: '/filters/urban.png' },
-  { name: 'Cosmic', style: 'cosmicaura', icon: '/filters/cosmic.png' },
-  { name: 'Honey', style: 'honeyhaze', icon: '/filters/honey.png' },
-  { name: 'Velvet', style: 'velvetskin', icon: '/filters/velvet.png' },
-  { name: 'Arctic', style: 'arcticchill', icon: '/filters/arctic.png' },
-  { name: 'Noir', style: 'noirchic', icon: '/filters/noir.png' },
-  { name: 'Citrus', style: 'citrussplash', icon: '/filters/citrus.png' },
-  { name: 'Mint', style: 'mintyfresh', icon: '/filters/mint.png' },
-  { name: 'Dusk', style: 'duskdream', icon: '/filters/dusk.png' },
-  { name: 'Glam', style: 'glamourdust', icon: '/filters/glam.png' },
-  { name: 'Latte', style: 'lattecream', icon: '/filters/latte.png' },
-  { name: 'Sapphire', style: 'sapphireshine', icon: '/filters/sapphire.png' },
-  { name: 'Candy', style: 'candycloud', icon: '/filters/candy.png' },
-];
-
-const FILTER_CSS: Record<string, string> = {
-  none: '',
-  dreamglow: 'contrast(1.2) brightness(1.1) saturate(1.3) drop-shadow(0 0 8px #fff)',
-  peachypop: 'sepia(0.3) hue-rotate(-10deg) brightness(1.1) saturate(1.2)',
-  frostedglass: 'blur(2px) brightness(1.2)',
-  neonmuse: 'contrast(1.5) saturate(2) drop-shadow(0 0 8px #0ff)',
-  retrovibe: 'sepia(0.7) contrast(1.2)',
-  sunkissed: 'brightness(1.2) sepia(0.2) hue-rotate(-20deg)',
-  velvetskin: 'contrast(1.1) brightness(1.05) saturate(1.1)',
-  cosmicaura: 'hue-rotate(90deg) saturate(1.5)',
-  blushbloom: 'hue-rotate(-20deg) saturate(1.3)',
-  urbanfade: 'grayscale(0.5) contrast(1.1)',
-  honeyhaze: 'sepia(0.4) brightness(1.1)',
-  arcticchill: 'hue-rotate(180deg) brightness(1.1)',
-  noirchic: 'grayscale(1) contrast(1.2)',
-  citrussplash: 'hue-rotate(30deg) saturate(1.3)',
-  mintyfresh: 'hue-rotate(120deg) saturate(1.2)',
-  duskdream: 'brightness(0.9) contrast(1.1) hue-rotate(-40deg)',
-  glamourdust: 'contrast(1.3) brightness(1.2) drop-shadow(0 0 6px #fff)',
-  lattecream: 'sepia(0.2) brightness(1.1)',
-  sapphireshine: 'hue-rotate(200deg) saturate(1.4)',
-  candycloud: 'hue-rotate(-90deg) brightness(1.1)',
-};
+// Remove FILTERS, FILTER_CSS, filterIdx, and all filter carousel/filter overlay UI.
+// In the video preview, remove any style applying a filter.
+// Only show the video preview, recapture, and upload form.
 
 const FILTER_THUMB_PLACEHOLDER = '/public/placeholder.svg';
 
@@ -63,7 +19,6 @@ const CreateVideoPage: React.FC = () => {
   const webcamRef = useRef<Webcam>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [filterIdx, setFilterIdx] = useState(0);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -148,7 +103,7 @@ const CreateVideoPage: React.FC = () => {
       setTitle("");
       setDescription("");
       setCategory('All');
-      navigate("/feed");
+      navigate("/upload");
     } catch (error: any) {
       toast({
         title: "Upload Failed",
@@ -180,40 +135,13 @@ const CreateVideoPage: React.FC = () => {
               autoPlay
               loop
               className="w-full h-64 object-cover rounded-lg mb-4"
-              style={{ filter: FILTER_CSS[FILTERS[filterIdx].style] || 'none' }}
             />
             {/* Filter carousel */}
-            <div className="w-full overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div
-                className="flex gap-3 px-2 min-w-max relative scrollbar-thin scrollbar-thumb-gray-500"
-                style={{ pointerEvents: 'auto', scrollSnapType: 'x mandatory', paddingLeft: 24, paddingRight: 24 }}
-              >
-                {FILTERS.map((filter, idx) => (
-                  <div
-                    key={filter.name + idx}
-                    className={`flex flex-col items-center transition-transform duration-200 px-1 flex-shrink-0 ${idx === filterIdx ? 'scale-125 z-20' : 'opacity-60 z-10'}`}
-                    style={{ minWidth: 60, scrollSnapAlign: 'center', paddingTop: 9, paddingBottom: 8 }}
-                    onClick={() => setFilterIdx(idx)}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center mb-1"
-                      style={{ background: 'rgba(255,255,255,0.1)', border: idx === filterIdx ? '2px solid var(--primary)' : '2px solid rgba(255,255,255,0.2)' }}
-                    >
-                      <img src={filter.icon || FILTER_THUMB_PLACEHOLDER} alt={filter.name} className="w-full h-full object-cover" />
-                    </div>
-                    <span
-                      className="text-xs whitespace-nowrap"
-                      style={{ color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)', background: 'rgba(0,0,0,0.3)', borderRadius: 4, padding: '0 4px' }}
-                    >
-                      {filter.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex justify-end mt-2">
+            {/* Remove FILTERS, FILTER_CSS, filterIdx, and all filter carousel/filter overlay UI. */}
+            {/* In the video preview, remove any style applying a filter. */}
+            {/* Only show the video preview, recapture, and upload form. */}
+            {/* Centered Recapture button below video preview */}
+            <div className="flex justify-center mt-4">
               <Button variant="outline" onClick={handleRecapture}>
                 Recapture
               </Button>
@@ -250,13 +178,22 @@ const CreateVideoPage: React.FC = () => {
                 required
               >
                 <option value="All">All</option>
-                <option value="Soca">Soca</option>
-                <option value="Dancehall">Dancehall</option>
+                <option value="Bar Limes">Bar Limes</option>
                 <option value="Carnival">Carnival</option>
                 <option value="Comedy">Comedy</option>
                 <option value="Dance">Dance</option>
-                <option value="Music">Music</option>
+                <option value="Dancehall">Dancehall</option>
+                <option value="DIY Projects">DIY Projects</option>
+                <option value="Educational">Educational</option>
+                <option value="Events">Events</option>
+                <option value="Fete">Fete</option>
+                <option value="Funny Vids">Funny Vids</option>
+                <option value="HOW TOs">HOW TOs</option>
                 <option value="Local News">Local News</option>
+                <option value="Music Vids">Music Vids</option>
+                <option value="Parties">Parties</option>
+                <option value="Soca">Soca</option>
+                <option value="Trini Celebs">Trini Celebs</option>
               </select>
             </div>
             <div>

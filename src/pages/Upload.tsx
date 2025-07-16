@@ -78,7 +78,7 @@ const Upload = () => {
   };
 
   const handleCameraVideo = (videoFile: File, previewUrl: string) => {
-    navigate('/create-video', { state: { file: videoFile, preview: previewUrl } });
+    // Do nothing here; camera video should not be handled in the upload page
   };
 
   // Utility to extract video duration only
@@ -400,10 +400,14 @@ const Upload = () => {
                   </label>
                 </>
               ) : (
-                <Button variant="outline" className="flex items-center gap-2" onClick={() => setShowCameraModal(true)}>
-                  <RotateCcw size={18} />
-                  Recapture
-                </Button>
+                <label htmlFor="file-upload">
+                  <Button variant="outline" asChild className="cursor-pointer flex items-center gap-2">
+                    <span className="flex items-center gap-2">
+                      <RotateCcw size={18} />
+                      Change Video
+                    </span>
+                  </Button>
+                </label>
               )}
               <CameraModal open={showCameraModal} onClose={() => setShowCameraModal(false)} onVideoCaptured={handleCameraVideo} />
             </div>

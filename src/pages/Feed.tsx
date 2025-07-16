@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import React from "react";
 
 // --- AutoPlayVideo component ---
 const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onViewRecorded, ...props }) => {
@@ -139,6 +140,7 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onView
 
 const Feed = () => {
   const [activeCategory, setActiveCategory] = useState("All");
+  const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +166,17 @@ const Feed = () => {
   ];
 
   const currentVideos = searchResults !== null ? searchResults : videos;
+
+  // Filtering logic for hashtag
+  const filteredVideos = React.useMemo(() => {
+    if (activeHashtag) {
+      return videos.filter(v => v.description && v.description.toLowerCase().includes(`#${activeHashtag.toLowerCase()}`));
+    }
+    if (activeCategory && activeCategory !== "All") {
+      return videos.filter(v => v.category === activeCategory);
+    }
+    return videos;
+  }, [videos, activeCategory, activeHashtag]);
 
   // Record video view (only for other users' videos)
   const recordVideoView = async (videoId: string, creatorId: string) => {
@@ -259,8 +272,13 @@ const Feed = () => {
     if (searchTerm.startsWith('#')) {
       const tag = searchTerm.replace('#', '').toLowerCase();
       query = query.ilike('description', `%#${tag}%`);
+    } else if (searchTerm.startsWith('@')) {
+      // Search by username (from profiles)
+      const username = searchTerm.replace('@', '').toLowerCase();
+      query = query.ilike('profiles.username', `%${username}%`);
     } else {
-      query = query.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,tags.ilike.%${searchTerm}%`);
+      // Default: search title, description, category, tags, and username
+      query = query.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,tags.ilike.%${searchTerm}%,profiles.username.ilike.%${searchTerm}%`);
     }
 
     const { data, error } = await query;
@@ -277,8 +295,11 @@ const Feed = () => {
       if (searchTerm.startsWith('#')) {
         const tag = searchTerm.replace('#', '').toLowerCase();
         fallbackQuery = fallbackQuery.ilike('description', `%#${tag}%`);
+      } else if (searchTerm.startsWith('@')) {
+        const username = searchTerm.replace('@', '').toLowerCase();
+        fallbackQuery = fallbackQuery.ilike('username', `%${username}%`);
       } else {
-        fallbackQuery = fallbackQuery.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,tags.ilike.%${searchTerm}%`);
+        fallbackQuery = fallbackQuery.or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,tags.ilike.%${searchTerm}%,username.ilike.%${searchTerm}%`);
       }
 
       const { data: fallbackData, error: fallbackError } = await fallbackQuery;
@@ -614,6 +635,30 @@ const Feed = () => {
     }
   };
 
+  // Helper to render clickable hashtags
+  function renderDescriptionWithHashtags(description: string) {
+    return description.split(/(#[\w-]+)/g).map((part, idx) => {
+      if (/^#[\w-]+$/.test(part)) {
+        return (
+          <button
+            key={idx}
+            className="text-lime-400 hover:underline font-semibold"
+            onClick={e => {
+              e.stopPropagation();
+              setActiveHashtag(part.substring(1));
+            }}
+          >
+            {part}
+          </button>
+        );
+      }
+      return part;
+    });
+  }
+
+  // Back button for filtered views
+  const showBackButton = activeHashtag || (activeCategory && activeCategory !== "All");
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}
@@ -678,43 +723,60 @@ const Feed = () => {
 
         {/* Search Overlay */}
         {showSearch && (
-          <form onSubmit={handleSearch} className="flex items-center gap-2 mt-4 mb-2">
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="flex-1 p-2 border rounded text-base bg-black/50 text-white border-white/20 placeholder-white/50"
-              placeholder="Search hashtags, titles, categories..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <Button
-              type="submit"
-              variant="default"
-              size="icon"
-              aria-label="Go"
-              disabled={searchLoading}
-            >
-              {searchLoading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              ) : (
-                <SearchIcon size={18} />
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                setShowSearch(false);
-                setSearchTerm('');
-                setSearchResults(null);
-              }}
-              aria-label="Close"
-              className="text-white hover:bg-white/10"
-            >
-              <CloseIcon size={18} />
-            </Button>
-          </form>
+          <>
+            <form onSubmit={handleSearch} className="flex items-center gap-2 mt-4 mb-2">
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="flex-1 p-2 border rounded text-base bg-black/50 text-white border-white/20 placeholder-white/50"
+                placeholder="Search hashtags, titles, categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              <Button
+                type="submit"
+                variant="default"
+                size="icon"
+                aria-label="Go"
+                disabled={searchLoading}
+              >
+                {searchLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <SearchIcon size={18} />
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setShowSearch(false);
+                  setSearchTerm('');
+                  setSearchResults(null);
+                }}
+                aria-label="Close"
+                className="text-white hover:bg-white/10"
+              >
+                <CloseIcon size={18} />
+              </Button>
+            </form>
+            {/* Back Button below search form when search is open */}
+            {showBackButton && (
+              <div className="flex justify-start mb-2">
+                <Button
+                  variant="outline"
+                  className="text-white border-white/20 hover:bg-white/10"
+                  onClick={() => {
+                    setActiveHashtag(null);
+                    setActiveCategory("All");
+                  }}
+                >
+                  ← Back to All Videos
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -734,6 +796,22 @@ const Feed = () => {
           )}
         </Button>
       </div>
+
+      {/* Back Button for filtered feed (only show if not searching) */}
+      {showBackButton && !showSearch && (
+        <div className="fixed top-16 left-4 z-50">
+          <Button
+            variant="outline"
+            className="text-white border-white/20 hover:bg-white/10"
+            onClick={() => {
+              setActiveHashtag(null);
+              setActiveCategory("All");
+            }}
+          >
+            ← Back to All Videos
+          </Button>
+        </div>
+      )}
 
       {/* Video Feed */}
       <div
@@ -837,7 +915,22 @@ const Feed = () => {
                         <div className="space-y-2">
                           <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
                           {video.description && (
-                            <p className="text-white/90 text-sm leading-relaxed">{video.description}</p>
+                            <p className="text-white/90 text-sm leading-relaxed">
+                              {renderDescriptionWithHashtags(video.description)}
+                            </p>
+                          )}
+                          {/* Category badge below description */}
+                          {video.category && (
+                            <button
+                              className="mt-2 inline-block px-3 py-1 rounded-full bg-lime-700/80 text-white text-xs font-semibold hover:bg-lime-600 transition-colors"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setActiveCategory(video.category);
+                                setActiveHashtag(null);
+                              }}
+                            >
+                              {video.category}
+                            </button>
                           )}
                         </div>
                       </div>
@@ -928,7 +1021,7 @@ const Feed = () => {
             </div>
           ) : (
             <div className="space-y-0">
-              {videos.map((video) => (
+              {filteredVideos.map((video) => (
                 <div 
                   key={video.id} 
                   className="relative h-screen snap-start snap-always flex items-center justify-center"
@@ -1010,7 +1103,22 @@ const Feed = () => {
                         <div className="space-y-2">
                           <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
                           {video.description && (
-                            <p className="text-white/90 text-sm leading-relaxed">{video.description}</p>
+                            <p className="text-white/90 text-sm leading-relaxed">
+                              {renderDescriptionWithHashtags(video.description)}
+                            </p>
+                          )}
+                          {/* Category badge below description */}
+                          {video.category && (
+                            <button
+                              className="mt-2 inline-block px-3 py-1 rounded-full bg-lime-700/80 text-white text-xs font-semibold hover:bg-lime-600 transition-colors"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setActiveCategory(video.category);
+                                setActiveHashtag(null);
+                              }}
+                            >
+                              {video.category}
+                            </button>
                           )}
                         </div>
                       </div>
