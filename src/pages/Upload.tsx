@@ -392,34 +392,28 @@ const Upload = () => {
             />
             {/* The Upload/Change Video button triggers the regular input (no capture) */}
             <div className="flex gap-3 justify-center">
-              {/* Create button triggers CameraModal */}
-              {!file && (
+              {!file ? (
                 <>
                   <Button variant="neon" className="flex items-center gap-2" onClick={() => setShowCameraModal(true)}>
                     <Paintbrush size={18} />
                     Create
                   </Button>
-                  <CameraModal open={showCameraModal} onClose={() => setShowCameraModal(false)} onVideoCaptured={handleCameraVideo} />
+                  <label htmlFor="file-upload">
+                    <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
+                      <span className="flex items-center gap-2">
+                        <Plus size={18} />
+                        Upload
+                      </span>
+                    </Button>
+                  </label>
                 </>
-              )}
-              {/* Upload/Change Video button triggers gallery, only show if not from camera */}
-              {!file || captureMode === 'gallery' ? (
-                <label htmlFor="file-upload">
-                  <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
-                    <span className="flex items-center gap-2">
-                      <Plus size={18} />
-                      {file ? 'Change Video' : 'Upload'}
-                    </span>
-                  </Button>
-                </label>
-              ) : null}
-              {/* Re-Capture button if video was captured from camera */}
-              {file && captureMode === 'camera' && (
+              ) : (
                 <Button variant="outline" className="flex items-center gap-2" onClick={() => setShowCameraModal(true)}>
                   <RotateCcw size={18} />
-                  Re-Capture
+                  Recapture
                 </Button>
               )}
+              <CameraModal open={showCameraModal} onClose={() => setShowCameraModal(false)} onVideoCaptured={handleCameraVideo} />
             </div>
           </div>
         </Card>
