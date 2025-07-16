@@ -343,16 +343,22 @@ const Upload = () => {
         <Card className="p-8 border-2 border-dashed border-border hover:border-primary transition-colors">
           <div className="text-center">
             {preview ? (
-              <div className="mb-4">
+              <div className="mb-4 flex flex-col items-center">
                 {file?.type.startsWith('video/') ? (
-                  <video 
-                    src={preview} 
-                    className="max-w-full h-64 mx-auto rounded-lg"
-                    controls
-                  />
+                  <>
+                    <video
+                      src={preview}
+                      className="max-w-full h-64 mx-auto rounded-lg"
+                      controls
+                      style={{ filter: selectedFilter?.style ? FILTER_CSS[selectedFilter.style] : undefined }}
+                    />
+                    <Button variant="outline" className="mt-2" onClick={() => navigate(-1)}>
+                      Re-Capture
+                    </Button>
+                  </>
                 ) : (
-                  <img 
-                    src={preview} 
+                  <img
+                    src={preview}
                     alt="Preview"
                     className="max-w-full h-64 mx-auto rounded-lg object-cover"
                   />
