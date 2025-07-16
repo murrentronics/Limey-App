@@ -1,17 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Paintbrush, Plus, RotateCcw, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useNavigate, useLocation } from "react-router-dom";
-import CameraModal from "@/components/CameraModal";
 
 const Upload = () => {
   const location = useLocation();
@@ -21,15 +19,14 @@ const Upload = () => {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [category, setCategory] = useState<string>('All');
-  const [sheetOpen, setSheetOpen] = useState(false);
-  // Thumbnail selection removed, handled by backend or default
   const { toast } = useToast();
   const { user } = useAuth();
-  const [captureMode, setCaptureMode] = useState<'none' | 'camera' | 'gallery'>('none');
-  const navigate = useNavigate();
-  const [showCameraModal, setShowCameraModal] = useState(false);
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  // For direct camera capture
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (location.state?.file) setFile(location.state.file);
@@ -65,22 +62,33 @@ const Upload = () => {
         return;
       }
       setFile(selectedFile);
-      
+
       // Create preview for videos/images
       const url = URL.createObjectURL(selectedFile);
       setPreview(url);
-      
+
       // Auto-generate title from filename
       if (!title) {
         const name = selectedFile.name.split('.')[0];
         setTitle(name.charAt(0).toUpperCase() + name.slice(1));
       }
-      setCaptureMode(mode);
     }
   };
 
-  const handleCameraVideo = (videoFile: File, previewUrl: string) => {
-    // Do nothing here; camera video should not be handled in the upload page
+  // Direct camera capture: open camera and go to create-video page
+  const handleCreateClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleCreateFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      const url = URL.createObjectURL(selectedFile);
+      navigate('/create-video', { state: { file: selectedFile, preview: url } });
+    }
   };
 
   // Utility to extract video duration only
@@ -129,19 +137,19 @@ const Upload = () => {
       video.src = URL.createObjectURL(file);
       video.muted = true;
       video.playsInline = true;
-      
+
       video.onloadedmetadata = () => {
         // Seek to 1 second or 25% of the video, whichever is shorter
         const seekTime = Math.min(1, video.duration * 0.25);
         video.currentTime = seekTime;
       };
-      
+
       video.onseeked = () => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = 320; // Thumbnail width
         canvas.height = 568; // Thumbnail height (9:16 aspect ratio)
-        
+
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           canvas.toBlob((blob) => {
@@ -155,7 +163,7 @@ const Upload = () => {
           reject(new Error('Failed to get canvas context'));
         }
       };
-      
+
       video.onerror = (e) => reject(new Error('Failed to load video for thumbnail generation'));
     });
   };
@@ -177,10 +185,10 @@ const Upload = () => {
       // Extract video duration and generate thumbnail
       let duration = 0;
       let thumbnailUrl = '';
-      
+
       if (file.type.startsWith('video/')) {
         duration = await extractVideoDuration(file);
-        
+
         // If user picked a custom cover image, upload it
         if (coverImageFile) {
           const coverFileName = `${user.id}/thumbnails/cover_${Date.now()}.jpg`;
@@ -259,7 +267,7 @@ const Upload = () => {
         avatar_url: profile.avatar_url,
         // Add more fields as needed (e.g., tags)
       }).select();
-      
+
       if (dbError) {
         console.error('Database error details:', {
           code: dbError.code,
@@ -281,15 +289,13 @@ const Upload = () => {
       setTitle("");
       setDescription("");
       setPreview(null);
-      setCaptureMode('none');
-      setShowCameraModal(false);
       setCoverImageFile(null);
       setCoverImagePreview(null);
     } catch (error: any) {
       console.error('Upload error:', error);
-      
+
       let errorMessage = "Something went wrong";
-      
+
       if (error.message) {
         errorMessage = error.message;
       } else if (error.code === '23503') {
@@ -299,7 +305,7 @@ const Upload = () => {
       } else if (error.code === '42501') {
         errorMessage = "Permission denied. Please check your account status.";
       }
-      
+
       toast({
         title: "Upload Failed",
         description: errorMessage,
@@ -378,54 +384,39 @@ const Upload = () => {
                 </p>
               </div>
             )}
-            
-            
-            {/* Add a separate file input for the Create button with capture="environment" */}
-            <Input
+
+            {/* Hidden file input for Create (camera) */}
+            <input
               type="file"
               accept="video/*"
               capture="environment"
-              onChange={e => handleFileSelect(e, 'camera')}
               className="hidden"
-              id="file-create"
+              ref={fileInputRef}
+              onChange={handleCreateFile}
             />
             {/* The Create button triggers this input */}
-            <Input
+            <div className="flex gap-3 justify-center">
+              <Button variant="neon" className="flex items-center gap-2" onClick={handleCreateClick}>
+                <Paintbrush size={18} />
+                Create
+              </Button>
+              <label htmlFor="file-upload">
+                <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
+                  <span className="flex items-center gap-2">
+                    <Plus size={18} />
+                    Upload
+                  </span>
+                </Button>
+              </label>
+            </div>
+            {/* Upload/Change Video button triggers the regular input (no capture) */}
+            <input
               type="file"
               accept="video/*"
               onChange={e => handleFileSelect(e, 'gallery')}
               className="hidden"
               id="file-upload"
             />
-            {/* The Upload/Change Video button triggers the regular input (no capture) */}
-            <div className="flex gap-3 justify-center">
-              {!file ? (
-                <>
-                  <Button variant="neon" className="flex items-center gap-2" onClick={() => setShowCameraModal(true)}>
-                    <Paintbrush size={18} />
-                    Create
-                  </Button>
-                  <label htmlFor="file-upload">
-                    <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
-                      <span className="flex items-center gap-2">
-                        <Plus size={18} />
-                        Upload
-                      </span>
-                    </Button>
-                  </label>
-                </>
-              ) : (
-                <label htmlFor="file-upload">
-                  <Button variant="outline" asChild className="cursor-pointer flex items-center gap-2">
-                    <span className="flex items-center gap-2">
-                      <RotateCcw size={18} />
-                      Change Video
-                    </span>
-                  </Button>
-                </label>
-              )}
-              <CameraModal open={showCameraModal} onClose={() => setShowCameraModal(false)} onVideoCaptured={handleCameraVideo} />
-            </div>
           </div>
         </Card>
 
@@ -552,8 +543,6 @@ const Upload = () => {
                 <Badge variant="outline">Trinidad & Tobago</Badge>
               </div>
 
-              {/* Thumbnail selection removed */}
-
               {/* Upload Button */}
               <div className="flex space-x-3 pt-4">
                 <Button 
@@ -563,20 +552,19 @@ const Upload = () => {
                     setPreview(null);
                     setTitle("");
                     setDescription("");
-                    setCaptureMode('none');
                   }}
                   disabled={uploading}
                 >
                   Cancel
                 </Button>
-                              <Button 
-                variant="neon" 
-                onClick={handleUpload}
-                disabled={uploading || !title.trim()}
-                className="flex-1"
-              >
-                {uploading ? "Uploading..." : "Share to Limey 🚀"}
-              </Button>
+                <Button 
+                  variant="neon" 
+                  onClick={handleUpload}
+                  disabled={uploading || !title.trim()}
+                  className="flex-1"
+                >
+                  {uploading ? "Uploading..." : "Share to Limey 🚀"}
+                </Button>
               </div>
             </div>
           </Card>
