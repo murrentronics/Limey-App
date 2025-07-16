@@ -1,3 +1,4 @@
+import ModalVerticalFeed from "@/components/ModalVerticalFeed";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -808,16 +809,12 @@ const Profile = () => {
       </div>
 
       {showVideoModal && currentVideoIndex !== null && (
-        <VideoPlayer
-          video={userVideos[currentVideoIndex]}
-          videos={userVideos}
-          setVideos={setUserVideos}
-          currentIndex={currentVideoIndex}
-          onClose={() => setShowVideoModal(false)}
-          onNext={() => setCurrentVideoIndex(i => (i !== null && i < userVideos.length - 1 ? i + 1 : i))}
-          onPrevious={() => setCurrentVideoIndex(i => (i !== null && i > 0 ? i - 1 : i))}
-        />
-      )}
+  <ModalVerticalFeed
+    videos={userVideos}
+    startIndex={currentVideoIndex}
+    onClose={() => setShowVideoModal(false)}
+  />
+)}
 
       {/* Confirmation Dialog */}
       {showConfirmDialog && (

@@ -157,13 +157,15 @@ const CreateVideoPage: React.FC = () => {
           </div>
         ) : (
           <>
+            <div className="w-full max-w-xs mx-auto aspect-[9/16] bg-black rounded-lg overflow-hidden flex items-center justify-center mb-4">
             <video
               src={videoUrl}
               controls
               autoPlay
               loop
-              className="w-full h-64 object-cover rounded-lg mb-4"
+              className="w-full h-full object-cover"
             />
+          </div>
             {/* Filter carousel */}
             {/* Remove FILTERS, FILTER_CSS, filterIdx, and all filter carousel/filter overlay UI. */}
             {/* In the video preview, remove any style applying a filter. */}
@@ -259,7 +261,9 @@ const CreateVideoPage: React.FC = () => {
                 required
               >
                 <option value="All">All</option>
+                <option value="Anime">Anime</option>
                 <option value="Bar Limes">Bar Limes</option>
+                <option value="Cartoon">Cartoon</option>
                 <option value="Carnival">Carnival</option>
                 <option value="Comedy">Comedy</option>
                 <option value="Dance">Dance</option>
@@ -293,13 +297,13 @@ const CreateVideoPage: React.FC = () => {
               </p>
             </div>
             <div className="flex space-x-3 pt-4">
-              <Button
-                variant="outline"
-                onClick={handleRecapture}
-                disabled={uploading}
-              >
-                Cancel
-              </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate("/upload")}
+              disabled={uploading}
+            >
+              Cancel
+            </Button>
               <Button
                 variant="neon"
                 onClick={handleUpload}

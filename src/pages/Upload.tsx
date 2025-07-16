@@ -13,6 +13,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 const Upload = () => {
   const location = useLocation();
+  const changeVideoInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -353,27 +354,49 @@ const Upload = () => {
       <div className="p-4 max-w-2xl mx-auto">
         {/* File Upload Area */}
         <Card className="p-8 border-2 border-dashed border-border hover:border-primary transition-colors">
-          <div className="text-center">
-            {preview ? (
-              <div className="mb-4">
+        <div className="text-center">
+          {preview ? (
+            <>
+              <div className="mb-2 w-full max-w-xs mx-auto aspect-[9/16] bg-black rounded-lg overflow-hidden flex items-center justify-center">
                 {file?.type.startsWith('video/') ? (
                   <video 
                     src={preview} 
-                    className="max-w-full h-64 mx-auto rounded-lg"
+                    className="w-full h-full object-cover"
                     controls
                   />
                 ) : (
                   <img 
                     src={preview} 
                     alt="Preview"
-                    className="max-w-full h-64 mx-auto rounded-lg object-cover"
+                    className="w-full h-full object-cover"
                   />
                 )}
-                <p className="text-sm text-muted-foreground mt-2">
-                  {file?.name} ({(file?.size || 0 / 1024 / 1024).toFixed(2)} MB)
-                </p>
               </div>
-            ) : (
+              <p className="text-sm text-muted-foreground mt-2 text-center">
+                {file?.name} ({((file?.size || 0) / 1024 / 1024).toFixed(2)} MB)
+              </p>
+              {/* Hidden file input for changing video */}
+              <input
+        type="file"
+        accept="video/*"
+        className="hidden"
+        ref={changeVideoInputRef}
+        onChange={e => handleFileSelect(e, 'gallery')}
+      />
+      <div className="flex justify-center mt-4">
+        <Button
+          variant="outline"
+          onClick={() => {
+            if (changeVideoInputRef.current) changeVideoInputRef.current.value = '';
+            changeVideoInputRef.current?.click();
+          }}
+        >
+          Change Video
+        </Button>
+      </div>
+            </>
+          ) : (
+            <>
               <div className="mb-4">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">📁</span>
@@ -383,42 +406,41 @@ const Upload = () => {
                   Use the Create button to record a new video, or Upload to select an existing video or image to share with the Limey community.
                 </p>
               </div>
-            )}
-
-            {/* Hidden file input for Create (camera) */}
-            <input
-              type="file"
-              accept="video/*"
-              capture="environment"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleCreateFile}
-            />
-            {/* The Create button triggers this input */}
-            <div className="flex gap-3 justify-center">
-              <Button variant="neon" className="flex items-center gap-2" onClick={handleCreateClick}>
-                <Paintbrush size={18} />
-                Create
-              </Button>
-              <label htmlFor="file-upload">
-                <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
-                  <span className="flex items-center gap-2">
-                    <Plus size={18} />
-                    Upload
-                  </span>
+              {/* Hidden file input for Create (camera) */}
+              <input
+                type="file"
+                accept="video/*"
+                capture="environment"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleCreateFile}
+              />
+              {/* Upload/Change Video button triggers the regular input (no capture) */}
+              <input
+                type="file"
+                accept="video/*"
+                onChange={e => handleFileSelect(e, 'gallery')}
+                className="hidden"
+                id="file-upload"
+              />
+              <div className="flex gap-3 justify-center">
+                <Button variant="neon" className="flex items-center gap-2" onClick={handleCreateClick}>
+                  <Paintbrush size={18} />
+                  Create
                 </Button>
-              </label>
-            </div>
-            {/* Upload/Change Video button triggers the regular input (no capture) */}
-            <input
-              type="file"
-              accept="video/*"
-              onChange={e => handleFileSelect(e, 'gallery')}
-              className="hidden"
-              id="file-upload"
-            />
-          </div>
-        </Card>
+                <label htmlFor="file-upload">
+                  <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
+                    <span className="flex items-center gap-2">
+                      <Plus size={18} />
+                      Upload
+                    </span>
+                  </Button>
+                </label>
+              </div>
+            </>
+          )}
+        </div>
+      </Card>
 
         {/* Upload Form */}
         {file && (
@@ -454,8 +476,8 @@ const Upload = () => {
                       }}
                     />
                     <label htmlFor="cover-image-input">
-                      <Button variant="outline" className="cursor-pointer">
-                        Choose Cover Image
+                      <Button variant="outline" className="cursor-pointer" asChild>
+                        <span>Choose Cover Image</span>
                       </Button>
                     </label>
                     {coverImageFile && (
@@ -470,7 +492,7 @@ const Upload = () => {
                         Use Default Thumbnail
                       </Button>
                     )}
-                  </div>
+                </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Choose a custom cover image or use the default video thumbnail.
@@ -497,20 +519,31 @@ const Upload = () => {
                   Category
                 </label>
                 <select
-                  className="w-full border rounded px-3 py-2 bg-background text-foreground"
-                  value={category || 'All'}
-                  onChange={e => setCategory(e.target.value)}
-                  required
-                >
-                  <option value="All">All</option>
-                  <option value="Soca">Soca</option>
-                  <option value="Dancehall">Dancehall</option>
-                  <option value="Carnival">Carnival</option>
-                  <option value="Comedy">Comedy</option>
-                  <option value="Dance">Dance</option>
-                  <option value="Music">Music</option>
-                  <option value="Local News">Local News</option>
-                </select>
+                className="w-full border rounded px-3 py-2 bg-background text-foreground"
+                value={category || 'All'}
+                onChange={e => setCategory(e.target.value)}
+                required
+              >
+                <option value="All">All</option>
+                <option value="Anime">Anime</option>
+                <option value="Bar Limes">Bar Limes</option>
+                <option value="Cartoon">Cartoon</option>
+                <option value="Carnival">Carnival</option>
+                <option value="Comedy">Comedy</option>
+                <option value="Dance">Dance</option>
+                <option value="Dancehall">Dancehall</option>
+                <option value="DIY Projects">DIY Projects</option>
+                <option value="Educational">Educational</option>
+                <option value="Events">Events</option>
+                <option value="Fete">Fete</option>
+                <option value="Funny Vids">Funny Vids</option>
+                <option value="HOW TOs">HOW TOs</option>
+                <option value="Local News">Local News</option>
+                <option value="Music Vids">Music Vids</option>
+                <option value="Parties">Parties</option>
+                <option value="Soca">Soca</option>
+                <option value="Trini Celebs">Trini Celebs</option>
+              </select>
               </div>
 
               <div>
