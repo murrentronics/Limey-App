@@ -195,8 +195,8 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
   // Handler for confirm (tick) button
   const handleConfirmEdits = () => {
     if (videoFile && videoUrl) {
-      // Navigate to upload page, passing video file and preview URL via state
-      navigate('/upload', { state: { file: videoFile, preview: videoUrl } });
+      // Pass selected filter style and name as well
+      navigate('/upload', { state: { file: videoFile, preview: videoUrl, filter: FILTERS[filterIdx] } });
     }
   };
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,10 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import BottomNavigation from "@/components/BottomNavigation";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import CameraModal from "@/components/CameraModal";
 
 const Upload = () => {
+  const location = useLocation();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -21,12 +22,19 @@ const Upload = () => {
   const [preview, setPreview] = useState<string | null>(null);
   const [category, setCategory] = useState<string>('All');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<{ name: string; style: string; icon?: string } | null>(null);
   // Thumbnail selection removed, handled by backend or default
   const { toast } = useToast();
   const { user } = useAuth();
   const [captureMode, setCaptureMode] = useState<'none' | 'camera' | 'gallery'>('none');
   const navigate = useNavigate();
   const [showCameraModal, setShowCameraModal] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.file) setFile(location.state.file);
+    if (location.state?.preview) setPreview(location.state.preview);
+    if (location.state?.filter) setSelectedFilter(location.state.filter);
+  }, [location.state]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, mode: 'camera' | 'gallery') => {
     const selectedFile = e.target.files?.[0];
