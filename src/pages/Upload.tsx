@@ -22,7 +22,6 @@ const Upload = () => {
   const [preview, setPreview] = useState<string | null>(null);
   const [category, setCategory] = useState<string>('All');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<{ name: string; style: string; icon?: string } | null>(null);
   // Thumbnail selection removed, handled by backend or default
   const { toast } = useToast();
   const { user } = useAuth();
@@ -33,7 +32,6 @@ const Upload = () => {
   useEffect(() => {
     if (location.state?.file) setFile(location.state.file);
     if (location.state?.preview) setPreview(location.state.preview);
-    if (location.state?.filter) setSelectedFilter(location.state.filter);
   }, [location.state]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, mode: 'camera' | 'gallery') => {
@@ -279,6 +277,7 @@ const Upload = () => {
       setDescription("");
       setPreview(null);
       setCaptureMode('none');
+      setShowCameraModal(false);
     } catch (error: any) {
       console.error('Upload error:', error);
       
@@ -343,22 +342,16 @@ const Upload = () => {
         <Card className="p-8 border-2 border-dashed border-border hover:border-primary transition-colors">
           <div className="text-center">
             {preview ? (
-              <div className="mb-4 flex flex-col items-center">
+              <div className="mb-4">
                 {file?.type.startsWith('video/') ? (
-                  <>
-                    <video
-                      src={preview}
-                      className="max-w-full h-64 mx-auto rounded-lg"
-                      controls
-                      style={{ filter: selectedFilter?.style ? FILTER_CSS[selectedFilter.style] : undefined }}
-                    />
-                    <Button variant="outline" className="mt-2" onClick={() => navigate(-1)}>
-                      Re-Capture
-                    </Button>
-                  </>
+                  <video 
+                    src={preview} 
+                    className="max-w-full h-64 mx-auto rounded-lg"
+                    controls
+                  />
                 ) : (
-                  <img
-                    src={preview}
+                  <img 
+                    src={preview} 
                     alt="Preview"
                     className="max-w-full h-64 mx-auto rounded-lg object-cover"
                   />
