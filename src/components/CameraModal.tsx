@@ -4,6 +4,12 @@ import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
 import { X, Circle, Video, RefreshCw, Zap, User, Check, Music, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 // Placeholder filter list (to be replaced with real filter logic)
 const FILTERS = [
@@ -94,6 +100,95 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filterListRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  // 1. Add upload form state and logic at the top of CameraModal
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [category, setCategory] = useState('All');
+
+  const handleUpload = async () => {
+    if (!videoFile || !user || !title.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please record a video and add a title",
+        variant: "destructive"
+      });
+      return;
+    }
+    setUploading(true);
+    try {
+      // Generate thumbnail
+      let thumbnailUrl = '';
+      if (videoFile.type.startsWith('video/')) {
+        // ... thumbnail generation logic can be added here if needed ...
+      }
+      // Upload video file to new bucket
+      const fileExt = videoFile.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const { data, error } = await supabase.storage
+        .from('limeytt-uploads')
+        .upload(fileName, videoFile);
+      if (error) {
+        toast({
+          title: "File Too Large",
+          description: "Your video is too large. The maximum allowed size is 50 MB.",
+          variant: "destructive"
+        });
+        setUploading(false);
+        return;
+      }
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('limeytt-uploads')
+        .getPublicUrl(fileName);
+      // Fetch username and avatar_url from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('username, avatar_url')
+        .eq('user_id', user.id)
+        .single();
+      if (profileError || !profile) {
+        throw new Error('Could not fetch user profile for video upload.');
+      }
+      // Insert metadata into videos table
+      const { data: insertData, error: dbError } = await supabase.from('videos').insert({
+        title,
+        description,
+        video_url: publicUrl,
+        thumbnail_url: thumbnailUrl,
+        user_id: user.id,
+        category,
+        username: profile.username,
+        avatar_url: profile.avatar_url,
+      }).select();
+      if (dbError) {
+        throw dbError;
+      }
+      toast({
+        title: "Upload Successful! 🎉",
+        description: "Your content has been uploaded to Limey",
+        className: "bg-green-600 text-white border-green-700"
+      });
+      // Reset form
+      setVideoFile(null);
+      setVideoUrl(null);
+      setTitle("");
+      setDescription("");
+      setCategory('All');
+      onClose();
+    } catch (error: any) {
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Something went wrong",
+        variant: "destructive"
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // When modal opens, trigger device camera
   useEffect(() => {
@@ -195,8 +290,9 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
   // Handler for confirm (tick) button
   const handleConfirmEdits = () => {
     if (videoFile && videoUrl) {
-      // Navigate to upload page, passing video file and preview URL via state
-      navigate('/upload', { state: { file: videoFile, preview: videoUrl } });
+      // Navigate to CreateVideoPage, passing video file and preview URL via state
+      navigate('/create-video', { state: { file: videoFile, preview: videoUrl } });
+      onClose();
     }
   };
 
@@ -293,7 +389,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
         {/* Right-side vertical icons */}
         <div className="absolute right-4 top-32 flex flex-col gap-4 z-10">
           <button className="bg-black/40 rounded-full p-2 text-white"><User size={22} /></button>
-          <button className="bg-black/40 rounded-full p-2 text-white" onClick={handleConfirmEdits}><Check size={22} /></button>
+          {/* 2. Remove the tick (confirm) button from the right-side vertical menu */}
           <button className="bg-black/40 rounded-full p-2 text-white flex items-center justify-center">
             <Music size={22} />
             <Plus size={16} style={{ marginLeft: '-8px', marginTop: '-8px' }} />
@@ -311,6 +407,86 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
           </div>
           {error && <div className="text-red-400 mt-2 text-center absolute bottom-24 w-full">{error}</div>}
         </div>
+      )}
+      {/* 3. Add the upload form below the filter carousel and video preview */}
+      {videoUrl && (
+        <Card className="mt-6 p-6 max-w-md mx-auto">
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Title *
+              </label>
+              <Input
+                placeholder="Give your content a catchy title..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={100}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {title.length}/100 characters
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Category
+              </label>
+              <select
+                className="w-full border rounded px-3 py-2 bg-background text-foreground"
+                value={category || 'All'}
+                onChange={e => setCategory(e.target.value)}
+                required
+              >
+                <option value="All">All</option>
+                <option value="Soca">Soca</option>
+                <option value="Dancehall">Dancehall</option>
+                <option value="Carnival">Carnival</option>
+                <option value="Comedy">Comedy</option>
+                <option value="Dance">Dance</option>
+                <option value="Music">Music</option>
+                <option value="Local News">Local News</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-2 block">
+                Description
+              </label>
+              <Textarea
+                placeholder="Tell viewers about your content..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={500}
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {description.length}/500 characters
+              </p>
+            </div>
+            <div className="flex space-x-3 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setVideoFile(null);
+                  setVideoUrl(null);
+                  setTitle("");
+                  setDescription("");
+                  setCategory('All');
+                  onClose();
+                }}
+                disabled={uploading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="neon"
+                onClick={handleConfirmEdits}
+                disabled={uploading || !title.trim()}
+                className="flex-1"
+              >
+                {uploading ? "Uploading..." : "Share to Limey 🚀"}
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
     </div>,
     document.body

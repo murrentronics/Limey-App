@@ -78,15 +78,7 @@ const Upload = () => {
   };
 
   const handleCameraVideo = (videoFile: File, previewUrl: string) => {
-    setFile(videoFile);
-    setPreview(previewUrl);
-    setTitle("");
-    setDescription("");
-    setCaptureMode('camera');
-    setShowCameraModal(false);
-    // Optionally: auto-generate title from filename
-    const name = videoFile.name.split('.')[0];
-    setTitle(name.charAt(0).toUpperCase() + name.slice(1));
+    navigate('/create-video', { state: { file: videoFile, preview: previewUrl } });
   };
 
   // Utility to extract video duration only
