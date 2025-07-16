@@ -28,6 +28,8 @@ const Upload = () => {
   const [captureMode, setCaptureMode] = useState<'none' | 'camera' | 'gallery'>('none');
   const navigate = useNavigate();
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+  const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (location.state?.file) setFile(location.state.file);
@@ -179,22 +181,33 @@ const Upload = () => {
       if (file.type.startsWith('video/')) {
         duration = await extractVideoDuration(file);
         
-        // Generate thumbnail
-        try {
-          const thumbnailBlob = await generateThumbnail(file);
-          const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
-          const thumbnailFileName = `${user.id}/thumbnails/${Date.now()}.jpg`;
-          
-          const { error: thumbnailError } = await supabase.storage
+        // If user picked a custom cover image, upload it
+        if (coverImageFile) {
+          const coverFileName = `${user.id}/thumbnails/cover_${Date.now()}.jpg`;
+          const { error: coverError } = await supabase.storage
             .from('limeytt-uploads')
-            .upload(thumbnailFileName, thumbnailFile);
-          
-          if (!thumbnailError) {
-            thumbnailUrl = thumbnailFileName;
+            .upload(coverFileName, coverImageFile);
+          if (!coverError) {
+            thumbnailUrl = coverFileName;
+          } else {
+            toast({ title: "Cover upload failed", description: coverError.message, variant: "destructive" });
           }
-        } catch (thumbnailError) {
-          console.warn('Failed to generate thumbnail:', thumbnailError);
-          // Continue without thumbnail
+        } else {
+          // Generate thumbnail from video
+          try {
+            const thumbnailBlob = await generateThumbnail(file);
+            const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
+            const thumbnailFileName = `${user.id}/thumbnails/${Date.now()}.jpg`;
+            const { error: thumbnailError } = await supabase.storage
+              .from('limeytt-uploads')
+              .upload(thumbnailFileName, thumbnailFile);
+            if (!thumbnailError) {
+              thumbnailUrl = thumbnailFileName;
+            }
+          } catch (thumbnailError) {
+            console.warn('Failed to generate thumbnail:', thumbnailError);
+            // Continue without thumbnail
+          }
         }
       }
 
@@ -270,6 +283,8 @@ const Upload = () => {
       setPreview(null);
       setCaptureMode('none');
       setShowCameraModal(false);
+      setCoverImageFile(null);
+      setCoverImagePreview(null);
     } catch (error: any) {
       console.error('Upload error:', error);
       
@@ -418,6 +433,58 @@ const Upload = () => {
         {file && (
           <Card className="mt-6 p-6">
             <div className="space-y-4">
+              {/* Cover Image Selection */}
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  Cover Image
+                </label>
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="w-24 h-36 bg-black rounded overflow-hidden flex items-center justify-center border border-border">
+                    {coverImagePreview ? (
+                      <img src={coverImagePreview} alt="Cover Preview" className="w-full h-full object-cover" />
+                    ) : preview ? (
+                      <video src={preview} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-white text-xs">No Cover</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      id="cover-image-input"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setCoverImageFile(file);
+                          setCoverImagePreview(URL.createObjectURL(file));
+                        }
+                      }}
+                    />
+                    <label htmlFor="cover-image-input">
+                      <Button variant="outline" className="cursor-pointer">
+                        Choose Cover Image
+                      </Button>
+                    </label>
+                    {coverImageFile && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setCoverImageFile(null);
+                          setCoverImagePreview(null);
+                        }}
+                      >
+                        Use Default Thumbnail
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Choose a custom cover image or use the default video thumbnail.
+                </p>
+              </div>
 
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">

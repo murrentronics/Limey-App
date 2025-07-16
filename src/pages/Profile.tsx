@@ -726,12 +726,28 @@ const Profile = () => {
               {userVideos.map((video, idx) => (
                 <Card
                   key={video.id}
-                  className="relative aspect-[9/16] cursor-pointer group bg-black/10"
+                  className="relative aspect-[9/16] cursor-pointer group bg-black/10 overflow-hidden"
                   onClick={() => {
                     setCurrentVideoIndex(idx);
                     setShowVideoModal(true);
                   }}
                 >
+                  {/* Thumbnail image or fallback */}
+                  {video.thumbnail_url ? (
+                    <img
+                      src={
+                        video.thumbnail_url.startsWith('http')
+                          ? video.thumbnail_url
+                          : supabase.storage.from('limeytt-uploads').getPublicUrl(video.thumbnail_url).data.publicUrl
+                      }
+                      alt={video.title}
+                      className="w-full h-full object-cover rounded"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">
+                      No Cover
+                    </div>
+                  )}
                   {/* 3-dots menu - Only show for own videos */}
                   {isOwnProfile && (
                     <div className="absolute top-2 right-2 z-10">

@@ -89,7 +89,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
   const webcamRef = useRef<Webcam>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [recording, setRecording] = useState(false);
-  const [filterIdx, setFilterIdx] = useState(0); // default to 0 (Cosmic)
   const [chunks, setChunks] = useState<Blob[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [durationIdx, setDurationIdx] = useState(1); // default to 60s
@@ -98,7 +97,6 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const filterListRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   // 1. Add upload form state and logic at the top of CameraModal
@@ -225,72 +223,8 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
     }
   }, [open]);
 
-  // Center the first filter (Cosmic) on modal open
-  useEffect(() => {
-    if (open && videoUrl && filterListRef.current) {
-      // Wait for DOM to render
-      setTimeout(() => {
-        filterListRef.current.scrollTo({ left: 0, behavior: 'auto' });
-      }, 0);
-    }
-  }, [open, videoUrl]);
-
-  // Update filterIdx based on scroll position
-  const handleFilterScroll = useCallback(() => {
-    if (!filterListRef.current) return;
-    const container = filterListRef.current;
-    const containerRect = container.getBoundingClientRect();
-    let minDiff = Infinity;
-    let selectedIdx = 0;
-    for (let i = 0; i < container.children.length; i++) {
-      const child = container.children[i] as HTMLElement;
-      const childRect = child.getBoundingClientRect();
-      const childCenter = childRect.left + childRect.width / 2;
-      const containerCenter = containerRect.left + containerRect.width / 2;
-      const diff = Math.abs(childCenter - containerCenter);
-      if (diff < minDiff) {
-        minDiff = diff;
-        selectedIdx = i;
-      }
-    }
-    if (selectedIdx !== filterIdx) setFilterIdx(selectedIdx);
-  }, [filterIdx]);
-
-  const handleStartRecording = () => {
-    setChunks([]);
-    setRecording(true);
-    const stream = webcamRef.current?.stream;
-    if (stream) {
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) setChunks((prev) => [...prev, e.data]);
-      };
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        const file = new File([blob], `video_${Date.now()}.webm`, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        onVideoCaptured(file, url);
-      };
-      mediaRecorder.start();
-    } else {
-      setError('Camera not available');
-    }
-  };
-
-  const handleStopRecording = () => {
-    setRecording(false);
-    mediaRecorderRef.current?.stop();
-  };
-
-  // Handler for confirm (tick) button
-  const handleConfirmEdits = () => {
-    if (videoFile && videoUrl) {
-      // Navigate to CreateVideoPage, passing video file and preview URL via state
-      navigate('/create-video', { state: { file: videoFile, preview: videoUrl } });
-      onClose();
-    }
-  };
+  // Handler for confirm (tick) button - REMOVE
+  // const handleConfirmEdits = () => { ... }
 
   if (!open) return null;
 
@@ -330,56 +264,8 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
           </div>
         )}
         {/* Overlay filter name */}
-        {videoUrl && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1 rounded-full text-white text-sm font-semibold z-10">
-            {FILTERS[filterIdx].name}
-          </div>
-        )}
         {/* Filter Carousel - floating above video, just above bottom nav, no overlay */}
-        {videoUrl && (
-          <div className="fixed left-0 right-0 z-[99999] flex items-center justify-center pointer-events-none" style={{bottom: '70px'}}>
-            <div className="w-full overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <div
-                ref={filterListRef}
-                className="flex gap-3 px-2 min-w-max relative scrollbar-thin scrollbar-thumb-gray-500"
-                style={{ pointerEvents: 'auto', scrollSnapType: 'x mandatory', paddingLeft: 24, paddingRight: 24 }}
-                onScroll={handleFilterScroll}
-              >
-                {FILTERS.map((filter, idx) => (
-                  <div
-                    key={filter.name + idx}
-                    className={`flex flex-col items-center transition-transform duration-200 px-1 flex-shrink-0 ${idx === filterIdx ? 'scale-125 z-20' : 'opacity-60 z-10'}`}
-                    style={{ minWidth: 60, scrollSnapAlign: 'center', paddingTop: 9, paddingBottom: 8 }}
-                    onClick={() => setFilterIdx(idx)}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center mb-1"
-                      style={filter.style === 'blank'
-                        ? { background: '#000', border: '2px solid #000' }
-                        : { background: 'rgba(255,255,255,0.1)', border: idx === filterIdx ? '2px solid var(--primary)' : '2px solid rgba(255,255,255,0.2)' }
-                      }
-                    >
-                      {filter.style !== 'blank' && (
-                        <img src={filter.icon || FILTER_THUMB_PLACEHOLDER} alt={filter.name} className="w-full h-full object-cover" />
-                      )}
-                    </div>
-                    <span
-                      className="text-xs whitespace-nowrap"
-                      style={filter.style === 'blank'
-                        ? { color: '#000' }
-                        : { color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)', background: 'rgba(0,0,0,0.3)', borderRadius: 4, padding: '0 4px' }
-                      }
-                    >
-                      {filter.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Filter Carousel - floating above video, just above bottom nav, no overlay */}
         {/* Right-side vertical icons */}
         <div className="absolute right-4 top-32 flex flex-col gap-4 z-10">
           <button className="bg-black/40 rounded-full p-2 text-white"><User size={22} /></button>
@@ -387,16 +273,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ open, onClose, onVideoCapture
             <Music size={22} />
             <Plus size={16} style={{ marginLeft: '-8px', marginTop: '-8px' }} />
           </button>
-          {videoUrl && (
-            <button
-              className="bg-green-600 hover:bg-green-700 rounded-full p-2 text-white flex items-center justify-center shadow-lg border-2 border-white"
-              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
-              onClick={handleConfirmEdits}
-              title="Confirm and continue"
-            >
-              <Check size={28} />
-            </button>
-          )}
+          {/* In the JSX, remove all filter UI and the green tick button */}
         </div>
       </div>
       {/* Controls on black padding at bottom */}
