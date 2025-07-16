@@ -72,8 +72,27 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
         loop
         muted={globalMuted}
         playsInline
+        controls={false}
         className={className}
+        style={{ pointerEvents: 'auto' }}
       />
+      <style>{`
+        video::-webkit-media-controls {
+          display: none !important;
+        }
+        video::-webkit-media-controls-enclosure {
+          display: none !important;
+        }
+        video::-webkit-media-controls-panel {
+          display: none !important;
+        }
+        video::-webkit-media-controls-play-button {
+          display: none !important;
+        }
+        video::-webkit-media-controls-start-playback-button {
+          display: none !important;
+        }
+      `}</style>
       {isVisible && !isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center z-20">
           <button
