@@ -34,9 +34,6 @@ export default function Wallet() {
   const [walletLinked, setWalletLinked] = useState<boolean | null>(null);
   const [linkedWalletEmail, setLinkedWalletEmail] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [monthlyWithdrawals, setMonthlyWithdrawals] = useState<number>(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [transactionsPerPage] = useState(100);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
@@ -70,10 +67,6 @@ export default function Wallet() {
         console.error("Error fetching transactions:", transactionsError);
       } else {
         setTransactions(transactionsData);
-        const monthlyWithdrawals = transactionsData
-          .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
-          .reduce((acc, tx) => acc + tx.amount, 0);
-        setMonthlyWithdrawals(monthlyWithdrawals);
       }
     } catch (err: any) {
       setError(err.message);
@@ -98,6 +91,10 @@ export default function Wallet() {
       setLoading(false);
       return;
     }
+
+    const monthlyWithdrawals = transactions
+      .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
+      .reduce((acc, tx) => acc + tx.amount, 0);
 
     if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
       setError(`This transaction would exceed your monthly debit transaction limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
@@ -284,9 +281,7 @@ export default function Wallet() {
             Transaction History
           </h2>
           <div className="space-y-2">
-            {transactions
-              .slice((currentPage - 1) * transactionsPerPage, currentPage * transactionsPerPage)
-              .map((tx) => (
+            {transactions.map((tx) => (
               <div
                 key={tx.id}
                 className="bg-black/90 p-4 rounded-lg border border-white/10 flex justify-between items-center"
@@ -312,19 +307,6 @@ export default function Wallet() {
               </div>
             ))}
           </div>
-        </div>
-        <div className="flex justify-center mt-4">
-          {Array.from({ length: Math.ceil(transactions.length / transactionsPerPage) }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrentPage(i + 1)}
-              className={`mx-1 px-3 py-1 rounded-full ${
-                currentPage === i + 1 ? "bg-green-500 text-white" : "bg-gray-800"
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
         </div>
       </div>
     </div>
