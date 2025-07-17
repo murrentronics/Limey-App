@@ -13,7 +13,8 @@ if (!defined('ABSPATH')) {
 add_action('rest_api_init', function () {
     remove_filter('rest_pre_serve_request', 'rest_send_cors_headers');
     add_filter('rest_pre_serve_request', function ($value) {
-        header('Access-Control-Allow-Origin: http://192.168.0.233:8080');
+        // In a production environment, you should restrict this to your app's domain
+        header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Credentials: true');
         return $value;
     });
