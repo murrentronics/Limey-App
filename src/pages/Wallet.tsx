@@ -92,7 +92,11 @@ export default function Wallet() {
       return;
     }
 
-    if (triniCredits + amountValue > limits.max_monthly_transactions) {
+    const monthlyWithdrawals = transactions
+      .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
+      .reduce((acc, tx) => acc + tx.amount, 0);
+
+    if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
       setError(`This transaction would exceed your monthly debit transaction limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
       setLoading(false);
       return;
