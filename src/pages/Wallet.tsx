@@ -96,13 +96,12 @@ export default function Wallet() {
       setLoading(false);
       return;
     }
-    
+
     if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
       setError(`This transaction would exceed your monthly debit transaction limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
       setLoading(false);
       return;
     }
-
 
     if (triniCredits + amountValue > limits.max_wallet_balance) {
       setError(`This transaction would exceed your maximum wallet balance of TT$${limits.max_wallet_balance.toLocaleString()}`);
