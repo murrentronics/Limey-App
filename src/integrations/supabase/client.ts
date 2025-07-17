@@ -30,12 +30,6 @@ export async function getLinkedWallet(userId: string) {
     .from('wallet_links')
     .select('wallet_email')
     .eq('user_id', userId)
-    .single()
-    .then(response => {
-      if (response.error && response.error.message.includes('multiple (or no) rows')) {
-        return { data: null, error: null };
-      }
-      return response;
-    });
+    .single();
   return { data, error };
 }
