@@ -97,7 +97,7 @@ export default function Wallet() {
       .reduce((acc, tx) => acc + tx.amount, 0);
 
     if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
-      setError(`This transaction would exceed your monthly withdrawal limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
+      setError(`This transaction would exceed your monthly debit transaction limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -109,7 +109,7 @@ export default function Wallet() {
     }
 
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your account type (${limits.primary_role || 'customer'}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your TTPayPal account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -153,7 +153,7 @@ export default function Wallet() {
     }
 
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your account type (${limits.primary_role || 'customer'}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your TTPayPal account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
