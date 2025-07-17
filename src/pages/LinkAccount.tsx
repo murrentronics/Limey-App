@@ -6,7 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { linkWallet as linkTTPaypalWallet, getUserLimits } from "@/lib/ttpaypalApi";
 import { wpLogin, storeWpToken, clearWpToken } from "@/lib/jwtAuth";
 import { useAuth } from "@/hooks/useAuth";
-import { linkWallet as linkSupabaseWallet, getLinkedWallet } from "@/integrations/supabase/client";
+import { linkWallet as linkSupabaseWallet, getLinkedWallet, supabase } from "@/integrations/supabase/client";
+import bcrypt from "bcryptjs";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
