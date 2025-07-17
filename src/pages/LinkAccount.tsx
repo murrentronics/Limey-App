@@ -60,6 +60,26 @@ export default function LinkAccount() {
         setLoading(false);
         return;
       }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('password')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile) {
+        setError("Could not verify your password.");
+        setLoading(false);
+        return;
+      }
+
+      const passwordMatches = await bcrypt.compare(wpPassword, profile.password);
+
+      if (!passwordMatches) {
+        setError("The password must match your Limey account password.");
+        setLoading(false);
+        return;
+      }
       // 1. Login to WordPress, get JWT
       const wpRes = await wpLogin(wpEmail, wpPassword);
       storeWpToken(wpRes.token);
