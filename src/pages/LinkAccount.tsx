@@ -6,8 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { linkWallet as linkTTPaypalWallet, getUserLimits } from "@/lib/ttpaypalApi";
 import { wpLogin, storeWpToken, clearWpToken } from "@/lib/jwtAuth";
 import { useAuth } from "@/hooks/useAuth";
-import { linkWallet as linkSupabaseWallet, getLinkedWallet, supabase } from "@/integrations/supabase/client";
-import bcrypt from "bcryptjs";
+import { linkWallet as linkSupabaseWallet, getLinkedWallet } from "@/integrations/supabase/client";
+import { verifyPassword } from "@/lib/auth";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -23,7 +23,6 @@ export default function LinkAccount() {
   const { user } = useAuth();
   const [alreadyLinked, setAlreadyLinked] = useState(false);
   const [linkedEmail, setLinkedEmail] = useState("");
-  const { user: authUser } = useAuth();
 
   useEffect(() => {
     const checkWalletLink = async () => {
@@ -63,49 +62,15 @@ export default function LinkAccount() {
         return;
       }
 
+      const passwordIsValid = await verifyPassword(user.id, wpPassword);
+
+      if (!passwordIsValid) {
+        setError("The password must match your Limey account password.");
+        setLoading(false);
+        return;
+      }
       // 1. Login to WordPress, get JWT
       const wpRes = await wpLogin(wpEmail, wpPassword);
-      storeWpToken(wpRes.token);
-
-      // 2. Call wallet link API (requires passcode)
-      await linkTTPaypalWallet({ email: wpEmail, password: wpPassword, passcode: "" });
-
-      const { data: userPassword, error: userPasswordError } = await supabase
-        .from('user_passwords')
-        .select('password')
-        .eq('id', user.id)
-        .single();
-      if (userPasswordError || !userPassword) {
-        setError("Could not verify your password.");
-        setLoading(false);
-        return;
-      }
-
-      const passwordMatches = await bcrypt.compare(wpPassword, userPassword.password);
-
-      if (!passwordMatches) {
-        setError("The password must match your Limey account password.");
-        setLoading(false);
-        return;
-      }
-      storeWpToken(wpRes.token);
-
-      // 2. Call wallet link API (requires passcode)
-      await linkTTPaypalWallet({ email: wpEmail, password: wpPassword, passcode: "" });
-
-      if (userPasswordError || !userPassword) {
-        setError("Could not verify your password.");
-        setLoading(false);
-        return;
-      }
-
-      const passwordMatches = await bcrypt.compare(wpPassword, userPassword.password);
-
-      if (!passwordMatches) {
-        setError("The password must match your Limey account password.");
-        setLoading(false);
-        return;
-      }
       storeWpToken(wpRes.token);
 
       // 2. Call wallet link API (requires passcode)
