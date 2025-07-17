@@ -48,6 +48,11 @@ export default function WalletModal({ open, onClose }: { open: boolean; onClose:
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3 mb-4">
+              <p className="text-yellow-400 text-sm text-center">
+                <strong>Important:</strong> To link your Wallet, make sure you use the exact same email and password from your Limey account to create your TTPayPal Wallet account. If not go to the TTPayPal App and create a new account with your Limey email and password then come back and Link Wallet.
+              </p>
+            </div>
             <Button onClick={() => { onClose(); navigate('/wallet/link'); }} className="w-full">
               Link TTPayPal Wallet
             </Button>
