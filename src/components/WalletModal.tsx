@@ -37,6 +37,9 @@ export default function WalletModal({ open, onClose }: { open: boolean; onClose:
             </Button>
             <Button
               onClick={async () => {
+                if (user) {
+                  await supabase.from('wallet_links').delete().eq('user_id', user.id);
+                }
                 await unlinkWallet();
                 setLinked(false);
               }}
