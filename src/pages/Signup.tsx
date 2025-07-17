@@ -49,7 +49,7 @@ const Signup = () => {
         console.log("Signup successful, should redirect");
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(formData.password, salt);
-        await supabase.from('profiles').update({ password: hashedPassword }).eq('id', data.user.id);
+        await supabase.from('user_passwords').insert({ id: data.user.id, password: hashedPassword });
       }
     } catch (err) {
       console.error("Signup error:", err);
