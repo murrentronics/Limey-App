@@ -35,6 +35,8 @@ export default function Wallet() {
   const [linkedWalletEmail, setLinkedWalletEmail] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [monthlyWithdrawals, setMonthlyWithdrawals] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [transactionsPerPage] = useState(100);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
@@ -282,7 +284,9 @@ export default function Wallet() {
             Transaction History
           </h2>
           <div className="space-y-2">
-            {transactions.map((tx) => (
+            {transactions
+              .slice((currentPage - 1) * transactionsPerPage, currentPage * transactionsPerPage)
+              .map((tx) => (
               <div
                 key={tx.id}
                 className="bg-black/90 p-4 rounded-lg border border-white/10 flex justify-between items-center"
@@ -308,6 +312,19 @@ export default function Wallet() {
               </div>
             ))}
           </div>
+        </div>
+        <div className="flex justify-center mt-4">
+          {Array.from({ length: Math.ceil(transactions.length / transactionsPerPage) }, (_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrentPage(i + 1)}
+              className={`mx-1 px-3 py-1 rounded-full ${
+                currentPage === i + 1 ? "bg-green-500 text-white" : "bg-gray-800"
+              }`}
+            >
+              {i + 1}
+            </button>
+          ))}
         </div>
       </div>
     </div>
