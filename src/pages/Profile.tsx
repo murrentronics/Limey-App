@@ -11,7 +11,6 @@ import { MoreVertical, ChevronDown, X, Settings, MessageSquare, ArrowLeft, Send,
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import VideoPlayer from "@/components/VideoPlayer";
 import { useToast } from "@/hooks/use-toast";
-import WalletModal from "@/components/WalletModal";
 import LinkAccount from "@/pages/LinkAccount";
 import { getTrincreditsBalance } from "@/lib/ttpaypalApi";
 
@@ -41,19 +40,10 @@ const Profile = () => {
     videoUrl: string;
     thumbnailUrl?: string;
   } | null>(null);
-  const [showWalletModal, setShowWalletModal] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   const location = useLocation();
 
-  useEffect(() => {
-    if (location.pathname === "/profile" && showWalletModal) {
-      setRefreshKey((k) => k + 1);
-      setShowWalletModal(false); // Optionally close modal after refresh
-    }
-    // eslint-disable-next-line
-  }, [location.pathname]);
 
   // Real-time subscription for video updates
   useEffect(() => {
@@ -487,7 +477,7 @@ const Profile = () => {
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
               <>
-                <Button variant="ghost" size="sm" onClick={() => setShowWalletModal(true)}>
+                <Button variant="ghost" size="sm" onClick={() => navigate('/wallet')}>
                   <Wallet size={16} />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
@@ -862,7 +852,6 @@ const Profile = () => {
 
       {/* Bottom Navigation */}
       <BottomNavigation />
-      <WalletModal open={showWalletModal} onClose={() => setShowWalletModal(false)} refreshKey={refreshKey} />
     </div>
   );
 };
