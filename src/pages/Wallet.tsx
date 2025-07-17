@@ -92,6 +92,12 @@ export default function Wallet() {
       return;
     }
 
+    if (amountValue > limits.per_transaction_limit) {
+      setError(`Maximum per transaction for your account type (${limits.user_role}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setLoading(false);
+      return;
+    }
+
     try {
       const depositResult = await depositToApp({ amount: amountValue });
       await recordTrincreditsTransaction({
@@ -126,6 +132,12 @@ export default function Wallet() {
 
     if (amountValue > triniCredits) {
       setError("Insufficient TriniCredits balance");
+      setLoading(false);
+      return;
+    }
+
+    if (amountValue > limits.per_transaction_limit) {
+      setError(`Maximum per transaction for your account type (${limits.user_role}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -187,6 +199,15 @@ export default function Wallet() {
                 TTPayPal Email: {linkedWalletEmail}
               </div>
             )}
+            <div className="text-xs text-gray-400 mt-2">
+              Max per transaction: TT${limits.per_transaction_limit.toLocaleString()}
+            </div>
+            <div className="text-xs text-gray-400">
+              Max wallet balance: TT${limits.max_wallet_balance.toLocaleString()}
+            </div>
+            <div className="text-xs text-gray-400">
+              Monthly limit: TT${limits.max_monthly_transactions.toLocaleString()}
+            </div>
           </div>
 
           <Tabs defaultValue="deposit" className="w-full">

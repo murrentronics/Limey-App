@@ -13,8 +13,16 @@ if (!defined('ABSPATH')) {
 add_action('rest_api_init', function () {
     remove_filter('rest_pre_serve_request', 'rest_send_cors_headers');
     add_filter('rest_pre_serve_request', function ($value) {
-        // In a production environment, you should restrict this to your app's domain
-        header('Access-Control-Allow-Origin: *');
+        $origin = get_http_origin();
+        $allowed_origins = [
+            'http://192.168.0.233:8080',
+            'https://limey-app.lovable.app'
+        ];
+
+        if (in_array($origin, $allowed_origins)) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+        }
+
         header('Access-Control-Allow-Credentials: true');
         return $value;
     });
@@ -93,7 +101,19 @@ add_action('rest_api_init', function () {
         'callback' => 'ttpaypal_rest_unlink_wallet',
         'permission_callback' => 'is_user_logged_in',
     ]);
+
+    register_rest_route('ttpaypal/v1', '/wallet', [
+        'methods' => 'GET',
+        'callback' => 'ttpaypal_rest_wallet_page',
+        'permission_callback' => 'is_user_logged_in',
+    ]);
 });
+
+function ttpaypal_rest_wallet_page() {
+    // This is a placeholder function.
+    // You can add any logic here that you want to execute when the /wallet endpoint is called.
+    return rest_ensure_response(['success' => true, 'message' => 'Welcome to your wallet!']);
+}
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
