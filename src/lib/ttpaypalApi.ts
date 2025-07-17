@@ -223,4 +223,20 @@ export async function recordTrincreditsTransaction({
     console.error('Error recording TriniCredits transaction:', error);
     throw new Error('Failed to record transaction');
   }
-} 
+}
+
+export async function getTransactionHistory(userId: string) {
+  const { supabase } = await import('@/integrations/supabase/client');
+  const { data, error } = await supabase
+    .from('trincredits_transactions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching transaction history:', error);
+    throw new Error('Failed to fetch transaction history');
+  }
+
+  return data;
+}

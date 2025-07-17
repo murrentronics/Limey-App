@@ -92,8 +92,34 @@ export default function Wallet() {
       return;
     }
 
+    const monthlyWithdrawals = transactions
+      .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
+      .reduce((acc, tx) => acc + tx.amount, 0);
+
+    if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
+      setError(`This transaction would exceed your monthly withdrawal limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
+      setLoading(false);
+      return;
+    }
+
+    const monthlyWithdrawals = transactions
+      .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
+      .reduce((acc, tx) => acc + tx.amount, 0);
+
+    if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
+      setError(`This transaction would exceed your monthly withdrawal limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
+      setLoading(false);
+      return;
+    }
+
+    if (triniCredits + amountValue > limits.max_wallet_balance) {
+      setError(`This transaction would exceed your maximum wallet balance of TT$${limits.max_wallet_balance.toLocaleString()}`);
+      setLoading(false);
+      return;
+    }
+
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your account type (${limits.user_role}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your account type (${limits.primary_role || 'customer'}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -137,7 +163,7 @@ export default function Wallet() {
     }
 
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your account type (${limits.user_role}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your account type (${limits.primary_role || 'customer'}) is TT$${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }

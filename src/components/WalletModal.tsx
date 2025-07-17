@@ -104,8 +104,11 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
               </div>
             )}
             <div className="flex flex-col gap-3">
-              <Button onClick={() => { onClose(); navigate('/wallet'); }} className="w-full">
-                Go to Wallet
+              <Button onClick={() => { onClose(); navigate('/wallet/deposit'); }} className="w-full">
+                Deposit
+              </Button>
+              <Button onClick={() => { onClose(); navigate('/wallet/withdraw'); }} className="w-full" variant="outline">
+                Withdraw
               </Button>
             </div>
             <Button onClick={handleUnlink} className="w-full mt-4" variant="destructive" disabled={unlinking}>
