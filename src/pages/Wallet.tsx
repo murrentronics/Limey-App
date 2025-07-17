@@ -103,6 +103,7 @@ export default function Wallet() {
       return;
     }
 
+
     if (triniCredits + amountValue > limits.max_wallet_balance) {
       setError(`This transaction would exceed your maximum wallet balance of TT$${limits.max_wallet_balance.toLocaleString()}`);
       setLoading(false);
