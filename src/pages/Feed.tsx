@@ -110,6 +110,7 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onView
   return (
     <div className="relative w-full h-full">
       <video
+        key={src}
         ref={videoRef}
         src={src}
         loop
