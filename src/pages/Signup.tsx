@@ -43,13 +43,16 @@ const Signup = () => {
     setLoading(true);
     
     try {
-      const { data, error } = await signUp(formData.email, formData.password, formData.username);
+      const { error } = await signUp(formData.email, formData.password, formData.username);
       
-      if (!error && data.user) {
+      if (!error) {
+        const { user: authUser } = useAuth();
         console.log("Signup successful, should redirect");
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(formData.password, salt);
-        await supabase.from('user_passwords').insert({ id: data.user.id, password: hashedPassword });
+        if (authUser) {
+          await supabase.from('user_passwords').insert({ id: authUser.id, password: hashedPassword });
+        }
       }
     } catch (err) {
       console.error("Signup error:", err);
