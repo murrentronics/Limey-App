@@ -474,11 +474,6 @@ const Feed = () => {
             .update({ like_count: newLikeCount })
             .eq('id', videoId);
           
-          setVideos(prev => 
-            prev.map(video => 
-              video.id === videoId ? { ...video, like_count: newLikeCount } : video
-            )
-          );
         }
       } else {
         await supabase
