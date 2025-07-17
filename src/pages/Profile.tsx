@@ -13,6 +13,7 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { useToast } from "@/hooks/use-toast";
 import LinkAccount from "@/pages/LinkAccount";
 import { getTrincreditsBalance } from "@/lib/ttpaypalApi";
+import NewWalletModal from "@/components/NewWalletModal";
 
 const Profile = () => {
   const { user, signOut } = useAuth();
@@ -41,6 +42,7 @@ const Profile = () => {
     thumbnailUrl?: string;
   } | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [showWalletModal, setShowWalletModal] = useState(false);
 
   const location = useLocation();
 
@@ -477,7 +479,7 @@ const Profile = () => {
           <div className="flex items-center space-x-2">
             {isOwnProfile ? (
               <>
-                <Button variant="ghost" size="sm" onClick={() => navigate('/wallet')}>
+                <Button variant="ghost" size="sm" onClick={() => setShowWalletModal(true)}>
                   <Wallet size={16} />
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
@@ -852,6 +854,7 @@ const Profile = () => {
 
       {/* Bottom Navigation */}
       <BottomNavigation />
+      <NewWalletModal open={showWalletModal} onClose={() => setShowWalletModal(false)} />
     </div>
   );
 };
