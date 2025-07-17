@@ -448,7 +448,7 @@ const Feed = () => {
 
   const handleLike = async (videoId: string) => {
     if (!user) return;
-    
+
     try {
       const { data: existingLike } = await supabase
         .from('video_likes')
@@ -463,9 +463,7 @@ const Feed = () => {
           .delete()
           .eq('video_id', videoId)
           .eq('user_id', user.id);
-        
-        setIsLiked(prev => ({ ...prev, [videoId]: false }));
-        
+
         const currentVideo = videos.find(v => v.id === videoId);
         if (currentVideo) {
           const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
@@ -473,9 +471,7 @@ const Feed = () => {
             .from('videos')
             .update({ like_count: newLikeCount })
             .eq('id', videoId);
-          
-          setVideos(prev => 
-            prev.map(video => 
+
               video.id === videoId ? { ...video, like_count: newLikeCount } : video
             )
           );
@@ -487,9 +483,7 @@ const Feed = () => {
             video_id: videoId,
             user_id: user.id
           });
-        
-        setIsLiked(prev => ({ ...prev, [videoId]: true }));
-        
+
         const currentVideo = videos.find(v => v.id === videoId);
         if (currentVideo) {
           const newLikeCount = (currentVideo.like_count || 0) + 1;
@@ -497,9 +491,7 @@ const Feed = () => {
             .from('videos')
             .update({ like_count: newLikeCount })
             .eq('id', videoId);
-          
-          setVideos(prev => 
-            prev.map(video => 
+
               video.id === videoId ? { ...video, like_count: newLikeCount } : video
             )
           );
