@@ -39,7 +39,6 @@ export default function WalletModal({ open, onClose }: { open: boolean; onClose:
               onClick={async () => {
                 await unlinkWallet();
                 setLinked(false);
-                onClose();
               }}
               className="w-full"
               variant="destructive"
