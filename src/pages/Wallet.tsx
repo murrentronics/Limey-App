@@ -34,6 +34,7 @@ export default function Wallet() {
   const [walletLinked, setWalletLinked] = useState<boolean | null>(null);
   const [linkedWalletEmail, setLinkedWalletEmail] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [monthlyWithdrawals, setMonthlyWithdrawals] = useState<number>(0);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
@@ -67,6 +68,10 @@ export default function Wallet() {
         console.error("Error fetching transactions:", transactionsError);
       } else {
         setTransactions(transactionsData);
+        const monthlyWithdrawals = transactionsData
+          .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
+          .reduce((acc, tx) => acc + tx.amount, 0);
+        setMonthlyWithdrawals(monthlyWithdrawals);
       }
     } catch (err: any) {
       setError(err.message);
@@ -91,16 +96,13 @@ export default function Wallet() {
       setLoading(false);
       return;
     }
-
-    const monthlyWithdrawals = transactions
-      .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
-      .reduce((acc, tx) => acc + tx.amount, 0);
-
+    
     if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
       setError(`This transaction would exceed your monthly debit transaction limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
       setLoading(false);
       return;
     }
+
 
     if (triniCredits + amountValue > limits.max_wallet_balance) {
       setError(`This transaction would exceed your maximum wallet balance of TT$${limits.max_wallet_balance.toLocaleString()}`);
