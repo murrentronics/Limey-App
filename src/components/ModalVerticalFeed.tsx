@@ -79,19 +79,10 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
         .delete()
         .eq('video_id', video.id)
         .eq('user_id', user.id);
-
-      setIsLiked((prev) => ({ ...prev, [video.id]: false }));
-      // Do NOT update like_count here; let DB update propagate
-
     } else {
       await supabase
         .from('video_likes')
         .insert({ video_id: video.id, user_id: user.id });
-
-
-      setIsLiked((prev) => ({ ...prev, [video.id]: true }));
-      // Do NOT update like_count here; let DB update propagate
-
     }
   };
 
