@@ -6,8 +6,6 @@ import { Eye, EyeOff } from "@/components/ui/password-eye-icons";
 import { Card } from "@/components/ui/card";
 import LimeyLogo from "@/components/LimeyLogo";
 import { useAuth } from "@/hooks/useAuth";
-import bcrypt from "bcryptjs";
-import { supabase } from "@/integrations/supabase/client";
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -46,13 +44,7 @@ const Signup = () => {
       const { error } = await signUp(formData.email, formData.password, formData.username);
       
       if (!error) {
-        const { user: authUser } = useAuth();
         console.log("Signup successful, should redirect");
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(formData.password, salt);
-        if (authUser) {
-          await supabase.from('user_passwords').insert({ id: authUser.id, password: hashedPassword });
-        }
       }
     } catch (err) {
       console.error("Signup error:", err);

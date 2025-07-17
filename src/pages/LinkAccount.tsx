@@ -7,7 +7,6 @@ import { linkWallet as linkTTPaypalWallet, getUserLimits } from "@/lib/ttpaypalA
 import { wpLogin, storeWpToken, clearWpToken } from "@/lib/jwtAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { linkWallet as linkSupabaseWallet, getLinkedWallet } from "@/integrations/supabase/client";
-import { verifyPassword } from "@/lib/auth";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -58,14 +57,6 @@ export default function LinkAccount() {
     try {
       if (user && user.email !== wpEmail) {
         setError("The email address must match your Limey account email address.");
-        setLoading(false);
-        return;
-      }
-
-      const passwordIsValid = await verifyPassword(user.id, wpPassword);
-
-      if (!passwordIsValid) {
-        setError("The password must match your Limey account password.");
         setLoading(false);
         return;
       }
