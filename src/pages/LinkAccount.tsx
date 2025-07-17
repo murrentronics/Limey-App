@@ -55,6 +55,11 @@ export default function LinkAccount() {
     setError("");
 
     try {
+      if (user && user.email !== wpEmail) {
+        setError("The email address must match your Limey account email address.");
+        setLoading(false);
+        return;
+      }
       // 1. Login to WordPress, get JWT
       const wpRes = await wpLogin(wpEmail, wpPassword);
       storeWpToken(wpRes.token);
