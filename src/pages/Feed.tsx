@@ -464,8 +464,6 @@ const Feed = () => {
           .eq('video_id', videoId)
           .eq('user_id', user.id);
 
-        setIsLiked(prev => ({ ...prev, [videoId]: false }));
-
         const currentVideo = videos.find(v => v.id === videoId);
         if (currentVideo) {
           const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
@@ -474,8 +472,6 @@ const Feed = () => {
             .update({ like_count: newLikeCount })
             .eq('id', videoId);
 
-          setVideos(prev =>
-            prev.map(video =>
               video.id === videoId ? { ...video, like_count: newLikeCount } : video
             )
           );
@@ -488,8 +484,6 @@ const Feed = () => {
             user_id: user.id
           });
 
-        setIsLiked(prev => ({ ...prev, [videoId]: true }));
-
         const currentVideo = videos.find(v => v.id === videoId);
         if (currentVideo) {
           const newLikeCount = (currentVideo.like_count || 0) + 1;
@@ -498,8 +492,6 @@ const Feed = () => {
             .update({ like_count: newLikeCount })
             .eq('id', videoId);
 
-          setVideos(prev =>
-            prev.map(video =>
               video.id === videoId ? { ...video, like_count: newLikeCount } : video
             )
           );
