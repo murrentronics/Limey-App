@@ -8,7 +8,6 @@ import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, S
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import React from "react";
-import { handleLike as handleLikeUtil } from "@/lib/likes";
 
 // --- AutoPlayVideo component ---
 const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onViewRecorded, ...props }) => {
@@ -449,7 +448,61 @@ const Feed = () => {
 
   const handleLike = async (videoId: string) => {
     if (!user) return;
-    await handleLikeUtil(videoId, user.id);
+    
+    try {
+      const { data: existingLike } = await supabase
+        .from('video_likes')
+        .select('*')
+        .eq('video_id', videoId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingLike) {
+        await supabase
+          .from('video_likes')
+          .delete()
+          .eq('video_id', videoId)
+          .eq('user_id', user.id);
+        
+        setIsLiked(prev => ({ ...prev, [videoId]: false }));
+        
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+          
+        }
+      } else {
+        await supabase
+          .from('video_likes')
+          .insert({
+            video_id: videoId,
+            user_id: user.id
+          });
+        
+        setIsLiked(prev => ({ ...prev, [videoId]: true }));
+        
+        const currentVideo = videos.find(v => v.id === videoId);
+        if (currentVideo) {
+          const newLikeCount = (currentVideo.like_count || 0) + 1;
+          await supabase
+            .from('videos')
+            .update({ like_count: newLikeCount })
+            .eq('id', videoId);
+          
+          setVideos(prev => 
+            prev.map(video => 
+              video.id === videoId ? { ...video, like_count: newLikeCount } : video
+            )
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error updating like status:', error);
+    }
   };
 
   const handleShare = async (video: any) => {

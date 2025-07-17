@@ -7,7 +7,6 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { handleLike as handleLikeUtil } from "@/lib/likes";
 
 const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -73,7 +72,22 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
 
   const handleLike = async (video) => {
     if (!user) return;
-    await handleLikeUtil(video.id, user.id);
+    const alreadyLiked = isLiked[video.id];
+    if (alreadyLiked) {
+      await supabase
+        .from('video_likes')
+        .delete()
+        .eq('video_id', video.id)
+        .eq('user_id', user.id);
+      setIsLiked((prev) => ({ ...prev, [video.id]: false }));
+      // Do NOT update like_count here; let DB update propagate
+    } else {
+      await supabase
+        .from('video_likes')
+        .insert({ video_id: video.id, user_id: user.id });
+      setIsLiked((prev) => ({ ...prev, [video.id]: true }));
+      // Do NOT update like_count here; let DB update propagate
+    }
   };
 
   const handleFollow = async (video) => {
