@@ -79,7 +79,7 @@ export default function LinkAccount() {
       });
       refresh();
       setTimeout(() => {
-        navigate("/profile");
+        navigate("/wallet");
       }, 3000);
     } catch (err: any) {
       // Show user-friendly error message
