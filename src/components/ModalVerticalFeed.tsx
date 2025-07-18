@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
 
 const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,6 +132,27 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
   const getUsername = (video) => video.profiles?.username || video.username || (video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown');
   const getAvatarUrl = (video) => video.profiles?.avatar_url || video.avatar_url || undefined;
 
+  const renderDescription = (desc) => {
+    if (!desc) return null;
+    return desc.split(/(#[\w-]+)/g).map((part, i) => {
+      if (/^#[\w-]+$/.test(part)) {
+        return (
+          <button
+            key={i}
+            className="inline-block text-green-400 hover:text-green-600 font-semibold px-1"
+            onClick={e => {
+              e.stopPropagation();
+              // TODO: Implement filter by hashtag
+            }}
+          >
+            {part}
+          </button>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <button
@@ -241,9 +263,16 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
                   {/* Caption */}
                   <div className="space-y-2 mt-2">
                     <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
-                    <p className="text-white/90 text-sm leading-relaxed break-words">
-                      {video.description || <span className="text-white/50 italic">No description</span>}
-                    </p>
+                    {/* Category badge */}
+                    {video.category && (
+                      <Badge className="bg-green-900 text-green-400 text-xs font-semibold mb-1">{video.category}</Badge>
+                    )}
+                    {/* Description with hashtags */}
+                    {video.description && (
+                      <p className="text-white/90 text-sm leading-relaxed break-words">
+                        {renderDescription(video.description)}
+                      </p>
+                    )}
                   </div>
                 </div>
                 {/* Actions */}
