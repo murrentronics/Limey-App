@@ -546,16 +546,22 @@ const Feed = () => {
         // Decrement counts atomically - removed due to type issues
         return false; // now unfollowed
       } else {
-        // Follow
-        await supabase
+        // Only insert if not already following
+        const { error } = await supabase
           .from('follows')
           .insert({
             follower_id: user.id,
             following_id: targetUserId
           });
-        setFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
-        // Increment counts atomically - removed due to type issues
-        return true; // now following
+        if (!error) {
+          setFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
+          return true; // now following
+        }
+        // If error is 409 or duplicate, ignore
+        if (error && error.code !== '23505' && error.status !== 409) {
+          console.error('Error following:', error);
+        }
+        return false;
       }
     } catch (error) {
       console.error('Error following/unfollowing:', error);

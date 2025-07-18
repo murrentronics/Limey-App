@@ -102,10 +102,25 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
         .eq('following_id', video.user_id);
       setFollowStatus((prev) => ({ ...prev, [video.user_id]: false }));
     } else {
-      await supabase
+      // Check for existing follow before inserting
+      const { data: existingFollow } = await supabase
         .from('follows')
-        .insert({ follower_id: user.id, following_id: video.user_id });
-      setFollowStatus((prev) => ({ ...prev, [video.user_id]: true }));
+        .select('*')
+        .eq('follower_id', user.id)
+        .eq('following_id', video.user_id)
+        .single();
+      if (!existingFollow) {
+        const { error } = await supabase
+          .from('follows')
+          .insert({ follower_id: user.id, following_id: video.user_id });
+        if (!error) {
+          setFollowStatus((prev) => ({ ...prev, [video.user_id]: true }));
+        }
+        // If error is 409 or duplicate, ignore
+        if (error && error.code !== '23505' && error.status !== 409) {
+          console.error('Error following:', error);
+        }
+      }
     }
   };
 

@@ -302,17 +302,25 @@ const Profile = () => {
         .update({ follower_count: Math.max(0, followerCount - 1) })
         .eq('user_id', profile.user_id);
     } else {
-      // Follow
-      await supabase
+      // Only insert if not already following
+      const { data: existingFollow } = await supabase
         .from('follows')
-        .insert({ follower_id: user.id, following_id: profile.user_id });
-      setIsFollowing(true);
-      setFollowerCount((prev) => prev + 1);
-      // Optionally update profile table follower_count in DB
-      await supabase
-        .from('profiles')
-        .update({ follower_count: followerCount + 1 })
-        .eq('user_id', profile.user_id);
+        .select('*')
+        .eq('follower_id', user.id)
+        .eq('following_id', profile.user_id)
+        .single();
+      if (!existingFollow) {
+        await supabase
+          .from('follows')
+          .insert({ follower_id: user.id, following_id: profile.user_id });
+        setIsFollowing(true);
+        setFollowerCount((prev) => prev + 1);
+        // Optionally update profile table follower_count in DB
+        await supabase
+          .from('profiles')
+          .update({ follower_count: followerCount + 1 })
+          .eq('user_id', profile.user_id);
+      }
     }
     setShowDropdown(false);
   };
