@@ -60,14 +60,8 @@ export default function LinkAccount() {
         setLoading(false);
         return;
       }
-      // 1. Login to WordPress, get JWT
-      const wpRes = await wpLogin(wpEmail, wpPassword);
-      storeWpToken(wpRes.token);
 
-      // 2. Call wallet link API (requires passcode)
-      await linkTTPaypalWallet({ email: wpEmail, password: wpPassword, passcode: "" });
-
-      // 3. Insert wallet link into Supabase wallet_links table
+      // 1. Insert wallet link into Supabase wallet_links table
       if (user?.id) {
         const { error: walletLinkError } = await linkSupabaseWallet(user.id, wpEmail);
         if (walletLinkError) {
@@ -91,17 +85,7 @@ export default function LinkAccount() {
         navigate("/profile");
       }, 3000);
     } catch (err: any) {
-      // Show user-friendly error message
-      if (err.message.includes('authentication') || 
-          err.message.includes('Invalid') || 
-          err.message.includes('credentials') ||
-          err.message.includes('Unknown email address') ||
-          err.message.includes('Unknown email')) {
-        setError("Invalid email address");
-      } else {
-        setError(err.message || "Failed to link wallet");
-      }
-      clearWpToken();
+      setError(err.message || "Failed to link wallet");
     } finally {
       setLoading(false);
     }
@@ -130,14 +114,6 @@ export default function LinkAccount() {
           placeholder="TTPayPal Email Address"
           value={wpEmail}
           onChange={e => setWpEmail(e.target.value)}
-          required
-        />
-        <Input
-          className="w-full mb-4 p-2 rounded bg-white/10 text-white"
-          type="password"
-          placeholder="TTPayPal Password"
-          value={wpPassword}
-          onChange={e => setWpPassword(e.target.value)}
           required
         />
         {error && <div className="text-red-400 mb-2 text-center">{error}</div>}
