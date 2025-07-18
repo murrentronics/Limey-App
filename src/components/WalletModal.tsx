@@ -5,36 +5,24 @@ import { useAuth } from "@/hooks/useAuth";
 import { getWalletStatus, unlinkWallet, getTrincreditsBalance } from "@/lib/ttpaypalApi";
 import { supabase } from "@/integrations/supabase/client";
 import { getLinkedWallet } from '@/integrations/supabase/client';
+import { useWalletLinkStatus } from "@/hooks/useWalletLinkStatus";
 
 export default function WalletModal({ open, onClose, refreshKey }: { open: boolean; onClose: () => void; refreshKey?: number }) {
-  const [loading, setLoading] = useState(true);
-  const [linked, setLinked] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [unlinking, setUnlinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [linkedElsewhere, setLinkedElsewhere] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { loading, linked, refresh } = useWalletLinkStatus(user?.id);
 
   useEffect(() => {
-    if (open && user) {
-      setLoading(true);
+    if (open) {
       setError(null);
-      // Get wallet link status from Supabase and TriniCredits balance
-      Promise.all([
-        getLinkedWallet(user.id),
-        getTrincreditsBalance(user.id)
-      ])
-        .then(([walletRes, triniCreditsBalance]) => {
-          setLinked(!!(walletRes.data && walletRes.data.wallet_email));
-          setBalance(triniCreditsBalance);
-          setLinkedElsewhere(false); // Not needed with Supabase-only logic
-        })
-        .catch((err) => {
-          setError(err.message || 'Failed to fetch wallet status');
-        })
-        .finally(() => setLoading(false));
+      getTrincreditsBalance(user?.id).then(setBalance).catch(() => setBalance(null));
+      if (user?.id) refresh();
     }
+    // eslint-disable-next-line
   }, [open, user, refreshKey]);
 
   const handleUnlink = async () => {
@@ -44,7 +32,7 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
       // Unlink from TTPayPal
       await unlinkWallet();
 
-      // Remove wallet link from Supabase wallet_links table
+      // Delete wallet link for this user
       if (user?.id) {
         const { error: dbError } = await supabase
           .from('wallet_links')
@@ -57,10 +45,8 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
         }
       }
 
-      // Update local state
-      setLinked(false);
-      setBalance(null);
-      setLinkedElsewhere(false);
+      // Refresh wallet link status
+      refresh();
       setUnlinking(false);
 
       // Show success toast

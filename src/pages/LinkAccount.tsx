@@ -7,6 +7,7 @@ import { linkWallet as linkTTPaypalWallet, getUserLimits } from "@/lib/ttpaypalA
 import { wpLogin, storeWpToken, clearWpToken } from "@/lib/jwtAuth";
 import { useAuth } from "@/hooks/useAuth";
 import { linkWallet as linkSupabaseWallet, getLinkedWallet } from "@/integrations/supabase/client";
+import { useWalletLinkStatus } from "@/hooks/useWalletLinkStatus";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -20,27 +21,16 @@ export default function LinkAccount() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { loading: statusLoading, linked, refresh } = useWalletLinkStatus(user?.id);
   const [alreadyLinked, setAlreadyLinked] = useState(false);
   const [linkedEmail, setLinkedEmail] = useState("");
 
   useEffect(() => {
     const checkWalletLink = async () => {
-      if (user?.id) {
-        const { data } = await getLinkedWallet(user.id);
-        if (
-          data &&
-          typeof data === 'object' &&
-          !Array.isArray(data) &&
-          !('code' in (data as object)) &&
-          typeof (data as any).wallet_email === 'string' &&
-          Boolean((data as any).wallet_email)
-        ) {
-          setAlreadyLinked(true);
-          setLinkedEmail((data as any).wallet_email);
-        } else {
-          setAlreadyLinked(false);
-          setLinkedEmail("");
-        }
+      const { data } = await getLinkedWallet();
+      if (data) {
+        setAlreadyLinked(true);
+        setLinkedEmail(''); // No wallet_email column
       } else {
         setAlreadyLinked(false);
         setLinkedEmail("");
@@ -55,12 +45,17 @@ export default function LinkAccount() {
     setError("");
 
     try {
-      if (user && user.email !== wpEmail) {
-        setError("The email address must match your Limey account email address.");
+      // Ensure TTPayPal email matches Limey user email
+      if (user?.email && wpEmail.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
+        setError("The TTPayPal email must match your Limey account email.");
         setLoading(false);
         return;
       }
-      
+      if (linked) {
+        setError("You are already linked.");
+        setLoading(false);
+        return;
+      }
       // 1. Login to WordPress, get JWT
       const wpRes = await wpLogin(wpEmail, wpPassword);
       storeWpToken(wpRes.token);
@@ -70,17 +65,11 @@ export default function LinkAccount() {
 
       // 3. Insert wallet link into Supabase wallet_links table
       if (user?.id) {
-        const { error: walletLinkError } = await linkSupabaseWallet(user.id, wpEmail);
+        const { error: walletLinkError } = await linkSupabaseWallet(user.id);
         if (walletLinkError) {
-          if (walletLinkError.code === '23505' || (walletLinkError.message && walletLinkError.message.includes('duplicate key')) ) {
-            setError('This wallet email is already linked to another account.');
-            setLoading(false);
-            return;
-          } else {
-            setError(walletLinkError.message || 'Failed to link wallet in database');
-            setLoading(false);
-            return;
-          }
+          setError(walletLinkError.message || 'Failed to link wallet in database');
+          setLoading(false);
+          return;
         }
       }
 
@@ -88,6 +77,7 @@ export default function LinkAccount() {
         title: "Wallet linked successfully!",
         description: "You can now deposit or withdraw.",
       });
+      refresh();
       setTimeout(() => {
         navigate("/profile");
       }, 3000);
@@ -103,9 +93,8 @@ export default function LinkAccount() {
         setError(err.message || "Failed to link wallet");
       }
       clearWpToken();
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   if (alreadyLinked) {

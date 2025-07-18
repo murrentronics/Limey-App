@@ -12,6 +12,7 @@ import {
 } from "@/lib/ttpaypalApi";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase, getLinkedWallet } from "@/integrations/supabase/client";
+import { useWalletLinkStatus } from "@/hooks/useWalletLinkStatus";
 
 export default function Wallet() {
   const [amount, setAmount] = useState("");
@@ -36,6 +37,7 @@ export default function Wallet() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
+  const { loading: statusLoading, linked, refresh } = useWalletLinkStatus(user?.id);
 
   const fetchWalletData = async () => {
     if (!user) return;
@@ -177,14 +179,15 @@ export default function Wallet() {
     }
   };
 
-  if (walletLinked === false) {
+  if (statusLoading) {
+    return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading...</div>;
+  }
+  if (!linked) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10 mt-20 text-center text-white">
           <div className="mb-4">Your account is not linked to TTPayPal.</div>
-          <Button onClick={() => navigate("/wallet/link")}>
-            Link TTPayPal Account
-          </Button>
+          <Button onClick={() => navigate("/wallet/link")}>Link TTPayPal Account</Button>
         </div>
       </div>
     );
