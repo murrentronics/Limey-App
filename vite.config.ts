@@ -9,7 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }: { mode: string }) => ({
   server: {
-    host: "",
+    host: true, // <--- This enables LAN access and shows your local IP
+    port: 8080,
   },
   plugins: [
     react(),
