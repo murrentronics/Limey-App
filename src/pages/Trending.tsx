@@ -46,18 +46,17 @@ const [modalIndex, setModalIndex] = useState<number | null>(null);
 
     const { data, error } = await supabase
       .from('videos')
-      .select('id, title, video_url, thumbnail_url, duration, user_id, profiles(username, avatar_url)')
+      .select('id, title, video_url, thumbnail_url, duration, user_id, profiles(username, avatar_url, deactivated)')
       .order('created_at', { ascending: false })
       .range(pageNum * VIDEOS_PER_PAGE, (pageNum + 1) * VIDEOS_PER_PAGE - 1);
     
-    if (data) {
-      if (append) {
-        setTrendingVideos(prev => [...prev, ...data]);
-      } else {
-        setTrendingVideos(data);
-      }
-      setHasMore(data.length === VIDEOS_PER_PAGE);
+    const filtered = (data || []).filter(v => !v.profiles?.deactivated);
+    if (append) {
+      setTrendingVideos(prev => [...prev, ...filtered]);
+    } else {
+      setTrendingVideos(filtered);
     }
+    setHasMore(data?.length === VIDEOS_PER_PAGE);
     
     setLoading(false);
     setLoadingMore(false);

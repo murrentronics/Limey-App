@@ -23,6 +23,7 @@ import NotFound from "./pages/NotFound";
 import LinkAccount from "@/pages/LinkAccount";
 import Wallet from "@/pages/Wallet";
 import CreateVideoPage from "./pages/CreateVideoPage";
+import Deactivated from "./pages/Deactivated";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/wallet/link" element={<ProtectedRoute><LinkAccount /></ProtectedRoute>} />
             <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
             <Route path="/create-video" element={<ProtectedRoute><CreateVideoPage /></ProtectedRoute>} />
+            <Route path="/deactivated" element={<Deactivated />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

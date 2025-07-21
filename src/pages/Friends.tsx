@@ -128,7 +128,7 @@ const Friends = () => {
       // Get all videos since we're removing follow functionality
       const { data, error } = await supabase
         .from('videos')
-        .select(`*`)
+        .select(`*, profiles!inner(username, avatar_url, deactivated)`) // include deactivated
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -139,7 +139,8 @@ const Friends = () => {
       }
 
       console.log('Videos fetched:', data);
-      setVideos(data || []);
+      const filtered = (data || []).filter(v => !v.profiles?.deactivated);
+      setVideos(filtered);
     } catch (error) {
       console.error('Error in fetchFriendsVideos:', error);
       setError('Failed to load videos. Please try again.');

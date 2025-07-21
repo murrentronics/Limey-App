@@ -308,6 +308,21 @@ const Profile = () => {
     );
   }
 
+  if (profile?.deactivated && !isOwnProfile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-foreground mb-4">This user is deactivated</h2>
+          <p className="text-muted-foreground">Their profile and videos are hidden.</p>
+        </div>
+      </div>
+    );
+  }
+  if (profile?.deactivated && isOwnProfile) {
+    navigate('/deactivated', { replace: true });
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background pb-20 pt-24">
       {/* Header */}

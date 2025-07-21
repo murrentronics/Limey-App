@@ -26,6 +26,10 @@ const Settings = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [deletionCountdown, setDeletionCountdown] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [pendingDeactivateChecked, setPendingDeactivateChecked] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -110,6 +114,49 @@ const Settings = () => {
         description: error.message || "Failed to delete account",
         variant: "destructive"
       });
+    }
+  };
+
+  const handleDeactivateToggle = (checked: boolean) => {
+    if (checked) {
+      setPendingDeactivateChecked(true);
+      setShowDeactivateConfirm(true);
+    } else {
+      // Reactivate immediately
+      doDeactivateToggle(false);
+    }
+  };
+
+  const doDeactivateToggle = async (checked: boolean) => {
+    if (!user) return;
+    setDeactivating(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ deactivated: checked })
+        .eq('user_id', user.id);
+      if (error) throw error;
+      toast({
+        title: checked ? "Account deactivated" : "Account reactivated",
+        description: checked
+          ? "Your account is now deactivated. You will be logged out."
+          : "Your account is now active.",
+        className: checked ? "bg-yellow-600 text-white border-yellow-700" : "bg-green-600 text-white border-green-700"
+      });
+      if (checked) {
+        await signOut();
+        navigate("/");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update account status",
+        variant: "destructive"
+      });
+    } finally {
+      setDeactivating(false);
+      setShowDeactivateConfirm(false);
+      setPendingDeactivateChecked(false);
     }
   };
 
@@ -361,6 +408,24 @@ const Settings = () => {
             <CardTitle>Account Management</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center justify-between mt-4">
+              <Label htmlFor="deactivate">Deactivate Account</Label>
+              <Switch
+                id="deactivate"
+                checked={settings?.deactivated || false}
+                onCheckedChange={handleDeactivateToggle}
+                disabled={deactivating}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sign Out */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign Out</CardTitle>
+          </CardHeader>
+          <CardContent>
             <Button
               onClick={signOut}
               variant="outline"
@@ -368,20 +433,36 @@ const Settings = () => {
             >
               Sign Out
             </Button>
-            
-            {!deletionCountdown && (
-              <Button
-                onClick={handleDeleteAccount}
-                variant="destructive"
-                className="w-full"
-              >
-                <Trash2 size={16} className="mr-2" />
-                Delete Account
-              </Button>
-            )}
           </CardContent>
         </Card>
       </div>
+
+      {showDeactivateConfirm && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95">
+          <div className="max-w-md w-full bg-card rounded-lg shadow-lg p-8 flex flex-col items-center">
+            <h2 className="text-2xl font-bold mb-4 text-primary">Confirm Deactivation</h2>
+            <p className="text-muted-foreground mb-8 text-center">Are you sure you want to deactivate your account? You will be logged out and your profile and videos will be hidden from others until you reactivate.</p>
+            <div className="flex w-full gap-4">
+              <Button
+                onClick={() => doDeactivateToggle(true)}
+                className="flex-1"
+              >
+                OK
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowDeactivateConfirm(false);
+                  setPendingDeactivateChecked(false);
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNavigation />
     </div>

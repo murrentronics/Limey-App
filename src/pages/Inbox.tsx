@@ -72,8 +72,8 @@ const Inbox = () => {
       const { data, error } = await supabase
         .from('chats')
         .select(`*,
-          sender:profiles!chats_sender_id_fkey(username, avatar_url),
-          receiver:profiles!chats_receiver_id_fkey(username, avatar_url)
+          sender:profiles!chats_sender_id_fkey(username, avatar_url, deactivated),
+          receiver:profiles!chats_receiver_id_fkey(username, avatar_url, deactivated)
         `)
         .or(`sender_id.eq.${user?.id},receiver_id.eq.${user?.id}`)
         .order('updated_at', { ascending: false });
@@ -87,12 +87,8 @@ const Inbox = () => {
         });
       } else {
         // Filter out chats that the current user has deleted
-        const filteredChats = (data || []).filter(chat => {
-          const isDeletedForUser =
-            (chat.sender_id === user?.id && chat.deleted_for_sender) ||
-            (chat.receiver_id === user?.id && chat.deleted_for_receiver);
-          return !isDeletedForUser;
-        });
+        const filteredChats = (data || []).filter(chat => !chat.sender?.deactivated && !chat.receiver?.deactivated);
+        setChats(filteredChats);
 
         // For each chat, fetch the latest visible message for the current user
         const chatIds = filteredChats.map(chat => chat.id);

@@ -25,14 +25,34 @@ const Upload = () => {
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const navigate = useNavigate();
-
-  // For direct camera capture
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
     if (location.state?.file) setFile(location.state.file);
     if (location.state?.preview) setPreview(location.state.preview);
   }, [location.state]);
+
+  useEffect(() => {
+    if (user) {
+      supabase
+        .from('profiles')
+        .select('deactivated')
+        .eq('user_id', user.id)
+        .single()
+        .then(({ data }) => setProfile(data));
+    }
+  }, [user]);
+
+  if (profile?.deactivated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-primary mb-4">Account Deactivated</h1>
+          <p className="text-muted-foreground mb-4">You cannot upload while your account is deactivated.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, mode: 'camera' | 'gallery') => {
     const selectedFile = e.target.files?.[0];

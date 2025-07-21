@@ -420,10 +420,12 @@ const Feed = () => {
       // Update like counts immediately
       setLikeCounts(prev => ({ ...prev, ...initialLikeCounts }));
 
-      setVideos(data || []);
-      await checkFollowStatus(data || []);
-      await checkLikeStatus(data || []);
-      await checkViewCounts(data || []);
+      // After fetching, filter out videos where profiles.deactivated is true
+      const filtered = (data || []).filter(v => !v.profiles?.deactivated);
+      setVideos(filtered);
+      await checkFollowStatus(filtered);
+      await checkLikeStatus(filtered);
+      await checkViewCounts(filtered);
     } catch (error) {
       console.error('Error in fetchVideos:', error);
       setError('Failed to load videos. Please try again.');

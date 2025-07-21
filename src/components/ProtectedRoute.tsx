@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -9,17 +10,29 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
   useEffect(() => {
-    console.log("ProtectedRoute - loading:", loading, "user:", !!user, "user email:", user?.email);
-    if (!loading && !user) {
-      console.log("Redirecting to welcome page");
+    if (!loading && user) {
+      // Fetch profile to check deactivated status
+      supabase
+        .from('profiles')
+        .select('deactivated')
+        .eq('user_id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.deactivated) {
+            navigate('/deactivated', { replace: true });
+          } else {
+            setCheckingProfile(false);
+          }
+        });
+    } else if (!loading && !user) {
       navigate('/welcome');
     }
   }, [user, loading, navigate]);
 
-  if (loading) {
-    console.log("ProtectedRoute - showing loading spinner");
+  if (loading || checkingProfile) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -28,11 +41,9 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }
 
   if (!user) {
-    console.log("ProtectedRoute - no user, returning null");
     return null;
   }
 
-  console.log("ProtectedRoute - rendering children");
   return <>{children}</>;
 };
 
