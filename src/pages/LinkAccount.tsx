@@ -27,13 +27,15 @@ export default function LinkAccount() {
 
   useEffect(() => {
     const checkWalletLink = async () => {
-      const { data } = await getLinkedWallet();
-      if (data) {
-        setAlreadyLinked(true);
-        setLinkedEmail(''); // No wallet_email column
-      } else {
-        setAlreadyLinked(false);
-        setLinkedEmail("");
+      if (user?.id) {
+        const { data } = await getLinkedWallet(user.id);
+        if (data) {
+          setAlreadyLinked(true);
+          setLinkedEmail(''); // No wallet_email column
+        } else {
+          setAlreadyLinked(false);
+          setLinkedEmail("");
+        }
       }
     };
     checkWalletLink();

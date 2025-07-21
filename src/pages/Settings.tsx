@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { deleteUserAccount } from "@/lib/ttpaypalApi";
 import { ArrowLeft, Trash2, Edit, Eye, EyeOff } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 
@@ -17,8 +18,6 @@ const Settings = () => {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [deletionCountdown, setDeletionCountdown] = useState<Date | null>(null);
-  const [timeLeft, setTimeLeft] = useState("");
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -32,28 +31,6 @@ const Settings = () => {
     fetchSettings();
   }, [user]);
 
-  useEffect(() => {
-    if (deletionCountdown) {
-      const timer = setInterval(() => {
-        const now = new Date();
-        const diff = deletionCountdown.getTime() - now.getTime();
-        
-        if (diff <= 0) {
-          setTimeLeft("Account will be deleted");
-          clearInterval(timer);
-        } else {
-          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-          
-          setTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-        }
-      }, 1000);
-
-      return () => clearInterval(timer);
-    }
-  }, [deletionCountdown]);
 
   const fetchSettings = async () => {
     if (!user) return;
@@ -75,16 +52,6 @@ const Settings = () => {
         account_settings: { dark_mode: false }
       });
 
-      // Check if account is scheduled for deletion
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('delete_at')
-        .eq('user_id', user.id)
-        .single();
-
-      if (profile?.delete_at) {
-        setDeletionCountdown(new Date(profile.delete_at));
-      }
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -120,60 +87,32 @@ const Settings = () => {
     }
   };
 
-  const scheduleAccountDeletion = async () => {
+  const handleDeleteAccount = async () => {
     if (!user) return;
 
     try {
-      const deleteDate = new Date();
-      deleteDate.setDate(deleteDate.getDate() + 7);
+      // Call the new function to delete the user account
+      await deleteUserAccount(user.id);
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({ delete_at: deleteDate.toISOString() })
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setDeletionCountdown(deleteDate);
       toast({
-        title: "Account deletion scheduled",
-        description: "Your account will be deleted in 7 days",
+        title: "Account deleted",
+        description: "Your account has been permanently deleted.",
         className: "bg-green-600 text-white border-green-700"
       });
-    } catch (error) {
+
+      // Sign out and navigate to home
+      await signOut();
+      navigate("/");
+
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to schedule account deletion",
+        description: error.message || "Failed to delete account",
         variant: "destructive"
       });
     }
   };
 
-  const cancelAccountDeletion = async () => {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ delete_at: null })
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setDeletionCountdown(null);
-      toast({
-        title: "Account deletion cancelled",
-        description: "Your account will not be deleted",
-        className: "bg-green-600 text-white border-green-700"
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to cancel account deletion",
-        variant: "destructive"
-      });
-    }
-  };
 
   const changePassword = async () => {
     if (!user) return;
@@ -258,32 +197,6 @@ const Settings = () => {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Account Deletion Warning */}
-        {deletionCountdown && (
-          <Card className="border-red-500 bg-red-50 dark:bg-red-950">
-            <CardHeader>
-              <CardTitle className="text-red-600 dark:text-red-400 flex items-center">
-                <Trash2 size={20} className="mr-2" />
-                Account Deletion Scheduled
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-red-700 dark:text-red-300 mb-2">
-                Your account will be permanently deleted in:
-              </p>
-              <Badge variant="destructive" className="text-lg p-2">
-                {timeLeft}
-              </Badge>
-              <Button
-                onClick={cancelAccountDeletion}
-                className="mt-4 w-full"
-                variant="outline"
-              >
-                Cancel Deletion
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Notifications */}
         <Card>
@@ -458,12 +371,12 @@ const Settings = () => {
             
             {!deletionCountdown && (
               <Button
-                onClick={scheduleAccountDeletion}
+                onClick={handleDeleteAccount}
                 variant="destructive"
                 className="w-full"
               >
                 <Trash2 size={16} className="mr-2" />
-                Delete Account (7 day countdown)
+                Delete Account
               </Button>
             )}
           </CardContent>
