@@ -1,6 +1,6 @@
 import AutoPlayVideo from "@/components/AutoPlayVideo";
 import React, { useRef, useEffect, useState } from "react";
-import { X, MoreVertical, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus } from "lucide-react";
+import { X, MessageCircle, Share2, Volume2, VolumeX, Plus, Heart, Eye } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -9,14 +9,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 
-const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
+interface ModalVerticalFeedProps {
+  videos: any[];
+  startIndex: number;
+  onClose: () => void;
+}
+
+const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [globalMuted, setGlobalMuted] = useState(false);
-  const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
+
   const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
+  const [likeStatus, setLikeStatus] = useState<{ [key: string]: boolean }>({});
+  const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
+  const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
   const [modalVideos, setModalVideos] = useState(videos);
 
   // Only update modalVideos when videos prop changes
@@ -33,24 +42,11 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
     }
   }, [startIndex]);
 
-  // Like/follow status check
+  // Follow status check
   useEffect(() => {
     if (!user) return;
-    const videoIds = modalVideos.map((v) => v.id);
     const userIds = modalVideos.map((v) => v.user_id).filter((id) => id !== user.id);
-    const checkLikeStatus = async () => {
-      const { data: likes } = await supabase
-        .from('video_likes')
-        .select('video_id')
-        .eq('user_id', user.id)
-        .in('video_id', videoIds);
-      const likedVideoIds = new Set(likes?.map(like => like.video_id) || []);
-      const newLikeStatus: { [key: string]: boolean } = {};
-      modalVideos.forEach(video => {
-        newLikeStatus[video.id] = likedVideoIds.has(video.id);
-      });
-      setIsLiked(newLikeStatus);
-    };
+
     const checkFollowStatus = async () => {
       if (userIds.length === 0) return;
       const { data: follows } = await supabase
@@ -67,31 +63,52 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
       });
       setFollowStatus(newFollowStatus);
     };
-    checkLikeStatus();
     checkFollowStatus();
   }, [user, modalVideos]);
 
-  const handleLike = async (video) => {
-    if (!user) return;
-    const alreadyLiked = isLiked[video.id];
-    if (alreadyLiked) {
-      await supabase
-        .from('video_likes')
-        .delete()
-        .eq('video_id', video.id)
-        .eq('user_id', user.id);
-      setIsLiked((prev) => ({ ...prev, [video.id]: false }));
-      // Do NOT update like_count here; let DB update propagate
-    } else {
-      await supabase
-        .from('video_likes')
-        .insert({ video_id: video.id, user_id: user.id });
-      setIsLiked((prev) => ({ ...prev, [video.id]: true }));
-      // Do NOT update like_count here; let DB update propagate
-    }
-  };
+  // Check like status and view counts
+  useEffect(() => {
+    if (!user || modalVideos.length === 0) return;
 
-  const handleFollow = async (video) => {
+    const checkLikeStatus = async () => {
+      try {
+        const videoIds = modalVideos.map(video => video.id);
+
+        // Check which videos the user has liked
+        const { data: likes } = await supabase
+          .from('video_likes')
+          .select('video_id')
+          .eq('user_id', user.id)
+          .in('video_id', videoIds);
+
+        const likedVideoIds = new Set(likes?.map(like => like.video_id) || []);
+
+        // Update like status and counts
+        const newLikeStatus: { [key: string]: boolean } = {};
+        const newLikeCounts: { [key: string]: number } = {};
+        const newViewCounts: { [key: string]: number } = {};
+
+        modalVideos.forEach(video => {
+          newLikeStatus[video.id] = likedVideoIds.has(video.id);
+          newLikeCounts[video.id] = video.like_count || 0;
+          newViewCounts[video.id] = video.view_count || 0;
+        });
+
+        setLikeStatus(newLikeStatus);
+        setLikeCounts(newLikeCounts);
+        setViewCounts(newViewCounts);
+
+      } catch (error) {
+        console.error('Error checking like status:', error);
+      }
+    };
+
+    checkLikeStatus();
+  }, [user, modalVideos]);
+
+
+
+  const handleFollow = async (video: any) => {
     if (!user) return;
     const alreadyFollowing = followStatus[video.user_id];
     if (alreadyFollowing) {
@@ -117,14 +134,14 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
           setFollowStatus((prev) => ({ ...prev, [video.user_id]: true }));
         }
         // If error is 409 or duplicate, ignore
-        if (error && error.code !== '23505' && error.status !== 409) {
+        if (error && error.code !== '23505') {
           console.error('Error following:', error);
         }
       }
     }
   };
 
-  const handleShare = async (video) => {
+  const handleShare = async (video: any) => {
     const videoUrl = `${window.location.origin}/video/${video.id}`;
     try {
       await navigator.share({
@@ -137,17 +154,56 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
     }
   };
 
-  const handleDelete = async (video) => {
+  const handleLike = async (videoId: string) => {
+    if (!user) return;
+
+    try {
+      // Call the toggle_video_like function
+      const { data, error } = await supabase.rpc('toggle_video_like' as any, {
+        video_uuid: videoId
+      });
+
+      if (error) {
+        console.error('Error toggling like:', error);
+        return;
+      }
+
+      // Update local state
+      const isNowLiked = data; // Function returns true if now liked, false if unliked
+
+      setLikeStatus(prev => ({ ...prev, [videoId]: isNowLiked }));
+
+      // Update like count
+      setLikeCounts(prev => ({
+        ...prev,
+        [videoId]: isNowLiked
+          ? (prev[videoId] || 0) + 1
+          : Math.max((prev[videoId] || 0) - 1, 0)
+      }));
+
+    } catch (error) {
+      console.error('Error handling like:', error);
+    }
+  };
+
+  const handleDelete = async (video: any) => {
     if (!user || video.user_id !== user.id) return;
     await supabase.from('videos').delete().eq('id', video.id);
     // Optionally: remove from UI
     // Optionally: show toast
   };
 
-  const getUsername = (video) => video.profiles?.username || video.username || (video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown');
-  const getAvatarUrl = (video) => video.profiles?.avatar_url || video.avatar_url || undefined;
+  // Format view count for display
+  const formatViews = (count: number) => {
+    if (count < 1000) return count.toString();
+    if (count < 1000000) return (count / 1000).toFixed(1) + 'K';
+    return (count / 1000000).toFixed(1) + 'M';
+  };
 
-  const renderDescription = (desc) => {
+  const getUsername = (video: any) => video.profiles?.username || video.username || (video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown');
+  const getAvatarUrl = (video: any) => video.profiles?.avatar_url || video.avatar_url || undefined;
+
+  const renderDescription = (desc: string) => {
     if (!desc) return null;
     return desc.split(/(#[\w-]+)/g).map((part, i) => {
       if (/^#[\w-]+$/.test(part)) {
@@ -228,9 +284,6 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
               src={video.video_url}
               className="w-full h-full object-cover"
               globalMuted={globalMuted}
-              videoId={video.id}
-              creatorId={video.user_id}
-              onViewRecorded={() => {}}
             />
             {/* Overlay UI */}
             <div className="absolute bottom-20 left-0 right-0 p-6 text-white">
@@ -292,27 +345,38 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }) => {
                 </div>
                 {/* Actions */}
                 <div className="flex flex-col items-center space-y-6">
-                  {/* Like */}
+                  {/* Like Button */}
                   <div className="flex flex-col items-center">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleLike(video);
+                        handleLike(video.id);
                       }}
                       className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
                       data-control
                     >
                       <Heart
                         size={24}
-                        className={`${
-                          isLiked[video.id] ? "fill-red-500 text-red-500" : "text-white"
-                        }`}
+                        className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white'} transition-colors`}
                       />
                     </Button>
-                    <span className="text-white text-xs font-semibold mt-1">{video.like_count || 0}</span>
+                    <span className="text-white text-xs font-semibold mt-1">
+                      {likeCounts[video.id] || 0}
+                    </span>
                   </div>
+
+                  {/* View Count */}
+                  <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                      <Eye size={24} className="text-white" />
+                    </div>
+                    <span className="text-white text-xs font-semibold mt-1">
+                      {formatViews(viewCounts[video.id] || 0)}
+                    </span>
+                  </div>
+
                   {/* Comment */}
                   <div className="flex flex-col items-center">
                     <Button

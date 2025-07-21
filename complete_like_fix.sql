@@ -1,49 +1,112 @@
--- Complete like system fix
--- Run this in your Supabase SQL Editor
-
--- Step 1: Clear everything
-DELETE FROM video_likes;
-UPDATE videos SET like_count = 0;
-
--- Step 2: Drop all triggers and functions
-DROP TRIGGER IF EXISTS video_like_insert_trigger ON video_likes;
-DROP TRIGGER IF EXISTS video_like_delete_trigger ON video_likes;
-DROP FUNCTION IF EXISTS handle_video_like_insert();
-DROP FUNCTION IF EXISTS handle_video_like_delete();
-DROP FUNCTION IF EXISTS increment_like_count(UUID);
-DROP FUNCTION IF EXISTS decrement_like_count(UUID);
-
--- Step 3: Enable real-time for video_likes table
-ALTER PUBLICATION supabase_realtime ADD TABLE video_likes;
-
--- Step 4: Verify the setup
-SELECT 
-  'Real-time tables:' as info;
-SELECT 
-  schemaname,
-  tablename
-FROM pg_publication_tables 
-WHERE pubname = 'supabase_realtime'
-AND tablename IN ('videos', 'video_likes', 'video_views')
-ORDER BY tablename;
-
--- Step 5: Verify everything is clean
-SELECT 
-  'Clean state verification:' as info;
-SELECT 
-  'video_likes' as table_name,
-  COUNT(*) as total_likes
-FROM video_likes
-UNION ALL
-SELECT 
-  'videos' as table_name,
-  SUM(like_count) as total_like_count
-FROM videos;
-
--- Success message
-DO $$
+-- Function to check if a user has liked a specific video
+CREATE OR REPLACE FUNCTION public.check_user_liked_video(video_uuid UUID, user_uuid UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  like_exists BOOLEAN;
 BEGIN
-  RAISE NOTICE 'Like system has been completely reset!';
-  RAISE NOTICE 'All likes cleared, triggers removed, real-time enabled.';
-  RAISE NOTICE 'Frontend will now handle all like counting.';
-END $$; 
+  SELECT EXISTS (
+    SELECT 1
+    FROM video_likes
+    WHERE video_id = video_uuid
+    AND user_id = user_uuid
+  ) INTO like_exists;
+  
+  RETURN like_exists;
+END;
+$$;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION public.check_user_liked_video(UUID, UUID) TO authenticated;
+
+-- Add comment to function
+COMMENT ON FUNCTION public.check_user_liked_video IS 'Checks if a specific user has liked a specific video';
+
+-- Function to toggle a like on a video
+CREATE OR REPLACE FUNCTION public.toggle_video_like(video_uuid UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  user_has_liked BOOLEAN;
+  current_user_id UUID;
+BEGIN
+  -- Get the current user ID from auth.uid()
+  current_user_id := auth.uid();
+  
+  -- Check if the user has already liked this video
+  SELECT EXISTS (
+    SELECT 1
+    FROM video_likes
+    WHERE video_id = video_uuid
+    AND user_id = current_user_id
+  ) INTO user_has_liked;
+  
+  IF user_has_liked THEN
+    -- User already liked the video, so remove the like
+    DELETE FROM video_likes
+    WHERE video_id = video_uuid
+    AND user_id = current_user_id;
+    
+    -- Update the like count in the videos table
+    UPDATE videos
+    SET like_count = GREATEST(like_count - 1, 0)
+    WHERE id = video_uuid;
+    
+    RETURN FALSE; -- User no longer likes the video
+  ELSE
+    -- User hasn't liked the video, so add a like
+    INSERT INTO video_likes (video_id, user_id)
+    VALUES (video_uuid, current_user_id);
+    
+    -- Update the like count in the videos table
+    UPDATE videos
+    SET like_count = like_count + 1
+    WHERE id = video_uuid;
+    
+    RETURN TRUE; -- User now likes the video
+  END IF;
+END;
+$$;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION public.toggle_video_like(UUID) TO authenticated;
+
+-- Add comment to function
+COMMENT ON FUNCTION public.toggle_video_like IS 'Toggles a like on a video for the current user';
+
+-- Create a trigger to update like_count when likes are added or removed directly
+CREATE OR REPLACE FUNCTION public.update_video_like_count()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    -- Increment like count
+    UPDATE videos
+    SET like_count = like_count + 1
+    WHERE id = NEW.video_id;
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    -- Decrement like count
+    UPDATE videos
+    SET like_count = GREATEST(like_count - 1, 0)
+    WHERE id = OLD.video_id;
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+-- Create the trigger on the video_likes table
+DROP TRIGGER IF EXISTS update_video_like_count_trigger ON video_likes;
+CREATE TRIGGER update_video_like_count_trigger
+AFTER INSERT OR DELETE ON video_likes
+FOR EACH ROW
+EXECUTE FUNCTION update_video_like_count();

@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp, Users } from "lucide-react";
+import { Settings, MessageCircle, Share2, Play, Volume2, VolumeX, TrendingUp, Users } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 // --- AutoPlayVideo component ---
-const AutoPlayVideo = ({ src, className, globalMuted, ...props }) => {
+const AutoPlayVideo = ({ src, className, globalMuted, ...props }: { src: string; className: string; globalMuted: boolean;[key: string]: any }) => {
   const videoRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -101,264 +100,57 @@ const Friends = () => {
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState<{ [key: string]: boolean }>({});
-  const [isMuted, setIsMuted] = useState<{ [key: string]: boolean }>({});
-  const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
-  const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
+
+
   const [globalMuted, setGlobalMuted] = useState(false); // Start unmuted (sound ON)
-  const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
+
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Record video view (only for other users' videos)
-  const recordVideoView = async (videoId: string, creatorId: string) => {
-    if (!user || user.id === creatorId) return;
-    try {
-      const { error } = await supabase.rpc('record_video_view', {
-        video_uuid: videoId
-      });
-      if (error) {
-        console.error('Error recording video view:', error);
-      }
-    } catch (error) {
-      console.error('Error recording video view:', error);
-    }
-  };
+
 
   useEffect(() => {
     console.log("Friends - fetching videos from followed users");
     fetchFriendsVideos();
   }, [user]);
 
-  // Real-time subscriptions for likes and video updates
-  useEffect(() => {
-    if (!user) return;
 
-    // Subscribe to video_likes changes (for heart color)
-    const likesChannel = supabase
-      .channel('video-likes-friends')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'video_likes'
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT' && payload.new.user_id === user.id) {
-            setIsLiked(prev => ({ ...prev, [payload.new.video_id]: true }));
-          } else if (payload.eventType === 'DELETE' && payload.old.user_id === user.id) {
-            setIsLiked(prev => ({ ...prev, [payload.old.video_id]: false }));
-          }
-        }
-      )
-      .subscribe();
-
-    // Subscribe to videos table changes (for like counts)
-    const videosChannel = supabase
-      .channel('videos-friends')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'videos'
-        },
-        (payload) => {
-          if (payload.eventType === 'UPDATE' && payload.new) {
-            setVideos(prev =>
-              prev.map(video =>
-                video.id === payload.new.id ? { ...video, like_count: payload.new.like_count } : video
-              )
-            );
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(likesChannel);
-      supabase.removeChannel(videosChannel);
-    };
-  }, [user]);
 
   const fetchFriendsVideos = async () => {
     if (!user) return;
-    
+
     console.log("Friends - fetchFriendsVideos called");
     try {
       setLoading(true);
       setError(null);
-      
-      // First get the list of users the current user is following
-      const { data: follows, error: followsError } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', user.id);
 
-      if (followsError) {
-        console.error('Error fetching follows:', followsError);
-        setError('Failed to load followed users.');
-        return;
-      }
-
-      if (!follows || follows.length === 0) {
-        setVideos([]);
-        setLoading(false);
-        return;
-      }
-
-      const followingIds = follows.map(f => f.following_id);
-
-      // Now get videos from these users
+      // Get all videos since we're removing follow functionality
       const { data, error } = await supabase
         .from('videos')
         .select(`*`)
-        .in('user_id', followingIds)
         .order('created_at', { ascending: false })
         .limit(100);
 
       if (error) {
-        console.error('Error fetching friends videos:', error);
-        setError('Failed to load videos from friends. Please try again.');
+        console.error('Error fetching videos:', error);
+        setError('Failed to load videos. Please try again.');
         return;
       }
-      
-      console.log('Friends videos fetched:', data);
+
+      console.log('Videos fetched:', data);
       setVideos(data || []);
-      await checkFollowStatus(data || []);
-      await checkLikeStatus(data || []);
     } catch (error) {
       console.error('Error in fetchFriendsVideos:', error);
-      setError('Failed to load videos from friends. Please try again.');
+      setError('Failed to load videos. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVideoRef = (videoId: string, element: HTMLVideoElement | null) => {
-    videoRefs.current[videoId] = element;
-  };
 
-  const togglePlay = (videoId: string) => {
-    const video = videoRefs.current[videoId];
-    if (!video) return;
-    
-    if (!video.paused) {
-      // Pause the video
-      video.pause();
-      setIsPlaying(prev => ({ ...prev, [videoId]: false }));
-      console.log(`Manually paused video ${videoId}`);
-    } else {
-      // Pause ALL other videos first
-      Object.keys(videoRefs.current).forEach(id => {
-        if (id !== videoId && videoRefs.current[id]) {
-          const otherVideo = videoRefs.current[id];
-          if (!otherVideo.paused) {
-            otherVideo.pause();
-            otherVideo.currentTime = 0;
-            console.log(`Paused video ${id} because ${videoId} was manually started`);
-          }
-        }
-      });
-      
-      // Update state to pause all others
-      setIsPlaying(prev => {
-        const newState = { ...prev };
-        Object.keys(newState).forEach(id => {
-          if (id !== videoId) {
-            newState[id] = false;
-          }
-        });
-        return newState;
-      });
-      
-      // Play this video
-      video.play().then(() => {
-        setIsPlaying(prev => ({ ...prev, [videoId]: true }));
-        console.log(`Manually started video ${videoId}`);
-      }).catch(e => {
-        console.log("Play error:", e);
-      });
-    }
-  };
 
-  const toggleGlobalMute = () => {
-    const newMutedState = !globalMuted;
-    setGlobalMuted(newMutedState);
-    // Update all videos to match global mute state
-    Object.keys(videoRefs.current).forEach(videoId => {
-      const video = videoRefs.current[videoId];
-      if (video) {
-        video.muted = newMutedState;
-      }
-    });
-  };
 
-  const handleLike = async (videoId: string) => {
-    if (!user) return;
-
-    try {
-      const { data: existingLike } = await supabase
-        .from('video_likes')
-        .select('*')
-        .eq('video_id', videoId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingLike) {
-        await supabase
-          .from('video_likes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
-        setIsLiked(prev => ({ ...prev, [videoId]: false }));
-
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-
-          setVideos(prev =>
-            prev.map(video =>
-              video.id === videoId ? { ...video, like_count: newLikeCount } : video
-            )
-          );
-        }
-      } else {
-        await supabase
-          .from('video_likes')
-          .insert({
-            video_id: videoId,
-            user_id: user.id
-          });
-
-        setIsLiked(prev => ({ ...prev, [videoId]: true }));
-
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = (currentVideo.like_count || 0) + 1;
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-
-          setVideos(prev =>
-            prev.map(video =>
-              video.id === videoId ? { ...video, like_count: newLikeCount } : video
-            )
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error updating like status:', error);
-    }
-  };
 
   const handleShare = async (video: any) => {
     const videoUrl = `${window.location.origin}/video/${video.id}`;
@@ -374,51 +166,7 @@ const Friends = () => {
     }
   };
 
-  // Follow function
-  const handleFollow = async (targetUserId: string, targetUsername: string) => {
-    if (!user) return;
-    try {
-      const { data: existingFollow } = await supabase
-        .from('follows')
-        .select('*')
-        .eq('follower_id', user.id)
-        .eq('following_id', targetUserId)
-        .single();
 
-      if (existingFollow) {
-        // Unfollow
-        await supabase
-          .from('follows')
-          .delete()
-          .eq('follower_id', user.id)
-          .eq('following_id', targetUserId);
-        setFollowStatus(prev => ({ ...prev, [targetUserId]: false }));
-        // Remove videos from this user from the feed
-        setVideos(prev => prev.filter(v => v.user_id !== targetUserId));
-        return false; // now unfollowed
-      } else {
-        // Only insert if not already following
-        const { error } = await supabase
-          .from('follows')
-          .insert({
-            follower_id: user.id,
-            following_id: targetUserId
-          });
-        if (!error) {
-          setFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
-          return true; // now following
-        }
-        // If error is 409 or duplicate, ignore
-        if (error && error.code !== '23505' && error.status !== 409) {
-          console.error('Error following:', error);
-        }
-        return false;
-      }
-    } catch (error) {
-      console.error('Error following/unfollowing:', error);
-      return followStatus[targetUserId] || false;
-    }
-  };
 
   const getUsername = (video: any) => {
     // Use direct username field from videos table
@@ -438,52 +186,9 @@ const Friends = () => {
     return `/profile/${username}`;
   };
 
-  const checkFollowStatus = async (videosArr: any[]) => {
-    if (!user) return;
-    try {
-      const userIds = videosArr.map(video => video.user_id).filter(id => id !== user.id);
-      if (userIds.length === 0) return;
-      const { data: follows } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', user.id)
-        .in('following_id', userIds);
-      const followingSet = new Set(follows?.map(f => f.following_id) || []);
-      const newFollowStatus: { [key: string]: boolean } = {};
-      videosArr.forEach(video => {
-        if (video.user_id !== user.id) {
-          newFollowStatus[video.user_id] = followingSet.has(video.user_id);
-        }
-      });
-      setFollowStatus(prev => ({ ...prev, ...newFollowStatus }));
-    } catch (error) {
-      console.error('Error checking follow status:', error);
-    }
-  };
 
-  // Check like status for all videos
-  const checkLikeStatus = async (videosArr: any[]) => {
-    if (!user) return;
-    try {
-      const videoIds = videosArr.map(video => video.id);
-      if (videoIds.length === 0) return;
-      
-      const { data: likes } = await supabase
-        .from('video_likes')
-        .select('video_id')
-        .eq('user_id', user.id)
-        .in('video_id', videoIds);
-      
-      const likedVideoIds = new Set(likes?.map(like => like.video_id) || []);
-      const newLikeStatus: { [key: string]: boolean } = {};
-      videosArr.forEach(video => {
-        newLikeStatus[video.id] = likedVideoIds.has(video.id);
-      });
-      setIsLiked(prev => ({ ...prev, ...newLikeStatus }));
-    } catch (error) {
-      console.error('Error checking like status:', error);
-    }
-  };
+
+
 
   return (
     <div className="min-h-screen bg-black">
@@ -578,16 +283,16 @@ const Friends = () => {
             <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
               <Users size={32} className="text-white" />
             </div>
-            <h3 className="text-lg font-semibold mb-2 text-white">No videos from friends</h3>
+            <h3 className="text-lg font-semibold mb-2 text-white">No videos available</h3>
             <p className="text-white/70 mb-4">
-              Follow some users to see their videos here, or your friends haven't posted any videos yet.
+              No videos have been posted yet.
             </p>
             <Button
               onClick={() => navigate('/')}
               variant="default"
               className="bg-white text-black hover:bg-white/90"
             >
-              Discover People to Follow
+              Discover Videos
             </Button>
           </div>
         ) : (
@@ -637,23 +342,7 @@ const Friends = () => {
                             <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
                             <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
                           </Avatar>
-                          {/* Follow Button */}
-                          {user && video.user_id !== user.id && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await handleFollow(video.user_id, getUsername(video));
-                              }}
-                              className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
-                              data-control
-                            >
-                              {followStatus[video.user_id] ? (
-                                <span className="text-white font-bold text-sm">✓</span>
-                              ) : (
-                                <Plus size={12} className="text-white" />
-                              )}
-                            </button>
-                          )}
+
                         </div>
                         <div>
                           <button
@@ -679,27 +368,7 @@ const Friends = () => {
 
                     {/* Actions */}
                     <div className="flex flex-col items-center space-y-6">
-                      {/* Like */}
-                      <div className="flex flex-col items-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLike(video.id);
-                          }}
-                          className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                          data-control
-                        >
-                          <Heart
-                            size={24}
-                            className={`${
-                              isLiked[video.id] ? "fill-red-500 text-red-500" : "text-white"
-                            }`}
-                          />
-                        </Button>
-                        <span className="text-white text-xs font-semibold mt-1">{video.like_count || 0}</span>
-                      </div>
+
                       {/* Comment */}
                       <div className="flex flex-col items-center">
                         <Button

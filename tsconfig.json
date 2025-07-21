@@ -9,6 +9,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    "jsx": "react-jsx", // or "react" for older versions
+    "lib": ["DOM", "DOM.Iterable", "ES6"],
     "noImplicitAny": false,
     "noUnusedParameters": false,
     "skipLibCheck": true,

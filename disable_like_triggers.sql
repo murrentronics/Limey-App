@@ -1,33 +1,23 @@
--- Disable problematic like triggers and handle counting in frontend
--- Run this in your Supabase SQL Editor
+-- Keep the update_video_like_count trigger disabled
+-- This is to prevent double-counting of likes
 
--- Drop the problematic triggers
-DROP TRIGGER IF EXISTS video_like_insert_trigger ON video_likes;
-DROP TRIGGER IF EXISTS video_like_delete_trigger ON video_likes;
-
--- Drop the trigger functions
-DROP FUNCTION IF EXISTS handle_video_like_insert();
-DROP FUNCTION IF EXISTS handle_video_like_delete();
-DROP FUNCTION IF EXISTS increment_like_count(UUID);
-DROP FUNCTION IF EXISTS decrement_like_count(UUID);
-
--- Clear all likes to start fresh
-DELETE FROM video_likes;
-
--- Reset all like counts to 0
-UPDATE videos SET like_count = 0;
-
--- Verify triggers are removed
+-- Verify that the trigger is disabled
 SELECT 
-  trigger_name,
-  event_manipulation
-FROM information_schema.triggers 
-WHERE trigger_name IN ('video_like_insert_trigger', 'video_like_delete_trigger');
+    tgname as trigger_name,
+    tgrelid::regclass as table_name,
+    tgenabled
+FROM 
+    pg_trigger
+WHERE 
+    tgname = 'update_video_like_count';
 
--- Success message
-DO $$
-BEGIN
-  RAISE NOTICE 'Like triggers have been disabled successfully!';
-  RAISE NOTICE 'Like counting will now be handled in the frontend.';
-  RAISE NOTICE 'All likes have been cleared for a fresh start.';
-END $$; 
+-- Check the definition of the toggle_video_like function to ensure it's updating like counts
+SELECT 
+    n.nspname as schema,
+    p.proname as function_name,
+    pg_get_functiondef(p.oid) as function_definition
+FROM 
+    pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE 
+    p.proname = 'toggle_video_like';

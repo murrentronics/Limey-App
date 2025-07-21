@@ -71,12 +71,15 @@ CREATE POLICY "Users can delete their own messages" ON messages
 CREATE OR REPLACE FUNCTION update_chat_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+  
   UPDATE chats 
   SET last_message = NEW.content, updated_at = NOW()
   WHERE id = NEW.chat_id;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Create trigger to automatically update chat timestamp
 CREATE TRIGGER update_chat_timestamp_trigger

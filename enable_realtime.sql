@@ -1,43 +1,33 @@
--- Enable real-time for messages table
--- Run this in your Supabase SQL Editor
+-- Ensure realtime is enabled for all social feature tables
 
--- Check if real-time is enabled for messages table
+-- 1. Check current realtime publications
 SELECT 
-  schemaname,
-  tablename
-FROM pg_tables 
-WHERE tablename = 'messages';
+    schemaname,
+    tablename,
+    'Currently enabled for realtime' as status
+FROM pg_publication_tables 
+WHERE pubname = 'supabase_realtime'
+AND tablename IN ('video_likes', 'video_views', 'videos', 'follows')
+ORDER BY tablename;
 
--- Enable real-time for messages table
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
-
--- Also enable real-time for chats table
-ALTER PUBLICATION supabase_realtime ADD TABLE chats;
-
--- Enable real-time for videos table
-ALTER PUBLICATION supabase_realtime ADD TABLE videos;
-
--- Enable real-time for video_likes table
+-- 2. Enable realtime for video_likes if not already enabled
 ALTER PUBLICATION supabase_realtime ADD TABLE video_likes;
 
--- Enable real-time for video_views table
+-- 3. Enable realtime for video_views if not already enabled  
 ALTER PUBLICATION supabase_realtime ADD TABLE video_views;
 
--- Check what tables are in the real-time publication
-SELECT 
-  schemaname,
-  tablename
-FROM pg_publication_tables 
-WHERE pubname = 'supabase_realtime';
+-- 4. Enable realtime for videos table (for like_count updates)
+ALTER PUBLICATION supabase_realtime ADD TABLE videos;
 
--- Alternative way to check if real-time is working
--- This will show all tables that are part of the real-time publication
+-- 5. Enable realtime for follows table
+ALTER PUBLICATION supabase_realtime ADD TABLE follows;
+
+-- 6. Verify all tables are now enabled
 SELECT 
-  n.nspname as schema_name,
-  c.relname as table_name
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-JOIN pg_publication_rel pr ON pr.prrelid = c.oid
-JOIN pg_publication p ON p.oid = pr.prpubid
-WHERE p.pubname = 'supabase_realtime'
-ORDER BY schema_name, table_name; 
+    schemaname,
+    tablename,
+    'Realtime enabled' as status
+FROM pg_publication_tables 
+WHERE pubname = 'supabase_realtime'
+AND tablename IN ('video_likes', 'video_views', 'videos', 'follows')
+ORDER BY tablename;

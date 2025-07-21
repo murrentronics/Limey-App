@@ -1,10 +1,7 @@
-// Helper type guard for profiles
-  function hasProfile(obj: any): obj is { username: string } {
-    return obj && typeof obj === "object" && typeof obj.username === "string";
-  }
+
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Volume2, VolumeX, Heart, MessageCircle, Share, Play, Plus } from "lucide-react";
+import { X, Volume2, VolumeX, Share, Play, Plus, Heart, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -17,11 +14,10 @@ interface Video {
   video_url: string;
   thumbnail_url?: string;
   duration?: number;
-  view_count?: number;
-  like_count?: number;
-  comment_count?: number;
   user_id: string;
   created_at: string;
+  like_count?: number;
+  view_count?: number;
   profiles?: {
     username: string;
     avatar_url?: string;
@@ -41,101 +37,22 @@ interface VideoPlayerProps {
 // ...existing code...
 const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, onPrevious }: VideoPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
+
   const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
+  const [likeStatus, setLikeStatus] = useState<{ [key: string]: boolean }>({});
+  const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
+  const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
+  const [viewRecorded, setViewRecorded] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [comments, setComments] = useState<CommentRow[]>([]);
-  const [newComment, setNewComment] = useState("");
-  const [editingComment, setEditingComment] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
-  const [showComments, setShowComments] = useState(false);
+
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
-  const [touchStartTime, setTouchStartTime] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const navigate = useNavigate();
 
-  // Comments state and logic moved inside component
-  type CommentRow = {
-    id: string;
-    content: string;
-    created_at: string;
-    updated_at: string;
-    user_id: string;
-    video_id: string;
-    profiles?: { username: string; avatar_url?: string } | null;
-  };
 
-  const viewTimer = useRef<NodeJS.Timeout | null>(null);
-  const hasRecordedView = useRef(false);
-
-  // Fetch comments
-  useEffect(() => {
-    const fetchComments = async () => {
-      const { data, error } = await supabase
-        .from("comments")
-        .select("*, profiles(username, avatar_url)")
-        .eq("video_id", video.id)
-        .order("created_at", { ascending: false });
-      if (!error && data) {
-        // Ensure profiles is either a valid object or null
-        const fixedComments = (data as any[]).map((c) => ({
-          ...c,
-          profiles: hasProfile(c.profiles) ? c.profiles : null,
-        })) as CommentRow[];
-        setComments(fixedComments);
-      }
-    };
-    fetchComments();
-  }, [video.id]);
-
-  // Add comment
-  const handleAddComment = async () => {
-    if (!user || !newComment.trim()) return;
-    const { error, data } = await supabase.from("comments").insert({
-      content: newComment,
-      user_id: user.id,
-      video_id: video.id,
-    }).select("*, profiles(username, avatar_url)").single();
-    if (!error && data) {
-      const fixedData = {
-        ...data,
-        profiles: hasProfile(data.profiles) ? data.profiles : null,
-      } as CommentRow;
-      setComments((prev) => [fixedData, ...prev]);
-      setNewComment("");
-    }
-  };
-
-  // Edit comment
-  const handleSaveEdit = async (id: string) => {
-    if (!editText.trim()) return;
-    const { error, data } = await supabase.from("comments").update({
-      content: editText,
-      updated_at: new Date().toISOString(),
-    }).eq("id", id).select("*, profiles(username, avatar_url)").single();
-    if (!error && data) {
-      const fixedData = {
-        ...data,
-        profiles: hasProfile(data.profiles) ? data.profiles : null,
-      } as CommentRow;
-      setComments((prev) => prev.map((c) => c.id === id ? fixedData : c));
-      setEditingComment(null);
-      setEditText("");
-    }
-  };
-
-  // Delete comment
-  const handleDeleteComment = async (id: string) => {
-    const { error } = await supabase.from("comments").delete().eq("id", id);
-    if (!error) {
-      setComments((prev) => prev.filter((c) => c.id !== id));
-      setEditingComment(null);
-      setEditText("");
-    }
-  };
   // Restore handleShare function
   const handleShare = async () => {
     try {
@@ -154,53 +71,12 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
     }
   };
 
-  // Cancel edit
-  const handleCancelEdit = () => {
-    setEditingComment(null);
-    setEditText("");
-  };
 
-  useEffect(() => {
-    // Reset timer and flag when video changes
-    hasRecordedView.current = false;
-    if (viewTimer.current) {
-      clearTimeout(viewTimer.current);
-      viewTimer.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.currentTime = 0;
-    }
-  }, [video.id, user]);
 
-  const handleTimeUpdate = () => {
-    if (!user || video.user_id === user.id || hasRecordedView.current) return;
-    if (videoRef.current && videoRef.current.currentTime >= 10) {
-      recordVideoView(video.id, video.user_id);
-      hasRecordedView.current = true;
-    }
-  };
 
-  // Record video view (only for other users' videos)
-  const recordVideoView = async (videoId: string, creatorId: string) => {
-    if (!user || user.id === creatorId) return; // Don't record own views
-    
-    try {
-      // Call the database function to record the view
-      const { error } = await supabase.rpc('record_video_view', {
-        video_uuid: videoId
-      });
-      
-      if (error) {
-        console.error('Error recording video view:', error);
-      }
-    } catch (error) {
-      console.error('Error recording video view:', error);
-    }
-  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartY(e.touches[0].clientY);
-    setTouchStartTime(Date.now());
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -219,70 +95,7 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
     }
   };
 
-  // Like/unlike logic (revert to previous working version)
-  const handleLike = async (videoId: string) => {
-    if (!user) return;
 
-    try {
-      const { data: existingLike } = await supabase
-        .from('video_likes')
-        .select('*')
-        .eq('video_id', videoId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingLike) {
-        await supabase
-          .from('video_likes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
-        setIsLiked(false);
-
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-
-          setVideos(prev =>
-            prev.map(v =>
-              v.id === videoId ? { ...v, like_count: newLikeCount } : v
-            )
-          );
-        }
-      } else {
-        await supabase
-          .from('video_likes')
-          .insert({
-            video_id: videoId,
-            user_id: user.id
-          });
-
-        setIsLiked(true);
-
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = (currentVideo.like_count || 0) + 1;
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-
-          setVideos(prev =>
-            prev.map(v =>
-              v.id === videoId ? { ...v, like_count: newLikeCount } : v
-            )
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error updating like status:', error);
-    }
-  };
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -351,7 +164,7 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
           return true; // now following
         }
         // If error is 409 or duplicate, ignore
-        if (error && error.code !== '23505' && error.status !== 409) {
+        if (error && error.code !== '23505') {
           console.error('Error following:', error);
         }
         return false;
@@ -376,37 +189,130 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
     }
   };
 
+  // Like handling functions
+  const handleLike = async (videoId: string) => {
+    if (!user) return;
+    
+    try {
+      // Call the toggle_video_like function
+      const { data, error } = await supabase.rpc('toggle_video_like' as any, {
+        video_uuid: videoId
+      });
+
+      if (error) {
+        console.error('Error toggling like:', error);
+        return;
+      }
+
+      // Update local state
+      const isNowLiked = data; // Function returns true if now liked, false if unliked
+      setLikeStatus(prev => ({ ...prev, [videoId]: isNowLiked }));
+      
+      // Update like count
+      setLikeCounts(prev => ({
+        ...prev,
+        [videoId]: isNowLiked 
+          ? (prev[videoId] || 0) + 1 
+          : Math.max((prev[videoId] || 0) - 1, 0)
+      }));
+
+    } catch (error) {
+      console.error('Error handling like:', error);
+    }
+  };
+
   const checkLikeStatus = async () => {
     if (!user) return;
+    
     try {
-      const { data } = await supabase
+      // Check if user has liked this video
+      const { data: likes } = await supabase
         .from('video_likes')
-        .select('*')
-        .eq('video_id', video.id)
+        .select('video_id')
         .eq('user_id', user.id)
-        .single();
-      setIsLiked(!!data);
+        .eq('video_id', video.id);
+
+      const isLiked = likes && likes.length > 0;
+      console.log('VideoPlayer like status check:', { videoId: video.id, isLiked, likesData: likes, likeCount: video.like_count });
+      
+      setLikeStatus(prev => ({ ...prev, [video.id]: isLiked }));
+      
+      // Get current like count from video data or fetch it
+      setLikeCounts(prev => ({ ...prev, [video.id]: video.like_count || 0 }));
+      
     } catch (error) {
-      setIsLiked(false);
+      console.error('Error checking like status:', error);
+    }
+  };
+
+  // View handling functions
+  const recordView = async () => {
+    if (viewRecorded) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('record_video_view' as any, {
+        video_uuid: video.id
+      });
+      
+      if (!error && data) {
+        setViewRecorded(true);
+        // Update view count
+        setViewCounts(prev => ({
+          ...prev,
+          [video.id]: (prev[video.id] || 0) + 1
+        }));
+      }
+    } catch (error) {
+      console.error('Error recording view:', error);
+    }
+  };
+
+  const checkViewCounts = async () => {
+    try {
+      // Get current view count from video data
+      setViewCounts(prev => ({ ...prev, [video.id]: video.view_count || 0 }));
+    } catch (error) {
+      console.error('Error checking view counts:', error);
+    }
+  };
+
+  // Format view count for display
+  const formatViews = (count: number) => {
+    if (count < 1000) return count.toString();
+    if (count < 1000000) return (count / 1000).toFixed(1) + 'K';
+    return (count / 1000000).toFixed(1) + 'M';
+  };
+
+
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
     }
   };
 
   useEffect(() => {
     checkFollowStatus();
     checkLikeStatus();
+    checkViewCounts();
   }, [video.id, user]);
+
+  // Record view when video starts playing
+  useEffect(() => {
+    if (isPlaying && !viewRecorded) {
+      recordView();
+    }
+  }, [isPlaying, viewRecorded]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-    };
-
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration);
-    };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -550,26 +456,21 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
           >
             <Heart 
               size={28} 
-              className={`${isLiked ? "fill-red-500 text-red-500" : "text-white"} transition-colors`} 
+              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white'} transition-colors`} 
             />
           </Button>
-          <span className="text-white text-xs font-semibold mt-1">
-            {video.like_count || 0}
+          <span className="text-white text-xs mt-1 font-medium">
+            {likeCounts[video.id] || 0}
           </span>
         </div>
 
-        {/* Comment Button */}
+        {/* View Count */}
         <div className="flex flex-col items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-            data-control
-          >
-            <MessageCircle size={28} className="text-white" />
-          </Button>
-          <span className="text-white text-xs font-semibold mt-1">
-            {video.comment_count || 0}
+          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+            <Eye size={28} className="text-white" />
+          </div>
+          <span className="text-white text-xs mt-1 font-medium">
+            {formatViews(viewCounts[video.id] || 0)}
           </span>
         </div>
 
@@ -619,7 +520,6 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                const navigate = useNavigate();
                 navigate(getProfileUrl(video));
               }}
               className="text-white font-semibold hover:text-white/80 transition-colors"
@@ -634,127 +534,7 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
         )}
       </div>
 
-      {/* Comments Section */}
-      {showComments && (
-        <div className="absolute inset-0 bg-black/90 z-20">
-          <div className="flex flex-col h-full">
-            {/* Comments Header */}
-            <div className="flex items-center justify-between p-4 border-b border-white/20">
-              <h3 className="text-white font-semibold">Comments</h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowComments(false)}
-                className="text-white hover:bg-white/10"
-              >
-                <X size={20} />
-              </Button>
-            </div>
 
-            {/* Comments List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {comments.map((comment) => (
-                <div key={comment.id} className="flex space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-sm font-semibold">
-                      {comment.profiles?.username?.charAt(0).toUpperCase() || 'U'}
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span className="text-white font-semibold text-sm">
-                        @{comment.profiles?.username || 'unknown'}
-                      </span>
-                      <span className="text-white/60 text-xs">
-                        {new Date(comment.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    {editingComment === comment.id ? (
-                      <div className="space-y-2">
-                        <textarea
-                          value={editText}
-                          onChange={(e) => setEditText(e.target.value)}
-                          className="w-full p-2 bg-white/10 text-white rounded resize-none"
-                          rows={2}
-                        />
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleSaveEdit(comment.id)}
-                            className="bg-white text-black hover:bg-white/90"
-                          >
-                            Save
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleCancelEdit}
-                            className="text-white border-white/20 hover:bg-white/10"
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start justify-between">
-                        <p className="text-white text-sm">{comment.content}</p>
-                        {user && comment.user_id === user.id && (
-                          <div className="flex space-x-1 ml-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingComment(comment.id);
-                                setEditText(comment.content);
-                              }}
-                              className="text-white/60 hover:text-white text-xs"
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className="text-red-400 hover:text-red-300 text-xs"
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Add Comment */}
-            <div className="p-4 border-t border-white/20">
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="flex-1 p-2 bg-white/10 text-white rounded placeholder-white/50"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleAddComment();
-                    }
-                  }}
-                />
-                <Button
-                  onClick={handleAddComment}
-                  disabled={!newComment.trim()}
-                  className="bg-white text-black hover:bg-white/90"
-                >
-                  Post
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

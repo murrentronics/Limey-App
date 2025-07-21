@@ -70,7 +70,7 @@ const Settings = () => {
       }
 
       setSettings(data || {
-        notification_settings: { likes: true, follows: true, comments: true },
+        notification_settings: {},
         privacy_settings: { private_account: false },
         account_settings: { dark_mode: false }
       });
@@ -290,55 +290,10 @@ const Settings = () => {
           <CardHeader>
             <CardTitle>Notifications</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="likes">Likes</Label>
-              <Switch
-                id="likes"
-                checked={settings?.notification_settings?.likes || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    notification_settings: {
-                      ...settings.notification_settings,
-                      likes: checked
-                    }
-                  })
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="follows">Follows</Label>
-              <Switch
-                id="follows"
-                checked={settings?.notification_settings?.follows || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    notification_settings: {
-                      ...settings.notification_settings,
-                      follows: checked
-                    }
-                  })
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="comments">Comments</Label>
-              <Switch
-                id="comments"
-                checked={settings?.notification_settings?.comments || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    notification_settings: {
-                      ...settings.notification_settings,
-                      comments: checked
-                    }
-                  })
-                }
-              />
-            </div>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              No notification settings available.
+            </p>
           </CardContent>
         </Card>
 

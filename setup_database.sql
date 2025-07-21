@@ -114,12 +114,15 @@ CREATE POLICY "Users can delete their own messages" ON messages
 CREATE OR REPLACE FUNCTION update_chat_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+  
   UPDATE chats 
   SET last_message = NEW.content, updated_at = NOW()
   WHERE id = NEW.chat_id;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Create trigger to automatically update chat timestamp
 DROP TRIGGER IF EXISTS update_chat_timestamp_trigger ON messages;
@@ -132,11 +135,14 @@ CREATE TRIGGER update_chat_timestamp_trigger
 CREATE OR REPLACE FUNCTION record_video_view(video_uuid UUID)
 RETURNS VOID AS $$
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+  
   UPDATE videos 
   SET view_count = COALESCE(view_count, 0) + 1
   WHERE id = video_uuid;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Grant necessary permissions
 GRANT USAGE ON SCHEMA public TO anon, authenticated;

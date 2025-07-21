@@ -4,28 +4,34 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp, ArrowLeft } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import React from "react";
 
 // --- AutoPlayVideo component ---
-const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onViewRecorded, ...props }) => {
+const AutoPlayVideo = ({ src, className, globalMuted, videoId, onViewRecorded, ...props }) => {
   const videoRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hasRecordedView, setHasRecordedView] = useState(false);
-  const { user } = useAuth();
+  const [viewRecorded, setViewRecorded] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.muted = globalMuted;
+    
+    // Always start muted to allow autoplay
+    video.muted = true;
+    
     const observer = new window.IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
           setIsVisible(true);
-          video.play();
+          // Try to play the video
+          video.play().catch(error => {
+            console.log('Autoplay prevented:', error);
+            // Video will remain paused until user interaction
+          });
         } else {
           setIsVisible(false);
           video.pause();
@@ -35,10 +41,42 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onView
       { threshold: 0.5 }
     );
     observer.observe(video);
+    
+    // After a short delay, apply the actual muted state
+    // This ensures autoplay works first, then we can unmute if needed
+    const timer = setTimeout(() => {
+      video.muted = globalMuted;
+    }, 1000);
+    
     return () => {
       observer.unobserve(video);
+      clearTimeout(timer);
     };
   }, [globalMuted]);
+
+  // Record view when video has been playing and visible for 5 seconds
+  useEffect(() => {
+    if (isVisible && isPlaying && !viewRecorded && videoId) {
+      const timer = setTimeout(async () => {
+        try {
+          const { data, error } = await supabase.rpc('record_video_view', {
+            video_uuid: videoId
+          });
+
+          if (!error && data) {
+            setViewRecorded(true);
+            if (onViewRecorded) {
+              onViewRecorded(videoId);
+            }
+          }
+        } catch (error) {
+          console.error('Error recording view:', error);
+        }
+      }, 5000); // 5 seconds delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible, isPlaying, viewRecorded, videoId, onViewRecorded]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -58,44 +96,6 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, creatorId, onView
       video.removeEventListener('pause', onPause);
     };
   }, []);
-
-  // Record view when video is watched for sufficient time
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !isVisible || !isPlaying || hasRecordedView || !user || !videoId || !creatorId) {
-      console.log('View recording conditions not met:', { 
-        hasVideo: !!video, 
-        isVisible, 
-        isPlaying, 
-        hasRecordedView, 
-        hasUser: !!user, 
-        hasVideoId: !!videoId, 
-        hasCreatorId: !!creatorId 
-      });
-      return;
-    }
-    
-    // Don't record views for own videos
-    if (user.id === creatorId) {
-      console.log('Skipping view recording - user is creator');
-      return;
-    }
-
-    const checkViewTime = () => {
-      if (video.currentTime >= 10 && !hasRecordedView) {
-        console.log('Recording view - video watched for 10+ seconds:', { videoId, creatorId, currentTime: video.currentTime });
-        setHasRecordedView(true);
-        onViewRecorded?.(videoId, creatorId);
-      }
-    };
-
-    const timeUpdateHandler = () => checkViewTime();
-    video.addEventListener('timeupdate', timeUpdateHandler);
-    
-    return () => {
-      video.removeEventListener('timeupdate', timeUpdateHandler);
-    };
-  }, [isVisible, isPlaying, hasRecordedView, user, videoId, creatorId, onViewRecorded]);
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -151,8 +151,10 @@ const Feed = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState<{ [key: string]: boolean }>({});
   const [isMuted, setIsMuted] = useState<{ [key: string]: boolean }>({});
-  const [isLiked, setIsLiked] = useState<{ [key: string]: boolean }>({});
   const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
+  const [likeStatus, setLikeStatus] = useState<{ [key: string]: boolean }>({});
+  const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
+  const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
   const [globalMuted, setGlobalMuted] = useState(false); // Start unmuted (sound ON)
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const containerRef = useRef<HTMLDivElement>(null);
@@ -178,70 +180,14 @@ const Feed = () => {
     return videos;
   }, [videos, activeCategory, activeHashtag]);
 
-  // Record video view (only for other users' videos)
-  const recordVideoView = async (videoId: string, creatorId: string) => {
-    if (!user || user.id === creatorId) {
-      console.log('Skipping view recording:', { 
-        hasUser: !!user, 
-        userId: user?.id, 
-        creatorId, 
-        isCreator: user?.id === creatorId 
-      });
-      return;
-    }
-    
-    console.log('Attempting to record video view:', { videoId, creatorId, userId: user.id });
-    
-    try {
-      const { error } = await supabase.rpc('record_video_view', {
-        video_uuid: videoId
-      });
-      if (error) {
-        console.error('Error recording video view:', error);
-      } else {
-        console.log('Successfully recorded video view for:', videoId);
-      }
-    } catch (error) {
-      console.error('Error recording video view:', error);
-    }
-  };
+
 
   useEffect(() => {
     console.log("Feed - fetching videos for category:", activeCategory);
     fetchVideos();
   }, [activeCategory]);
 
-  // Real-time subscriptions for likes and video updates
-  useEffect(() => {
-    if (!user) return;
 
-    // Subscribe to video_likes changes (only for like status, not counts)
-    const likesChannel = supabase
-      .channel('video-likes-feed')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'video_likes'
-        },
-        (payload) => {
-          console.log('Like update received:', payload);
-          if (payload.eventType === 'INSERT' && payload.new.user_id === user.id) {
-            // Current user liked a video
-            setIsLiked(prev => ({ ...prev, [payload.new.video_id]: true }));
-          } else if (payload.eventType === 'DELETE' && payload.old.user_id === user.id) {
-            // Current user unliked a video
-            setIsLiked(prev => ({ ...prev, [payload.old.video_id]: false }));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(likesChannel);
-    };
-  }, [user]);
 
   // Focus search input when shown
   useEffect(() => {
@@ -249,6 +195,114 @@ const Feed = () => {
       searchInputRef.current.focus();
     }
   }, [showSearch]);
+
+  // Real-time subscriptions for likes and views
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to videos table changes for like_count updates
+    const videosChannel = supabase
+      .channel('videos_realtime')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'videos'
+      }, async (payload) => {
+        console.log('Video updated:', payload);
+
+        try {
+          if (payload.new && payload.new.id) {
+            const videoId = payload.new.id;
+            const newLikeCount = payload.new.like_count || 0;
+            const oldLikeCount = payload.old?.like_count || 0;
+
+            // Always update the like count, even if it appears unchanged
+            // This ensures the UI stays in sync with the database
+            console.log(`Like count for video ${videoId}: ${oldLikeCount} -> ${newLikeCount}`);
+
+            // Update like count based on the payload
+            setLikeCounts(prev => ({
+              ...prev,
+              [videoId]: newLikeCount
+            }));
+          }
+        } catch (error) {
+          console.error('Unexpected error in videos realtime handler:', error);
+        }
+      })
+      .subscribe();
+
+    // Also subscribe to video_likes table for direct like status updates
+    const likesChannel = supabase
+      .channel('likes_realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'video_likes'
+      }, async (payload) => {
+        console.log('Like change detected:', payload);
+
+        try {
+          if (payload.eventType === 'INSERT' && payload.new?.user_id === user.id) {
+            // Handle INSERT events - user liked a video
+            setLikeStatus(prev => ({
+              ...prev,
+              [payload.new.video_id]: true
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            // For DELETE events, we need to handle them differently
+            console.log('DELETE event detected, payload:', payload);
+            
+            // Since we can't get the video_id from the payload due to REPLICA IDENTITY settings,
+            // we'll use the videos update event to determine which video was unliked
+            
+            // We don't need to do anything here - the videos update event will handle updating the like count
+            // and we'll use the optimistic update in handleLike to update the like status
+            
+            // This is just a fallback in case we do have the video_id in the payload
+            if (payload.old && payload.old.video_id) {
+              const videoId = payload.old.video_id;
+              console.log('Found video_id in DELETE payload:', videoId);
+              
+              // Update like status for the specific video - assume it's the current user's action
+              setLikeStatus(prev => ({
+                ...prev,
+                [videoId]: false
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error in likes realtime handler:', error);
+        }
+      })
+      .subscribe();
+
+    // Subscribe to video_views changes
+    const viewsChannel = supabase
+      .channel('video_views_realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'video_views'
+      }, (payload) => {
+        console.log('View change detected:', payload);
+        const newView = payload.new;
+
+        // Update view count
+        setViewCounts(prev => ({
+          ...prev,
+          [newView.video_id]: (prev[newView.video_id] || 0) + 1
+        }));
+      })
+      .subscribe();
+
+    // Cleanup subscriptions
+    return () => {
+      supabase.removeChannel(videosChannel);
+      supabase.removeChannel(likesChannel);
+      supabase.removeChannel(viewsChannel);
+    };
+  }, [user, videos]);
 
   // Play first video only after user interaction
   useEffect(() => {
@@ -328,6 +382,8 @@ const Feed = () => {
       }
     } else {
       setSearchResults(data || []);
+      // Also check like status for search results
+      await checkLikeStatus(data || []);
     }
     setSearchLoading(false);
   };
@@ -339,7 +395,7 @@ const Feed = () => {
       setError(null);
       let query = supabase
         .from('videos')
-        .select(`*`)
+        .select(`*, like_count, view_count`)
         .order('created_at', { ascending: false })
         .limit(100);
       if (activeCategory !== "All") {
@@ -352,11 +408,22 @@ const Feed = () => {
         setError('Failed to load videos. Please try again.');
         return;
       }
-      
+
       console.log('Videos fetched:', data);
+      
+      // Initialize like counts from the fetched data
+      const initialLikeCounts = {};
+      data?.forEach(video => {
+        initialLikeCounts[video.id] = video.like_count || 0;
+      });
+      
+      // Update like counts immediately
+      setLikeCounts(prev => ({ ...prev, ...initialLikeCounts }));
+      
       setVideos(data || []);
       await checkFollowStatus(data || []);
       await checkLikeStatus(data || []);
+      await checkViewCounts(data || []);
     } catch (error) {
       console.error('Error in fetchVideos:', error);
       setError('Failed to load videos. Please try again.');
@@ -372,12 +439,7 @@ const Feed = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const formatViews = (count?: number) => {
-    if (!count) return "0";
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-    return count.toString();
-  };
+
 
   const handleVideoRef = (videoId: string, element: HTMLVideoElement | null) => {
     videoRefs.current[videoId] = element;
@@ -386,7 +448,7 @@ const Feed = () => {
   const togglePlay = (videoId: string) => {
     const video = videoRefs.current[videoId];
     if (!video) return;
-    
+
     if (!video.paused) {
       // Pause the video
       video.pause();
@@ -404,7 +466,7 @@ const Feed = () => {
           }
         }
       });
-      
+
       // Update state to pause all others
       setIsPlaying(prev => {
         const newState = { ...prev };
@@ -415,7 +477,7 @@ const Feed = () => {
         });
         return newState;
       });
-      
+
       // Play this video
       video.play().then(() => {
         setIsPlaying(prev => ({ ...prev, [videoId]: true }));
@@ -446,69 +508,7 @@ const Feed = () => {
     }
   };
 
-  const handleLike = async (videoId: string) => {
-    if (!user) return;
 
-    try {
-      const { data: existingLike } = await supabase
-        .from('video_likes')
-        .select('*')
-        .eq('video_id', videoId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingLike) {
-        await supabase
-          .from('video_likes')
-          .delete()
-          .eq('video_id', videoId)
-          .eq('user_id', user.id);
-
-        setIsLiked(prev => ({ ...prev, [videoId]: false }));
-
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = Math.max((currentVideo.like_count || 0) - 1, 0);
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-
-          setVideos(prev =>
-            prev.map(video =>
-              video.id === videoId ? { ...video, like_count: newLikeCount } : video
-            )
-          );
-        }
-      } else {
-        await supabase
-          .from('video_likes')
-          .insert({
-            video_id: videoId,
-            user_id: user.id
-          });
-
-        setIsLiked(prev => ({ ...prev, [videoId]: true }));
-
-        const currentVideo = videos.find(v => v.id === videoId);
-        if (currentVideo) {
-          const newLikeCount = (currentVideo.like_count || 0) + 1;
-          await supabase
-            .from('videos')
-            .update({ like_count: newLikeCount })
-            .eq('id', videoId);
-
-          setVideos(prev =>
-            prev.map(video =>
-              video.id === videoId ? { ...video, like_count: newLikeCount } : video
-            )
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error updating like status:', error);
-    }
-  };
 
   const handleShare = async (video: any) => {
     const videoUrl = `${window.location.origin}/video/${video.id}`;
@@ -558,7 +558,7 @@ const Feed = () => {
           return true; // now following
         }
         // If error is 409 or duplicate, ignore
-        if (error && error.code !== '23505' && error.status !== 409) {
+        if (error && error.code !== '23505') {
           console.error('Error following:', error);
         }
         return false;
@@ -617,29 +617,147 @@ const Feed = () => {
     }
   };
 
-  // Check like status for all videos
+  // Like handling functions
+  const handleLike = async (videoId: string) => {
+    if (!user) return;
+
+    try {
+      console.log('Handling like for video:', videoId, 'Current status:', likeStatus[videoId]);
+      
+      // Optimistically update UI first for better user experience
+      const currentLikeStatus = likeStatus[videoId] || false;
+      const currentLikeCount = likeCounts[videoId] || 0;
+      
+      // Update like status immediately (optimistic update)
+      setLikeStatus(prev => ({
+        ...prev,
+        [videoId]: !currentLikeStatus
+      }));
+      
+      // Update like count immediately (optimistic update)
+      setLikeCounts(prev => ({
+        ...prev,
+        [videoId]: currentLikeStatus ? Math.max(0, currentLikeCount - 1) : currentLikeCount + 1
+      }));
+
+      // Call the toggle_video_like function
+      const { data, error } = await supabase.rpc('toggle_video_like' as any, {
+        video_uuid: videoId
+      });
+
+      if (error) {
+        console.error('Error toggling like:', error);
+        // Revert optimistic update on error
+        setLikeStatus(prev => ({
+          ...prev,
+          [videoId]: currentLikeStatus
+        }));
+        setLikeCounts(prev => ({
+          ...prev,
+          [videoId]: currentLikeCount
+        }));
+        return;
+      }
+
+      console.log('Like toggled, now liked:', data);
+      
+      // The realtime subscription will handle updates from other users
+      // Our optimistic update already handled the UI for this user
+
+    } catch (error) {
+      console.error('Error handling like:', error);
+    }
+  };
+
   const checkLikeStatus = async (videosArr: any[]) => {
     if (!user) return;
+
     try {
       const videoIds = videosArr.map(video => video.id);
       if (videoIds.length === 0) return;
-      
-      const { data: likes } = await supabase
-        .from('video_likes')
-        .select('video_id')
-        .eq('user_id', user.id)
-        .in('video_id', videoIds);
-      
-      const likedVideoIds = new Set(likes?.map(like => like.video_id) || []);
+
+      console.log('Checking like status for user:', user.id, 'videos:', videoIds);
+
+      // Don't update like counts here - they're handled by the videos channel
+      // This prevents overriding the like counts from the realtime subscription
+
+      // Then check which videos the user has liked - one by one to avoid filter issues
+      const likedVideoIds = new Set<string>();
+
+      // Process videos in batches to avoid too many parallel requests
+      const batchSize = 5;
+      for (let i = 0; i < videoIds.length; i += batchSize) {
+        const batch = videoIds.slice(i, i + batchSize);
+
+        await Promise.all(batch.map(async (videoId) => {
+          try {
+            // Use direct query instead of RPC function since it might not be available
+            const { data, error } = await supabase
+              .from('video_likes')
+              .select('id')
+              .eq('video_id', videoId)
+              .eq('user_id', user.id);
+
+            if (!error && data && data.length > 0) {
+              likedVideoIds.add(videoId);
+            }
+          } catch (err) {
+            console.error(`Error checking like for video ${videoId}:`, err);
+          }
+        }));
+      }
+
+      console.log('Likes query result - liked videos:', Array.from(likedVideoIds));
+
+      // Update like status
       const newLikeStatus: { [key: string]: boolean } = {};
+
       videosArr.forEach(video => {
         newLikeStatus[video.id] = likedVideoIds.has(video.id);
       });
-      setIsLiked(prev => ({ ...prev, ...newLikeStatus }));
+
+      console.log('Like status check:', { newLikeStatus, likedVideoIds: Array.from(likedVideoIds) });
+
+      // Update like status
+      setLikeStatus(prev => ({ ...prev, ...newLikeStatus }));
+
     } catch (error) {
       console.error('Error checking like status:', error);
     }
   };
+
+  // View count functions
+  const checkViewCounts = async (videosArr: any[]) => {
+    try {
+      const newViewCounts: { [key: string]: number } = {};
+
+      videosArr.forEach(video => {
+        newViewCounts[video.id] = video.view_count || 0;
+      });
+
+      setViewCounts(prev => ({ ...prev, ...newViewCounts }));
+
+    } catch (error) {
+      console.error('Error checking view counts:', error);
+    }
+  };
+
+  const onViewRecorded = (videoId: string) => {
+    // Update view count when a view is recorded
+    setViewCounts(prev => ({
+      ...prev,
+      [videoId]: (prev[videoId] || 0) + 1
+    }));
+  };
+
+  // Format view count for display
+  const formatViews = (count: number) => {
+    if (count < 1000) return count.toString();
+    if (count < 1000000) return (count / 1000).toFixed(1) + 'K';
+    return (count / 1000000).toFixed(1) + 'M';
+  };
+
+
 
   // Helper to render clickable hashtags
   function renderDescriptionWithHashtags(description: string) {
@@ -873,8 +991,7 @@ const Feed = () => {
                     className="w-full h-full object-cover"
                     globalMuted={globalMuted}
                     videoId={video.id}
-                    creatorId={video.user_id}
-                    onViewRecorded={(videoId, creatorId) => recordVideoView(videoId, creatorId)}
+                    onViewRecorded={onViewRecorded}
                   />
                   {/* Video Info Overlay */}
                   <div className="absolute bottom-20 left-0 right-0 p-6 text-white">
@@ -945,7 +1062,7 @@ const Feed = () => {
 
                       {/* Right actions */}
                       <div className="flex flex-col items-center space-y-6">
-                        {/* Like */}
+                        {/* Like Button */}
                         <div className="flex flex-col items-center">
                           <Button
                             variant="ghost"
@@ -959,32 +1076,24 @@ const Feed = () => {
                           >
                             <Heart
                               size={24}
-                              className={`${
-                                isLiked[video.id] ? "fill-red-500 text-red-500" : "text-white"
-                              }`}
+                              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white'} transition-colors`}
                             />
                           </Button>
-                          <span className="text-white text-xs font-semibold mt-1">{video.like_count || 0}</span>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {likeCounts[video.id] || 0}
+                          </span>
                         </div>
-                        {/* Comment */}
-                        <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                            data-control
-                          >
-                            <MessageCircle size={24} className="text-white" />
-                          </Button>
-                          <span className="text-white text-xs font-semibold mt-1">{video.comment_count || 0}</span>
-                        </div>
+
                         {/* View Count */}
                         <div className="flex flex-col items-center">
                           <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                            <span className="text-white text-lg">👁️</span>
+                            <Eye size={24} className="text-white" />
                           </div>
-                          <span className="text-white text-xs font-semibold mt-1">{formatViews(video.view_count)}</span>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {formatViews(viewCounts[video.id] || 0)}
+                          </span>
                         </div>
+
                         {/* Share */}
                         <div className="flex flex-col items-center">
                           <Button
@@ -1030,8 +1139,8 @@ const Feed = () => {
           ) : (
             <div className="space-y-0">
               {filteredVideos.map((video) => (
-                <div 
-                  key={video.id} 
+                <div
+                  key={video.id}
                   className="relative h-screen snap-start snap-always flex items-center justify-center"
                   onClick={e => {
                     // Only trigger play/pause if not clicking on a control
@@ -1060,8 +1169,7 @@ const Feed = () => {
                     className="w-full h-full object-cover"
                     globalMuted={globalMuted}
                     videoId={video.id}
-                    creatorId={video.user_id}
-                    onViewRecorded={(videoId, creatorId) => recordVideoView(videoId, creatorId)}
+                    onViewRecorded={onViewRecorded}
                   />
 
                   {/* Overlay UI */}
@@ -1133,7 +1241,7 @@ const Feed = () => {
 
                       {/* Actions */}
                       <div className="flex flex-col items-center space-y-6">
-                        {/* Like */}
+                        {/* Like Button */}
                         <div className="flex flex-col items-center">
                           <Button
                             variant="ghost"
@@ -1147,32 +1255,24 @@ const Feed = () => {
                           >
                             <Heart
                               size={24}
-                              className={`${
-                                isLiked[video.id] ? "fill-red-500 text-red-500" : "text-white"
-                              }`}
+                              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white'} transition-colors`}
                             />
                           </Button>
-                          <span className="text-white text-xs font-semibold mt-1">{video.like_count || 0}</span>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {likeCounts[video.id] || 0}
+                          </span>
                         </div>
-                        {/* Comment */}
-                        <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                            data-control
-                          >
-                            <MessageCircle size={24} className="text-white" />
-                          </Button>
-                          <span className="text-white text-xs font-semibold mt-1">{video.comment_count || 0}</span>
-                        </div>
+
                         {/* View Count */}
                         <div className="flex flex-col items-center">
                           <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                            <span className="text-white text-lg">👁️</span>
+                            <Eye size={24} className="text-white" />
                           </div>
-                          <span className="text-white text-xs font-semibold mt-1">{formatViews(video.view_count)}</span>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {formatViews(viewCounts[video.id] || 0)}
+                          </span>
                         </div>
+
                         {/* Share */}
                         <div className="flex flex-col items-center">
                           <Button

@@ -5,18 +5,12 @@ interface AutoPlayVideoProps {
   src: string;
   className?: string;
   globalMuted?: boolean;
-  videoId?: string;
-  creatorId?: string;
-  onViewRecorded?: (videoId?: string, creatorId?: string) => void;
 }
 
 const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
   src,
   className,
   globalMuted = false,
-  videoId,
-  creatorId,
-  onViewRecorded,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isVisible, setIsVisible] = useState(false);

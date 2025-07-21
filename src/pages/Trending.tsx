@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import BottomNavigation from "@/components/BottomNavigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Settings, Search as SearchIcon, X as CloseIcon, Heart, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, MessageCircle, Share2, Play, Volume2, VolumeX, Plus, Pause, MessageSquare, TrendingUp } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
@@ -31,9 +31,9 @@ const [modalIndex, setModalIndex] = useState<number | null>(null);
     // Example: search by title
     const { data, error } = await supabase
       .from('videos')
-      .select('id, title, video_url, thumbnail_url, duration, view_count, user_id, profiles(username, avatar_url)')
+      .select('id, title, video_url, thumbnail_url, duration, user_id, profiles(username, avatar_url)')
       .ilike('title', `%${searchTerm}%`)
-      .order('view_count', { ascending: false });
+      .order('created_at', { ascending: false });
     setSearchResults(data || []);
     setSearchLoading(false);
   };
@@ -46,8 +46,8 @@ const [modalIndex, setModalIndex] = useState<number | null>(null);
 
     const { data, error } = await supabase
       .from('videos')
-      .select('id, title, video_url, thumbnail_url, duration, view_count, user_id, profiles(username, avatar_url)')
-      .order('view_count', { ascending: false })
+      .select('id, title, video_url, thumbnail_url, duration, user_id, profiles(username, avatar_url)')
+      .order('created_at', { ascending: false })
       .range(pageNum * VIDEOS_PER_PAGE, (pageNum + 1) * VIDEOS_PER_PAGE - 1);
     
     if (data) {
@@ -164,14 +164,9 @@ const [modalIndex, setModalIndex] = useState<number | null>(null);
           src={video.video_url}
           className="w-full h-full object-cover"
           globalMuted={true}
-          videoId={video.id}
-          creatorId={video.user_id}
         />
       </div>
-      {/* Bottom left: Views */}
-      <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 rounded-full px-2 py-1 text-xs text-white">
-        <span role="img" aria-label="views">👁️</span> {video.view_count || 0}
-      </div>
+
       {/* Bottom right: Duration */}
       <div className="absolute bottom-2 right-2 bg-black/60 rounded-full px-2 py-1 text-xs text-white">
         {video.duration ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}` : '0:00'}
