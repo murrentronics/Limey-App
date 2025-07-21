@@ -19,10 +19,10 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, onViewRecorded, .
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    
+
     // Always start muted to allow autoplay
     video.muted = true;
-    
+
     const observer = new window.IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
@@ -41,13 +41,13 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, onViewRecorded, .
       { threshold: 0.5 }
     );
     observer.observe(video);
-    
+
     // After a short delay, apply the actual muted state
     // This ensures autoplay works first, then we can unmute if needed
     const timer = setTimeout(() => {
       video.muted = globalMuted;
     }, 1000);
-    
+
     return () => {
       observer.unobserve(video);
       clearTimeout(timer);
@@ -164,7 +164,7 @@ const Feed = () => {
   const { user } = useAuth();
 
   const categories = [
-    "All", "Soca", "Dancehall", "Carnival", "Comedy", "Dance", "Music", "Local News"
+    "Soca", "Dancehall", "Carnival", "Comedy", "Dance", "Music", "Local News"
   ];
 
   const currentVideos = searchResults !== null ? searchResults : videos;
@@ -252,18 +252,18 @@ const Feed = () => {
           } else if (payload.eventType === 'DELETE') {
             // For DELETE events, we need to handle them differently
             console.log('DELETE event detected, payload:', payload);
-            
+
             // Since we can't get the video_id from the payload due to REPLICA IDENTITY settings,
             // we'll use the videos update event to determine which video was unliked
-            
+
             // We don't need to do anything here - the videos update event will handle updating the like count
             // and we'll use the optimistic update in handleLike to update the like status
-            
+
             // This is just a fallback in case we do have the video_id in the payload
             if (payload.old && payload.old.video_id) {
               const videoId = payload.old.video_id;
               console.log('Found video_id in DELETE payload:', videoId);
-              
+
               // Update like status for the specific video - assume it's the current user's action
               setLikeStatus(prev => ({
                 ...prev,
@@ -410,16 +410,16 @@ const Feed = () => {
       }
 
       console.log('Videos fetched:', data);
-      
+
       // Initialize like counts from the fetched data
       const initialLikeCounts = {};
       data?.forEach(video => {
         initialLikeCounts[video.id] = video.like_count || 0;
       });
-      
+
       // Update like counts immediately
       setLikeCounts(prev => ({ ...prev, ...initialLikeCounts }));
-      
+
       setVideos(data || []);
       await checkFollowStatus(data || []);
       await checkLikeStatus(data || []);
@@ -623,17 +623,17 @@ const Feed = () => {
 
     try {
       console.log('Handling like for video:', videoId, 'Current status:', likeStatus[videoId]);
-      
+
       // Optimistically update UI first for better user experience
       const currentLikeStatus = likeStatus[videoId] || false;
       const currentLikeCount = likeCounts[videoId] || 0;
-      
+
       // Update like status immediately (optimistic update)
       setLikeStatus(prev => ({
         ...prev,
         [videoId]: !currentLikeStatus
       }));
-      
+
       // Update like count immediately (optimistic update)
       setLikeCounts(prev => ({
         ...prev,
@@ -660,7 +660,7 @@ const Feed = () => {
       }
 
       console.log('Like toggled, now liked:', data);
-      
+
       // The realtime subscription will handle updates from other users
       // Our optimistic update already handled the UI for this user
 
@@ -783,6 +783,10 @@ const Feed = () => {
   // Back button for filtered views
   const showBackButton = activeHashtag || (activeCategory && activeCategory !== "All");
 
+  function Term(arg0: string) {
+    throw new Error("Function not implemented.");
+  }
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}
@@ -844,46 +848,105 @@ const Feed = () => {
             </Button>
           </div>
         </div>
-
         {/* Search Overlay */}
         {showSearch && (
           <>
-            <form onSubmit={handleSearch} className="flex items-center gap-2 mt-4 mb-2">
-              <input
-                ref={searchInputRef}
-                type="text"
-                className="flex-1 p-2 border rounded text-base bg-black/50 text-white border-white/20 placeholder-white/50"
-                placeholder="Search hashtags, titles, categories..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <Button
-                type="submit"
-                variant="default"
-                size="icon"
-                aria-label="Go"
-                disabled={searchLoading}
-              >
-                {searchLoading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                ) : (
-                  <SearchIcon size={18} />
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setShowSearch(false);
-                  setSearchTerm('');
-                  setSearchResults(null);
-                }}
-                aria-label="Close"
-                className="text-white hover:bg-white/10"
-              >
-                <CloseIcon size={18} />
-              </Button>
+            <form onSubmit={handleSearch} className="flex flex-col gap-2 mt-4 mb-2">
+              <div className="flex items-center gap-2">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className="flex-1 p-2 border rounded text-base bg-black/50 text-white border-white/20 placeholder-white/50"
+                  placeholder="Search videos by title or hashtags..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <Button
+                  type="submit"
+                  variant="default"
+                  size="icon"
+                  aria-label="Go"
+                  disabled={searchLoading}
+                >
+                  {searchLoading ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  ) : (
+                    <SearchIcon size={18} />
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setShowSearch(false);
+                    setSearchTerm('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);Term('');
+                    setSearchResults(null);
+                  }}
+                  aria-label="Close"
+                  className="text-white hover:bg-white/10"
+                >
+                  <CloseIcon size={18} />
+                </Button>
+              </div>
+              
+              {/* Category carousel */}
+              <div className="overflow-x-auto pb-2 -mx-2 px-2">
+                <div className="flex space-x-2">
+                  {/* All button */}
+                  <Button
+                    key="all"
+                    variant="outline"
+                    size="sm"
+                    className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${
+                      activeCategory === "All" ? 'border-lime-400 text-lime-400' : 'border-white/50'
+                    }`}
+                    onClick={() => {
+                      setActiveCategory("All");
+                      setActiveHashtag(null);
+                      setSearchResults(null);
+                    }}
+                  >
+                    All Videos
+                  </Button>
+                  {categories.map((category) => (
+                    <Button
+                      key={category}
+                      variant="outline"
+                      size="sm"
+                      className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${
+                        activeCategory === category ? 'border-lime-400 text-lime-400' : 'border-white/50'
+                      }`}
+                      onClick={() => {
+                        setActiveCategory(category);
+                        setActiveHashtag(null);
+                        setSearchResults(null);
+                      }}
+                    >
+                      {category}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </form>
             {/* Back Button below search form when search is open */}
             {showBackButton && (
@@ -942,9 +1005,10 @@ const Feed = () => {
       {/* Video Feed */}
       <div
         ref={containerRef}
-        className="pt-20 pb-24 h-screen overflow-y-auto snap-y snap-mandatory"
+        className="h-screen overflow-y-auto snap-y snap-mandatory"
         style={{ scrollSnapType: 'y mandatory' }}
       >
+
         {/* Loading/Error */}
         {loading ? (
           <div className="flex justify-center items-center h-64">
@@ -984,57 +1048,36 @@ const Feed = () => {
           ) : (
             <div className="space-y-0">
               {searchResults.map((video) => (
-                <div key={video.id} className="relative h-screen snap-start snap-always flex items-center justify-center">
-                  {/* Video */}
-                  <AutoPlayVideo
-                    src={video.video_url}
-                    className="w-full h-full object-cover"
-                    globalMuted={globalMuted}
-                    videoId={video.id}
-                    onViewRecorded={onViewRecorded}
-                  />
-                  {/* Video Info Overlay */}
-                  <div className="absolute bottom-20 left-0 right-0 p-6 text-white">
+                <div key={video.id} className="relative h-screen snap-start snap-always flex items-center justify-center">  {/* Black space for top menu */}
+                  <div className="absolute top-0 left-0 right-0 h-16 bg-black z-10"></div>
+
+                  {/* Video container with fixed height - stops above the text area */}
+                  <div className="absolute inset-0 top-16 bottom-32 overflow-hidden">
+                    {/* Video */}
+                    <AutoPlayVideo
+                      src={video.video_url}
+                      className="w-full h-full object-cover"
+                      globalMuted={globalMuted}
+                      videoId={video.id}
+                      onViewRecorded={onViewRecorded}
+                    />
+                  </div>
+
+                  {/* Separator line */}
+                  <div className="absolute bottom-32 left-0 right-0 h-[1px] bg-white/20 z-10"></div>
+
+                  {/* Text area with black background */}
+                  <div className="absolute bottom-16 left-0 right-0 h-16 bg-black z-10"></div>
+
+                  {/* Black space for bottom navigation */}
+                  <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-10"></div>
+
+                  {/* Video Info Overlay - positioned in the text area */}
+                  <div className="absolute bottom-16 left-0 right-0 p-4 text-white z-20">
                     <div className="flex justify-between items-end">
                       {/* Left - User info & caption */}
                       <div className="flex-1 mr-4 space-y-3">
-                        {/* User Profile */}
-                        <div className="flex items-center space-x-3">
-                          <div className="relative">
-                            <Avatar className="w-12 h-12">
-                              <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
-                              <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            {/* Follow Button */}
-                            {user && video.user_id !== user.id && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await handleFollow(video.user_id, getUsername(video));
-                                }}
-                                className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
-                                data-control
-                              >
-                                {followStatus[video.user_id] ? (
-                                  <span className="text-white font-bold text-sm">✓</span>
-                                ) : (
-                                  <Plus size={12} className="text-white" />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                          <div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(getProfileUrl(video));
-                              }}
-                              className="text-white font-semibold text-lg hover:text-white/80 transition-colors"
-                            >
-                              @{getUsername(video)}
-                            </button>
-                          </div>
-                        </div>
+                        {/* Title and description without user profile */}
 
                         {/* Caption */}
                         <div className="space-y-2">
@@ -1044,24 +1087,49 @@ const Feed = () => {
                               {renderDescriptionWithHashtags(video.description)}
                             </p>
                           )}
-                          {/* Category badge below description */}
-                          {video.category && (
-                            <button
-                              className="mt-2 inline-block px-3 py-1 rounded-full bg-lime-700/80 text-white text-xs font-semibold hover:bg-lime-600 transition-colors"
-                              onClick={e => {
-                                e.stopPropagation();
-                                setActiveCategory(video.category);
-                                setActiveHashtag(null);
-                              }}
-                            >
-                              {video.category}
-                            </button>
-                          )}
+                          {/* Category badge removed */}
                         </div>
                       </div>
 
                       {/* Right actions */}
                       <div className="flex flex-col items-center space-y-6">
+                        {/* Profile Button */}
+                        <div className="flex flex-col items-center">
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(getProfileUrl(video));
+                              }}
+                              className="hover:opacity-80 transition-opacity"
+                              aria-label={`View ${getUsername(video)}'s profile`}
+                              data-control
+                            >
+                              <Avatar className="w-12 h-12 rounded-full">
+                                <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
+                                <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                            </button>
+                            {/* Follow Button */}
+                            {user && video.user_id !== user.id && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await handleFollow(video.user_id, getUsername(video));
+                                }}
+                                className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
+                                data-control
+                              >
+                                {followStatus[video.user_id] ? (
+                                  <span className="text-white font-bold text-xs">✓</span>
+                                ) : (
+                                  <Plus size={8} className="text-white" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
                         {/* Like Button */}
                         <div className="flex flex-col items-center">
                           <Button
@@ -1162,58 +1230,36 @@ const Feed = () => {
                       }
                     }
                   }}
-                >
-                  {/* Video */}
-                  <AutoPlayVideo
-                    src={video.video_url}
-                    className="w-full h-full object-cover"
-                    globalMuted={globalMuted}
-                    videoId={video.id}
-                    onViewRecorded={onViewRecorded}
-                  />
+                >  {/* Black space for top menu */}
+                  <div className="absolute top-0 left-0 right-0 h-16 bg-black z-10"></div>
 
-                  {/* Overlay UI */}
-                  <div className="absolute bottom-20 left-0 right-0 p-6 text-white">
+                  {/* Video container with fixed height - stops above the text area */}
+                  <div className="absolute inset-0 top-16 bottom-32 overflow-hidden">
+                    {/* Video */}
+                    <AutoPlayVideo
+                      src={video.video_url}
+                      className="w-full h-full object-cover"
+                      globalMuted={globalMuted}
+                      videoId={video.id}
+                      onViewRecorded={onViewRecorded}
+                    />
+                  </div>
+
+                  {/* Separator line */}
+                  <div className="absolute bottom-32 left-0 right-0 h-[1px] bg-white/20 z-10"></div>
+
+                  {/* Text area with black background */}
+                  <div className="absolute bottom-16 left-0 right-0 h-16 bg-black z-10"></div>
+
+                  {/* Black space for bottom navigation */}
+                  <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-10"></div>
+
+                  {/* Overlay UI - positioned in the text area */}
+                  <div className="absolute bottom-16 left-0 right-0 p-4 text-white z-20">
                     <div className="flex justify-between items-end">
                       {/* Left - User info & caption */}
                       <div className="flex-1 mr-4 space-y-3">
-                        {/* User Profile */}
-                        <div className="flex items-center space-x-3">
-                          <div className="relative">
-                            <Avatar className="w-12 h-12">
-                              <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
-                              <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            {/* Follow Button */}
-                            {user && video.user_id !== user.id && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await handleFollow(video.user_id, getUsername(video));
-                                }}
-                                className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
-                                data-control
-                              >
-                                {followStatus[video.user_id] ? (
-                                  <span className="text-white font-bold text-sm">✓</span>
-                                ) : (
-                                  <Plus size={12} className="text-white" />
-                                )}
-                              </button>
-                            )}
-                          </div>
-                          <div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(getProfileUrl(video));
-                              }}
-                              className="text-white font-semibold text-lg hover:text-white/80 transition-colors"
-                            >
-                              @{getUsername(video)}
-                            </button>
-                          </div>
-                        </div>
+                        {/* Title and description without user profile */}
 
                         {/* Caption */}
                         <div className="space-y-2">
@@ -1223,24 +1269,49 @@ const Feed = () => {
                               {renderDescriptionWithHashtags(video.description)}
                             </p>
                           )}
-                          {/* Category badge below description */}
-                          {video.category && (
-                            <button
-                              className="mt-2 inline-block px-3 py-1 rounded-full bg-lime-700/80 text-white text-xs font-semibold hover:bg-lime-600 transition-colors"
-                              onClick={e => {
-                                e.stopPropagation();
-                                setActiveCategory(video.category);
-                                setActiveHashtag(null);
-                              }}
-                            >
-                              {video.category}
-                            </button>
-                          )}
+                          {/* Category badge removed */}
                         </div>
                       </div>
 
                       {/* Actions */}
                       <div className="flex flex-col items-center space-y-6">
+                        {/* Profile Button */}
+                        <div className="flex flex-col items-center">
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(getProfileUrl(video));
+                              }}
+                              className="hover:opacity-80 transition-opacity"
+                              aria-label={`View ${getUsername(video)}'s profile`}
+                              data-control
+                            >
+                              <Avatar className="w-12 h-12 rounded-full">
+                                <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
+                                <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                            </button>
+                            {/* Follow Button */}
+                            {user && video.user_id !== user.id && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await handleFollow(video.user_id, getUsername(video));
+                                }}
+                                className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
+                                data-control
+                              >
+                                {followStatus[video.user_id] ? (
+                                  <span className="text-white font-bold text-xs">✓</span>
+                                ) : (
+                                  <Plus size={8} className="text-white" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
                         {/* Like Button */}
                         <div className="flex flex-col items-center">
                           <Button
@@ -1304,3 +1375,7 @@ const Feed = () => {
 };
 
 export default Feed;
+
+
+
+
