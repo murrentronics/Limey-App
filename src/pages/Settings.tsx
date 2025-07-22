@@ -136,13 +136,13 @@ const Settings = () => {
         .update({ deactivated: checked })
         .eq('user_id', user.id);
       if (error) throw error;
-      toast({
-        title: checked ? "Account deactivated" : "Account reactivated",
-        description: checked
-          ? "Your account is now deactivated. You will be logged out."
-          : "Your account is now active.",
-        className: checked ? "bg-yellow-600 text-white border-yellow-700" : "bg-green-600 text-white border-green-700"
-      });
+      if (!checked) {
+        toast({
+          title: "Account reactivated",
+          description: "Your account is now active.",
+          className: "bg-green-600 text-white border-green-700"
+        });
+      }
       if (checked) {
         await signOut();
         navigate("/");

@@ -14,6 +14,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 const Upload = () => {
   const location = useLocation();
   const changeVideoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -209,6 +210,15 @@ const Upload = () => {
 
       if (file.type.startsWith('video/')) {
         duration = await extractVideoDuration(file);
+        if (!Number.isFinite(duration) || duration <= 0) {
+          toast({
+            title: "Invalid Video Duration",
+            description: "Could not determine video duration. Please try a different video.",
+            variant: "destructive"
+          });
+          setUploading(false);
+          return;
+        }
 
         // If user picked a custom cover image, upload it
         if (coverImageFile) {

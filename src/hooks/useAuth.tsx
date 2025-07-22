@@ -135,9 +135,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
       } else {
         toast({
-          title: "Signed out successfully",
-          description: "You have been signed out",
-          className: "bg-green-600 text-white border-green-700"
+          description: "You have been signed out successfully.",
+          className: "bg-green-600 text-white border-green-700",
+          duration: 3000
         });
       }
     } catch (error) {

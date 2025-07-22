@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import React from "react";
@@ -156,6 +156,7 @@ const Feed = () => {
   const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
   const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
   const [globalMuted, setGlobalMuted] = useState(false); // Start unmuted (sound ON)
+  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -296,11 +297,41 @@ const Feed = () => {
       })
       .subscribe();
 
+    // Subscribe to saved_videos changes
+    const savedChannel = supabase
+      .channel('saved_videos_realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'saved_videos'
+      }, async (payload) => {
+        console.log('Saved video change detected:', payload);
+        try {
+          if (payload.eventType === 'INSERT' && payload.new?.user_id === user.id) {
+            setSavedStatus(prev => ({
+              ...prev,
+              [payload.new.video_id]: true
+            }));
+          } else if (payload.eventType === 'DELETE') {
+            if (payload.old && payload.old.user_id === user.id) {
+              setSavedStatus(prev => ({
+                ...prev,
+                [payload.old.video_id]: false
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Error in saved_videos realtime handler:', error);
+        }
+      })
+      .subscribe();
+
     // Cleanup subscriptions
     return () => {
       supabase.removeChannel(videosChannel);
       supabase.removeChannel(likesChannel);
       supabase.removeChannel(viewsChannel);
+      supabase.removeChannel(savedChannel);
     };
   }, [user, videos]);
 
@@ -384,6 +415,7 @@ const Feed = () => {
       setSearchResults(data || []);
       // Also check like status for search results
       await checkLikeStatus(data || []);
+      await checkSavedStatus(data || []);
     }
     setSearchLoading(false);
   };
@@ -426,6 +458,7 @@ const Feed = () => {
       await checkFollowStatus(filtered);
       await checkLikeStatus(filtered);
       await checkViewCounts(filtered);
+      await checkSavedStatus(filtered);
     } catch (error) {
       console.error('Error in fetchVideos:', error);
       setError('Failed to load videos. Please try again.');
@@ -759,6 +792,47 @@ const Feed = () => {
     return (count / 1000000).toFixed(1) + 'M';
   };
 
+  const checkSavedStatus = async (videosArr: any[]) => {
+    if (!user || videosArr.length === 0) return;
+    try {
+      const videoIds = videosArr.map(video => video.id);
+      const { data: saved } = await supabase
+        .from('saved_videos')
+        .select('video_id')
+        .eq('user_id', user.id)
+        .in('video_id', videoIds);
+      const savedVideoIds = new Set(saved?.map(row => row.video_id) || []);
+      const newSavedStatus: { [key: string]: boolean } = {};
+      videosArr.forEach(video => {
+        newSavedStatus[video.id] = savedVideoIds.has(video.id);
+      });
+      setSavedStatus(newSavedStatus);
+    } catch (error) {
+      console.error('Error checking saved status:', error);
+    }
+  };
+  const handleSave = async (videoId: string) => {
+    if (!user) return;
+    try {
+      if (savedStatus[videoId]) {
+        await supabase
+          .from('saved_videos')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('video_id', videoId);
+        setSavedStatus(prev => ({ ...prev, [videoId]: false }));
+        // Optionally show toast
+      } else {
+        await supabase
+          .from('saved_videos')
+          .insert({ user_id: user.id, video_id: videoId });
+        setSavedStatus(prev => ({ ...prev, [videoId]: true }));
+        // Optionally show toast
+      }
+    } catch (error) {
+      // Optionally show error toast
+    }
+  };
 
 
   // Helper to render clickable hashtags
@@ -883,7 +957,6 @@ const Feed = () => {
                   onClick={() => {
                     setShowSearch(false);
                     setSearchTerm('');
-                    setSearchResults(null);Term('');
                     setSearchResults(null);Term('');
                     setSearchResults(null);Term('');
                     setSearchResults(null);Term('');
@@ -1164,6 +1237,19 @@ const Feed = () => {
                           </span>
                         </div>
 
+                        {/* Save Button */}
+                        <div className="flex flex-col items-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={e => { e.stopPropagation(); handleSave(video.id); }}
+                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            data-control
+                          >
+                            {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
+                          </Button>
+                        </div>
+
                         {/* Share */}
                         <div className="flex flex-col items-center">
                           <Button
@@ -1344,6 +1430,19 @@ const Feed = () => {
                           <span className="text-white text-xs mt-1 font-medium">
                             {formatViews(viewCounts[video.id] || 0)}
                           </span>
+                        </div>
+
+                        {/* Save Button */}
+                        <div className="flex flex-col items-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={e => { e.stopPropagation(); handleSave(video.id); }}
+                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            data-control
+                          >
+                            {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
+                          </Button>
                         </div>
 
                         {/* Share */}

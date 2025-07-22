@@ -1,7 +1,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Volume2, VolumeX, Share, Play, Plus, Heart, Eye } from "lucide-react";
+import { X, Volume2, VolumeX, Share, Play, Plus, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -46,6 +46,7 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
 
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -297,10 +298,49 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
     }
   };
 
+  const checkSavedStatus = async () => {
+    if (!user) return;
+    try {
+      const { data: saved } = await supabase
+        .from('saved_videos')
+        .select('video_id')
+        .eq('user_id', user.id)
+        .eq('video_id', video.id);
+      setSavedStatus(prev => ({ ...prev, [video.id]: !!(saved && saved.length) }));
+    } catch (error) {
+      console.error('Error checking saved status:', error);
+    }
+  };
+  const handleSave = async (videoId: string) => {
+    if (!user) return;
+    try {
+      if (savedStatus[videoId]) {
+        // Unsave
+        await supabase
+          .from('saved_videos')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('video_id', videoId);
+        setSavedStatus(prev => ({ ...prev, [videoId]: false }));
+        toast({ description: 'Removed from Saved Videos.' });
+      } else {
+        // Save
+        await supabase
+          .from('saved_videos')
+          .insert({ user_id: user.id, video_id: videoId });
+        setSavedStatus(prev => ({ ...prev, [videoId]: true }));
+        toast({ description: 'Saved to your Saved Videos!' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Could not update saved status.', variant: 'destructive' });
+    }
+  };
+
   useEffect(() => {
     checkFollowStatus();
     checkLikeStatus();
     checkViewCounts();
+    checkSavedStatus();
   }, [video.id, user]);
 
   // Record view when video starts playing
@@ -441,7 +481,7 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
       </div>
 
       {/* Side Actions */}
-      <div className="absolute right-4 bottom-20 flex flex-col items-center space-y-6">
+      <div className="flex flex-col items-center space-y-4 absolute right-4 top-1/2 -translate-y-1/2 z-20">
         {/* Like Button */}
         <div className="flex flex-col items-center">
           <Button
@@ -472,6 +512,19 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
           <span className="text-white text-xs mt-1 font-medium">
             {formatViews(viewCounts[video.id] || 0)}
           </span>
+        </div>
+
+        {/* Save Button */}
+        <div className="flex flex-col items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={e => { e.stopPropagation(); handleSave(video.id); }}
+            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+            data-control
+          >
+            {savedStatus[video.id] ? <BookmarkCheck size={28} className="text-green-400" /> : <Bookmark size={28} className="text-white" />}
+          </Button>
         </div>
 
         {/* Share Button */}

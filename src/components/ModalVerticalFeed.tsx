@@ -1,6 +1,6 @@
 import AutoPlayVideo from "@/components/AutoPlayVideo";
 import React, { useRef, useEffect, useState } from "react";
-import { X, MessageCircle, Share2, Volume2, VolumeX, Plus, Heart, Eye } from "lucide-react";
+import { X, MessageCircle, Share2, Volume2, VolumeX, Plus, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -27,6 +27,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
   const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
   const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
   const [modalVideos, setModalVideos] = useState(videos);
+  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
 
   // Only update modalVideos when videos prop changes
   useEffect(() => {
@@ -106,6 +107,51 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
     checkLikeStatus();
   }, [user, modalVideos]);
 
+  const checkSavedStatus = async () => {
+    if (!user || modalVideos.length === 0) return;
+    try {
+      const videoIds = modalVideos.map(video => video.id);
+      const { data: saved } = await supabase
+        .from('saved_videos')
+        .select('video_id')
+        .eq('user_id', user.id)
+        .in('video_id', videoIds);
+      const savedVideoIds = new Set(saved?.map(row => row.video_id) || []);
+      const newSavedStatus: { [key: string]: boolean } = {};
+      modalVideos.forEach(video => {
+        newSavedStatus[video.id] = savedVideoIds.has(video.id);
+      });
+      setSavedStatus(newSavedStatus);
+    } catch (error) {
+      console.error('Error checking saved status:', error);
+    }
+  };
+  const handleSave = async (videoId: string) => {
+    if (!user) return;
+    try {
+      if (savedStatus[videoId]) {
+        await supabase
+          .from('saved_videos')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('video_id', videoId);
+        setSavedStatus(prev => ({ ...prev, [videoId]: false }));
+        // Optionally show toast
+      } else {
+        await supabase
+          .from('saved_videos')
+          .insert({ user_id: user.id, video_id: videoId });
+        setSavedStatus(prev => ({ ...prev, [videoId]: true }));
+        // Optionally show toast
+      }
+    } catch (error) {
+      // Optionally show error toast
+    }
+  };
+
+  useEffect(() => {
+    checkSavedStatus();
+  }, [user, modalVideos]);
 
 
   const handleFollow = async (video: any) => {
@@ -344,7 +390,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
                   </div>
                 </div>
                 {/* Actions */}
-                <div className="flex flex-col items-center space-y-6">
+                <div className="flex flex-col items-center space-y-4">
                   {/* Like Button */}
                   <div className="flex flex-col items-center">
                     <Button
@@ -376,20 +422,19 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
                       {formatViews(viewCounts[video.id] || 0)}
                     </span>
                   </div>
-
-                  {/* Comment */}
+                  {/* Save Button */}
                   <div className="flex flex-col items-center">
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={e => { e.stopPropagation(); handleSave(video.id); }}
                       className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
                       data-control
                     >
-                      <MessageCircle size={24} className="text-white" />
+                      {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
                     </Button>
-                    <span className="text-white text-xs font-semibold mt-1">{video.comment_count || 0}</span>
                   </div>
-                  {/* Share */}
+                  {/* Share Button */}
                   <div className="flex flex-col items-center">
                     <Button
                       variant="ghost"
