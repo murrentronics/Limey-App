@@ -250,18 +250,37 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
   const recordView = async () => {
     if (viewRecorded) return;
     
+    // Check if the current user is the creator of the video
+    // If so, don't record the view (prevent self-views)
+    if (user && video.user_id === user.id) {
+      console.log('Self-view detected, not recording view');
+      setViewRecorded(true); // Mark as recorded to prevent further attempts
+      return;
+    }
+    
     try {
       const { data, error } = await supabase.rpc('record_video_view' as any, {
         video_uuid: video.id
       });
       
-      if (!error && data) {
+      // The function returns a boolean indicating if the view was recorded
+      // If there's no error, consider the view recorded
+      if (error === null) {
         setViewRecorded(true);
-        // Update view count
-        setViewCounts(prev => ({
-          ...prev,
-          [video.id]: (prev[video.id] || 0) + 1
-        }));
+        
+        // Update view count locally only if the view was actually recorded (data === true)
+        // This ensures the UI is updated only for genuine views
+        if (data === true) {
+          setViewCounts(prev => ({
+            ...prev,
+            [video.id]: (prev[video.id] || 0) + 1
+          }));
+          
+          // If there's an onViewRecorded callback, call it
+          if (props.onViewRecorded) {
+            props.onViewRecorded(video.id);
+          }
+        }
       }
     } catch (error) {
       console.error('Error recording view:', error);
@@ -271,7 +290,9 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
   const checkViewCounts = async () => {
     try {
       // Get current view count from video data
-      setViewCounts(prev => ({ ...prev, [video.id]: video.view_count || 0 }));
+      const viewCount = typeof video.view_count === 'number' ? video.view_count : 0;
+      setViewCounts(prev => ({ ...prev, [video.id]: viewCount }));
+      console.log(`Initial view count for video ${video.id}:`, viewCount);
     } catch (error) {
       console.error('Error checking view counts:', error);
     }

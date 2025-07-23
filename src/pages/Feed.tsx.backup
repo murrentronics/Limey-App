@@ -1,0 +1,349 @@
+﻿import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
+import BottomNavigation from "@/components/BottomNavigation";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import React from "react";
+
+// --- AutoPlayVideo component ---
+const AutoPlayVideo = ({ src, className, globalMuted, videoId, videoData, onViewRecorded, ...props }) => {
+  const videoRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [viewRecorded, setViewRecorded] = useState(false);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Always start muted to allow autoplay
+    video.muted = true;
+    
+    // Add event listeners to track video playing state
+    const handlePlay = () => {
+      console.log('Video play event:', videoId);
+      setIsPlaying(true);
+    };
+    
+    const handlePause = () => {
+      console.log('Video pause event:', videoId);
+      setIsPlaying(false);
+    };
+    
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+
+    const observer = new window.IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          setIsVisible(true);
+          // Try to play the video
+          video.play().then(() => {
+            setIsPlaying(true); // Set isPlaying to true when video starts playing
+            console.log('Video playing:', videoId);
+          }).catch(error => {
+            console.log('Autoplay prevented:', error);
+            setIsPlaying(false);
+            // Video will remain paused until user interaction
+          });
+        } else {
+          setIsVisible(false);
+          setIsPlaying(false); // Set isPlaying to false when video is not visible
+          video.pause();
+          video.currentTime = 0;
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(video);
+
+    // After a short delay, apply the actual muted state
+    // This ensures autoplay works first, then we can unmute if needed
+    const timer = setTimeout(() => {
+      video.muted = globalMuted;
+    }, 1000);
+
+    return () => {
+      observer.unobserve(video);
+      clearTimeout(timer);
+      
+      // Remove event listeners
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+    };
+  }, [globalMuted, videoId]);
+
+  // Record view when video has been playing and visible for 5 seconds
+  useEffect(() => {
+    console.log('View recording effect running:', { isVisible, isPlaying, viewRecorded, videoId });
+    
+    if (isVisible && isPlaying && !viewRecorded && videoId) {
+      console.log('Starting view recording timer for video:', videoId);
+      
+      // Check if the current user is the creator of the video
+      // If so, don't record the view (prevent self-views)
+      if (user && videoData && videoData.user_id === user.id) {
+        console.log('Self-view detected, not recording view for video:', videoId);
+        setViewRecorded(true); // Mark as recorded to prevent further attempts
+        return;
+      }
+      
+      const timer = setTimeout(async () => {
+        console.log('View timer completed for video:', videoId);
+        try {
+          const { data, error } = await supabase.rpc('record_video_view', {
+            video_uuid: videoId
+          });
+
+          console.log('View recording response:', { data, error, videoId });
+
+          // Mark as recorded regardless of the response to prevent multiple attempts
+          setViewRecorded(true);
+          
+          // If there's no error, the view was processed (even if not counted due to server rules)
+          if (error === null) {
+            // Update the UI to show the view was counted
+            if (onViewRecorded) {
+              console.log('Calling onViewRecorded for video:', videoId);
+              onViewRecorded(videoId);
+            }
+          }
+        } catch (error) {
+          console.error('Error recording view:', error);
+        }
+      }, 5000); // 5 seconds delay
+
+      return () => {
+        console.log('Cleaning up view timer for video:', videoId);
+        clearTimeout(timer);
+      };
+    }
+  }, [isVisible, isPlaying, viewRecorded, videoId, onViewRecorded, user, videoData]);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      className={className}
+      loop
+      playsInline
+      muted={globalMuted}
+      {...props}
+    />
+  );
+};
+
+// Main Feed component
+const Feed = () => {
+  const [activeTab, setActiveTab] = useState("for-you");
+  const [activeCategory, setActiveCategory] = useState("All");
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [pageNum, setPageNum] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [globalMuted, setGlobalMuted] = useState(false);
+  const [likeStatus, setLikeStatus] = useState({});
+  const [likeCounts, setLikeCounts] = useState({});
+  const [viewCounts, setViewCounts] = useState({});
+  const [savedStatus, setSavedStatus] = useState({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const searchInputRef = useRef(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Format view count for display
+  const formatViews = (count) => {
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M`;
+    } else if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}K`;
+    } else {
+      return count.toString();
+    }
+  };
+
+  // Handle video view recording
+  const onViewRecorded = (videoId) => {
+    // Update view count when a view is recorded
+    // This is only called when a view is actually recorded (not for self-views)
+    console.log(`View recorded for video ${videoId}, updating count`);
+    setViewCounts(prev => ({
+      ...prev,
+      [videoId]: (prev[videoId] || 0) + 1
+    }));
+  };
+
+  // Load videos on component mount
+  useEffect(() => {
+    fetchVideos();
+  }, [activeTab, activeCategory]);
+
+  // Fetch videos from the database
+  const fetchVideos = async (append = false) => {
+    try {
+      setLoading(true);
+      
+      // Fetch videos based on active tab and category
+      const { data, error } = await supabase
+        .from('videos')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Filter videos by category if needed
+      const filtered = activeCategory === "All" 
+        ? data 
+        : data.filter(video => video.category === activeCategory);
+      
+      setVideos(filtered);
+      setHasMore(filtered.length > 0);
+      
+      // Check like status and view counts
+      if (filtered.length > 0) {
+        await checkLikeStatus(filtered);
+        await checkViewCounts(filtered);
+        await checkSavedStatus(filtered);
+      }
+    } catch (err) {
+      console.error("Error fetching videos:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check view counts for videos
+  const checkViewCounts = async (videosArr) => {
+    try {
+      const newViewCounts = {};
+
+      videosArr.forEach(video => {
+        // Make sure we're using the correct property and providing a default value of 0
+        newViewCounts[video.id] = typeof video.view_count === 'number' ? video.view_count : 0;
+      });
+
+      // Update the view counts state
+      setViewCounts(prev => ({ ...prev, ...newViewCounts }));
+      
+      console.log('Updated view counts:', newViewCounts);
+    } catch (error) {
+      console.error('Error checking view counts:', error);
+    }
+  };
+
+  // Check like status for videos
+  const checkLikeStatus = async (videosArr) => {
+    // Implementation would go here
+    // This is a placeholder
+  };
+
+  // Check saved status for videos
+  const checkSavedStatus = async (videosArr) => {
+    // Implementation would go here
+    // This is a placeholder
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      {/* Header */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-4">
+        <div className="flex items-center justify-between">
+          <span className="text-2xl font-black text-white tracking-wider logo-text-glow">
+            LIMEY
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSearch(!showSearch)}
+              className="text-white"
+            >
+              <SearchIcon size={20} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/settings')}
+              className="text-white"
+            >
+              <Settings size={20} />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="pt-16 pb-16">
+        {/* Video feed */}
+        <div className="relative">
+          {videos.map((video, index) => (
+            <div key={video.id} className="relative h-screen w-full">
+              {/* Video container */}
+              <div className="absolute inset-0 top-16 bottom-32 overflow-hidden">
+                {/* Video */}
+                <AutoPlayVideo
+                  src={video.video_url}
+                  className="w-full h-full object-cover"
+                  globalMuted={globalMuted}
+                  videoId={video.id}
+                  videoData={video}
+                  onViewRecorded={onViewRecorded}
+                />
+              </div>
+
+              {/* Video info */}
+              <div className="absolute bottom-32 left-0 right-0 p-4">
+                <div className="flex items-start">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-white">{video.title}</h3>
+                    <p className="text-sm text-white/70">{video.description}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Loading state */}
+          {loading && (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!loading && videos.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-[70vh] px-4">
+              <h3 className="text-xl font-bold text-white mb-2">No videos found</h3>
+              <p className="text-white/70 mb-4">
+                {activeCategory === "All"
+                  ? "Be the first to upload a video!"
+                  : `No videos found in the "${activeCategory}" category`}
+              </p>
+              <Button
+                onClick={() => navigate('/upload')}
+                className="bg-white text-black hover:bg-white/90"
+              >
+                Upload Your First Video
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Navigation */}
+      <BottomNavigation />
+    </div>
+  );
+};
+
+export default Feed;

@@ -1,0 +1,126 @@
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
+import BottomNavigation from "@/components/BottomNavigation";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import React from "react";
+
+// --- AutoPlayVideo component ---
+const AutoPlayVideo = ({ src, className, globalMuted, videoId, videoData, onViewRecorded, ...props }) => {
+  const videoRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [viewRecorded, setViewRecorded] = useState(false);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Always start muted to allow autoplay
+    video.muted = true;
+
+    const observer = new window.IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          setIsVisible(true);
+          // Try to play the video
+          video.play().catch(error => {
+            console.log('Autoplay prevented:', error);
+            // Video will remain paused until user interaction
+          });
+        } else {
+          setIsVisible(false);
+          video.pause();
+          video.currentTime = 0;
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(video);
+
+    // After a short delay, apply the actual muted state
+    // This ensures autoplay works first, then we can unmute if needed
+    const timer = setTimeout(() => {
+      video.muted = globalMuted;
+    }, 1000);
+
+    return () => {
+      observer.unobserve(video);
+      clearTimeout(timer);
+    };
+  }, [globalMuted]);
+
+  // Record view when video has been playing and visible for 5 seconds
+  useEffect(() => {
+    if (isVisible && isPlaying && !viewRecorded && videoId) {
+      // Check if the current user is the creator of the video
+      // If so, don't record the view (prevent self-views)
+      if (user && videoData && videoData.user_id === user.id) {
+        console.log('Self-view detected, not recording view');
+        setViewRecorded(true); // Mark as recorded to prevent further attempts
+        return;
+      }
+      
+      const timer = setTimeout(async () => {
+        try {
+          const { data, error } = await supabase.rpc('record_video_view', {
+            video_uuid: videoId
+          });
+
+          // If there's no error, consider the view recorded
+          // The function returns a boolean indicating if the view was actually recorded
+          if (error === null) {
+            setViewRecorded(true);
+            // Only update the view count if the view was actually recorded (data === true)
+            if (data === true && onViewRecorded) {
+              onViewRecorded(videoId);
+            }
+          }
+        } catch (error) {
+          console.error('Error recording view:', error);
+        }
+      }, 5000); // 5 seconds delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible, isPlaying, viewRecorded, videoId, onViewRecorded, user, videoData]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = globalMuted;
+    }
+  }, [globalMuted]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+    };
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      className={className}
+      loop
+      playsInline
+      muted={globalMuted}
+      {...props}
+    />
+  );
+};

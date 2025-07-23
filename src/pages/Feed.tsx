@@ -1,16 +1,54 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck, MessageCircle } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import React from "react";
 
+// Define interfaces for better type safety
+interface VideoData {
+  id: string;
+  title: string;
+  description?: string;
+  video_url: string;
+  thumbnail_url?: string;
+  category?: string;
+  user_id: string;
+  username?: string;
+  created_at: string;
+  like_count?: number;
+  view_count?: number;
+  comment_count?: number;
+  duration?: number;
+  tags?: string[];
+  profiles?: {
+    username?: string;
+    avatar_url?: string;
+    deactivated?: boolean;
+    user_id?: string;
+  };
+  avatar_url?: string;
+  is_following?: boolean;
+  follower_count?: number;
+  // Add any other properties that might be returned from Supabase
+  [key: string]: any; // This allows for additional properties
+}
+
 // --- AutoPlayVideo component ---
-const AutoPlayVideo = ({ src, className, globalMuted, videoId, onViewRecorded, ...props }) => {
+interface AutoPlayVideoProps {
+  src: string;
+  className?: string;
+  globalMuted: boolean;
+  videoId: string;
+  onViewRecorded?: (videoId: string) => void;
+  [key: string]: any;
+}
+
+const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMuted, videoId, onViewRecorded, ...props }) => {
   const videoRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -138,26 +176,28 @@ const AutoPlayVideo = ({ src, className, globalMuted, videoId, onViewRecorded, .
   );
 };
 
+// Note: VideoData interface is already defined above
+
 const Feed = () => {
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState<string>("All");
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
-  const [videos, setVideos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [videos, setVideos] = useState<VideoData[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [searchResults, setSearchResults] = useState<any[] | null>(null);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [isPlaying, setIsPlaying] = useState<{ [key: string]: boolean }>({});
-  const [isMuted, setIsMuted] = useState<{ [key: string]: boolean }>({});
-  const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
-  const [likeStatus, setLikeStatus] = useState<{ [key: string]: boolean }>({});
-  const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
-  const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
-  const [globalMuted, setGlobalMuted] = useState(false); // Start unmuted (sound ON)
-  const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
-  const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
+  const [currentVideoIndex, setCurrentVideoIndex] = useState<number>(0);
+  const [showSearch, setShowSearch] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<VideoData[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState<boolean>(false);
+  const [isPlaying, setIsPlaying] = useState<Record<string, boolean>>({});
+  const [isMuted, setIsMuted] = useState<Record<string, boolean>>({});
+  const [followStatus, setFollowStatus] = useState<Record<string, boolean>>({});
+  const [likeStatus, setLikeStatus] = useState<Record<string, boolean>>({});
+  const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
+  const [globalMuted, setGlobalMuted] = useState<boolean>(false);
+  const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
@@ -452,8 +492,12 @@ const Feed = () => {
       // Update like counts immediately
       setLikeCounts(prev => ({ ...prev, ...initialLikeCounts }));
 
-      // After fetching, filter out videos where profiles.deactivated is true
-      const filtered = (data || []).filter(v => !v.profiles?.deactivated);
+      // After fetching, filter out videos where profiles.deactivated is true//
+      const filtered = (data || []).filter(v => {
+        // Check if profiles exists and if deactivated is true
+        const profileData = v as unknown as { profiles?: { deactivated?: boolean } };
+        return !profileData.profiles?.deactivated;
+      });
       setVideos(filtered);
       await checkFollowStatus(filtered);
       await checkLikeStatus(filtered);
@@ -545,7 +589,7 @@ const Feed = () => {
 
 
 
-  const handleShare = async (video: any) => {
+  const handleShare = async (video: VideoData) => {
     const videoUrl = `${window.location.origin}/video/${video.id}`;
     try {
       await navigator.share({
@@ -604,7 +648,7 @@ const Feed = () => {
     }
   };
 
-  const getUsername = (video: any) => {
+  const getUsername = (video: VideoData) => {
     // Use direct username field from videos table
     if (video.username) return video.username;
     if (video.user_id) {
@@ -614,7 +658,7 @@ const Feed = () => {
     return 'unknown_user';
   };
 
-  const getProfileUrl = (video: any) => {
+  const getProfileUrl = (video: VideoData) => {
     const username = getUsername(video);
     if (user && video.user_id === user.id) {
       return '/profile';
@@ -622,14 +666,14 @@ const Feed = () => {
     return `/profile/${username}`;
   };
 
-  const addFollowFields = (videosArr) =>
+  const addFollowFields = (videosArr: VideoData[]): VideoData[] =>
     videosArr.map((v) => ({
       ...v,
       is_following: v.is_following ?? false,
       follower_count: v.follower_count ?? 0,
     }));
 
-  const checkFollowStatus = async (videosArr: any[]) => {
+  const checkFollowStatus = async (videosArr: VideoData[]) => {
     if (!user) return;
     try {
       const userIds = videosArr.map(video => video.user_id).filter(id => id !== user.id);
@@ -704,7 +748,7 @@ const Feed = () => {
     }
   };
 
-  const checkLikeStatus = async (videosArr: any[]) => {
+  const checkLikeStatus = async (videosArr: VideoData[]) => {
     if (!user) return;
 
     try {
@@ -762,7 +806,7 @@ const Feed = () => {
   };
 
   // View count functions
-  const checkViewCounts = async (videosArr: any[]) => {
+  const checkViewCounts = async (videosArr: VideoData[]) => {
     try {
       const newViewCounts: { [key: string]: number } = {};
 
@@ -792,20 +836,41 @@ const Feed = () => {
     return (count / 1000000).toFixed(1) + 'M';
   };
 
-  const checkSavedStatus = async (videosArr: any[]) => {
+  const checkSavedStatus = async (videosArr: VideoData[]) => {
     if (!user || videosArr.length === 0) return;
     try {
       const videoIds = videosArr.map(video => video.id);
-      const { data: saved } = await supabase
-        .from('saved_videos')
+
+      // Define a type for saved videos
+      interface SavedVideo {
+        video_id: string;
+      }
+
+      // Use type assertion to tell TypeScript that 'saved_videos' is a valid table
+      // and specify the expected response structure
+      const response = await (supabase
+        .from('saved_videos' as any)
         .select('video_id')
         .eq('user_id', user.id)
-        .in('video_id', videoIds);
-      const savedVideoIds = new Set(saved?.map(row => row.video_id) || []);
-      const newSavedStatus: { [key: string]: boolean } = {};
+        .in('video_id', videoIds));
+
+      // Extract the data from the response with proper type assertion
+      const saved = (response.data as unknown as SavedVideo[]) || [];
+
+      // Create a Set of saved video IDs with explicit typing
+      const savedVideoIds = new Set<string>(saved.map(row => row.video_id));
+
+      // Create a new status object
+      const newSavedStatus: Record<string, boolean> = {};
+
+      // Set saved status for each video
       videosArr.forEach(video => {
-        newSavedStatus[video.id] = savedVideoIds.has(video.id);
+        if (video && video.id) {
+          newSavedStatus[video.id] = savedVideoIds.has(video.id);
+        }
       });
+
+      // Update state with the new saved statuses
       setSavedStatus(newSavedStatus);
     } catch (error) {
       console.error('Error checking saved status:', error);
@@ -814,22 +879,47 @@ const Feed = () => {
   const handleSave = async (videoId: string) => {
     if (!user) return;
     try {
+      // Define interfaces for Supabase responses
+      interface DeleteResponse {
+        error: any;
+      }
+
+      interface InsertResponse {
+        error: any;
+      }
+
       if (savedStatus[videoId]) {
-        await supabase
-          .from('saved_videos')
+        // Delete the saved video with proper type assertion
+        const { error: deleteError } = await (supabase
+          .from('saved_videos' as any)
           .delete()
           .eq('user_id', user.id)
-          .eq('video_id', videoId);
+          .eq('video_id', videoId)) as DeleteResponse;
+
+        if (deleteError) throw deleteError;
+
+        // Update state optimistically
         setSavedStatus(prev => ({ ...prev, [videoId]: false }));
         // Optionally show toast
       } else {
-        await supabase
-          .from('saved_videos')
-          .insert({ user_id: user.id, video_id: videoId });
+        // Insert new saved video with proper type assertion
+        const { error: insertError } = await (supabase
+          .from('saved_videos' as any)
+          .insert({
+            user_id: user.id,
+            video_id: videoId
+          })) as InsertResponse;
+
+        if (insertError) throw insertError;
+
+        // Update state optimistically
         setSavedStatus(prev => ({ ...prev, [videoId]: true }));
         // Optionally show toast
       }
     } catch (error) {
+      console.error('Error saving/unsaving video:', error);
+      // Revert optimistic update if there was an error
+      setSavedStatus(prev => ({ ...prev, [videoId]: !prev[videoId] }));
       // Optionally show error toast
     }
   };
@@ -859,9 +949,7 @@ const Feed = () => {
   // Back button for filtered views
   const showBackButton = activeHashtag || (activeCategory && activeCategory !== "All");
 
-  function Term(arg0: string) {
-    throw new Error("Function not implemented.");
-  }
+
 
   return (
     <div className="min-h-screen bg-black">
@@ -957,24 +1045,6 @@ const Feed = () => {
                   onClick={() => {
                     setShowSearch(false);
                     setSearchTerm('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
-                    setSearchResults(null);Term('');
                     setSearchResults(null);
                   }}
                   aria-label="Close"
@@ -983,7 +1053,7 @@ const Feed = () => {
                   <CloseIcon size={18} />
                 </Button>
               </div>
-              
+
               {/* Category carousel */}
               <div className="overflow-x-auto pb-2 -mx-2 px-2">
                 <div className="flex space-x-2">
@@ -992,9 +1062,8 @@ const Feed = () => {
                     key="all"
                     variant="outline"
                     size="sm"
-                    className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${
-                      activeCategory === "All" ? 'border-lime-400 text-lime-400' : 'border-white/50'
-                    }`}
+                    className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${activeCategory === "All" ? 'border-lime-400 text-lime-400' : 'border-white/50'
+                      }`}
                     onClick={() => {
                       setActiveCategory("All");
                       setActiveHashtag(null);
@@ -1008,9 +1077,8 @@ const Feed = () => {
                       key={category}
                       variant="outline"
                       size="sm"
-                      className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${
-                        activeCategory === category ? 'border-lime-400 text-lime-400' : 'border-white/50'
-                      }`}
+                      className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${activeCategory === category ? 'border-lime-400 text-lime-400' : 'border-white/50'
+                        }`}
                       onClick={() => {
                         setActiveCategory(category);
                         setActiveHashtag(null);
@@ -1476,7 +1544,3 @@ const Feed = () => {
 };
 
 export default Feed;
-
-
-
-
