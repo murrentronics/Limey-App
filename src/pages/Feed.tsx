@@ -929,7 +929,7 @@ const Feed = () => {
     setViewCounts(prev => ({
       ...prev,
       [videoId]: (prev[videoId] || 0) + 1
-    }));
+    }));``
   };
 
   // Format view count for display
