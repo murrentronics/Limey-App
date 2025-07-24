@@ -759,6 +759,8 @@ const Profile = () => {
     
     setSendingMessage(true);
     try {
+      console.log('Sending message to user:', profile.username);
+      
       // Check if chat already exists between user and profile.user_id
       const { data: existingChats, error } = await supabase
         .from('chats' as any)
@@ -771,60 +773,87 @@ const Profile = () => {
         return;
       }
       
-      // Check if there are any chats (including deleted ones) between these users
-      const anyExistingChat = existingChats?.find(
-        c => (c.sender_id === user.id && c.receiver_id === profile.user_id) ||
-             (c.sender_id === profile.user_id && c.receiver_id === user.id)
-      );
+      console.log('Found existing chats:', existingChats);
       
-      let chat = null;
-      let shouldCreateNewChat = true;
-      
-      if (anyExistingChat) {
-        const isDeletedForUser = 
-          (anyExistingChat.sender_id === user.id && anyExistingChat.deleted_for_sender) ||
-          (anyExistingChat.receiver_id === user.id && anyExistingChat.deleted_for_receiver);
-        
-        if (!isDeletedForUser) {
-          // Chat exists and is not deleted for current user, reuse it
-          chat = anyExistingChat;
-          shouldCreateNewChat = false;
+      // Filter out deleted chats when looking for existing chats
+      const nonDeletedChats = existingChats?.filter(chat => {
+        if (chat.sender_id === user.id) {
+          return !chat.deleted_for_sender;
+        } else {
+          return !chat.deleted_for_receiver;
         }
-      }
+      }) || [];
       
-      if (shouldCreateNewChat) {
-        // Create new chat
+      const filteredExistingChat = nonDeletedChats.length > 0 ? nonDeletedChats[0] : null;
+      console.log('Using existing chat:', filteredExistingChat);
+      
+      let chatId;
+      
+      if (filteredExistingChat) {
+        console.log('Found existing non-deleted chat:', filteredExistingChat.id);
+        chatId = filteredExistingChat.id;
+        
+        // Update chat's last message and timestamp
+        const { error: updateError } = await supabase
+          .from('chats' as any)
+          .update({
+            last_message: messageText.trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', chatId);
+
+        if (updateError) {
+          console.error('Error updating existing chat:', updateError);
+          throw updateError;
+        }
+      } else {
+        // No non-deleted chat exists, create a completely new chat
+        console.log('Creating new chat between', user.id, 'and', profile.user_id);
+        
         const { data: newChat, error: createError } = await supabase
           .from('chats' as any)
-          .insert({ sender_id: user.id, receiver_id: profile.user_id })
+          .insert({
+            sender_id: user.id,
+            receiver_id: profile.user_id,
+            last_message: messageText.trim(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
           .select()
           .single();
+          
         if (createError) {
+          console.error('Error creating chat:', createError);
           toast({ title: 'Failed to create chat', description: createError.message, variant: 'destructive' });
           return;
         }
-        chat = newChat;
+        console.log('Created new chat:', newChat);
+        chatId = newChat.id;
       }
       
       // Send the message
       const { error: messageError } = await supabase
         .from('messages' as any)
         .insert({
-          chat_id: chat.id,
+          chat_id: chatId,
           sender_id: user.id,
-          receiver_id: profile.user_id, // Add the receiver_id field
-          content: messageText.trim()
+          receiver_id: profile.user_id,
+          content: messageText.trim(),
+          created_at: new Date().toISOString()
         });
       
       if (messageError) {
+        console.error('Error sending message:', messageError);
         toast({ title: 'Failed to send message', description: messageError.message, variant: 'destructive' });
         return;
       }
       
+      console.log('Message sent successfully, navigating to chat:', chatId);
+      
       // Close sheet and navigate to chat
       setShowMessageModal(false);
       setMessageText("");
-      navigate(`/chat/${chat.id}`);
+      navigate(`/chat/${chatId}`);
       
     } catch (error) {
       console.error('Error sending message:', error);
@@ -1319,11 +1348,14 @@ const Profile = () => {
       
       {/* Message Sheet - Slides up from bottom */}
       <Sheet open={showMessageModal} onOpenChange={setShowMessageModal}>
-        <SheetContent side="bottom" className="rounded-t-xl max-h-[80vh] overflow-y-auto">
+        <SheetContent side="bottom" className="rounded-t-xl max-h-[80vh] overflow-y-auto" aria-describedby="message-sheet-description">
           {/* Drag handle for swipe down to close */}
           <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-4"></div>
           <SheetHeader className="mb-4">
             <SheetTitle>Send Message</SheetTitle>
+            <p id="message-sheet-description" className="text-sm text-muted-foreground">
+              Send a direct message to this user.
+            </p>
           </SheetHeader>
           
           <div className="flex items-center gap-3 mb-4">

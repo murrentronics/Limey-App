@@ -904,37 +904,14 @@ const Chat = () => {
                 <AvatarImage src={partner?.avatar_url} alt={partner?.username} />
                 <AvatarFallback>{partner?.username?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
               </Avatar>
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-black"></div>
+              {/* Online indicator removed */}
             </div>
             <div>
               <h2 className="font-semibold">@{partner?.username || 'unknown'}</h2>
             </div>
           </div>
-          <div className="relative">
-            {/* Chat Menu Button - only show for sender */}
-            {chat?.sender_id === user?.id && (
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setShowChatMenu(!showChatMenu)}
-              >
-                <MoreVertical size={20} />
-              </Button>
-            )}
-            {showChatMenu && chat?.sender_id === user?.id && (
-              <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[120px]" data-dropdown>
-                <button
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
-                  onClick={() => {
-                    setShowChatMenu(false);
-                    deleteChat();
-                  }}
-                >
-                  <Trash2 size={14} />
-                  Delete Chat
-                </button>
-              </div>
-            )}
+          <div className="w-8">
+            {/* Removed 3-dot menu with delete option */}
           </div>
         </div>
       </div>

@@ -27,17 +27,17 @@ const Inbox = () => {
     if (user) {
       fetchChats();
       const cleanup = subscribeToChats();
-      
+
       // Start periodic checking for new messages
       const interval = setInterval(() => {
         checkForNewMessages();
       }, 10000); // Check every 10 seconds
-      
+
       // Initial check for unread messages after a short delay
       const initialCheck = setTimeout(() => {
         checkForNewMessages();
       }, 2000);
-      
+
       return () => {
         cleanup();
         clearInterval(interval);
@@ -86,8 +86,23 @@ const Inbox = () => {
           variant: 'destructive',
         });
       } else {
-        // Filter out chats that the current user has deleted
-        const filteredChats = (data || []).filter(chat => !chat.sender?.deactivated && !chat.receiver?.deactivated);
+        // Filter out chats that the current user has deleted or where users are deactivated
+        const filteredChats = (data || []).filter(chat => {
+          // Filter out chats with deactivated users
+          if (chat.sender?.deactivated || chat.receiver?.deactivated) {
+            return false;
+          }
+
+          // Filter out chats that the current user has deleted
+          if ((chat.sender_id === user?.id && chat.deleted_for_sender) ||
+            (chat.receiver_id === user?.id && chat.deleted_for_receiver)) {
+            return false;
+          }
+
+          return true;
+        });
+
+        console.log('Filtered chats:', filteredChats.length, 'out of', data?.length || 0);
         setChats(filteredChats);
 
         // For each chat, fetch the latest visible message for the current user
@@ -138,7 +153,7 @@ const Inbox = () => {
 
   const subscribeToChats = () => {
     console.log('Setting up real-time subscription for chats');
-    
+
     const subscription = supabase
       .channel(`chats_${user?.id}`)
       .on('postgres_changes', {
@@ -185,19 +200,20 @@ const Inbox = () => {
       }, (payload) => {
         console.log('Chat updated:', payload.new);
         const updatedChat = payload.new;
-        
+
         // Only process if current user is involved
         if (updatedChat.sender_id === user?.id || updatedChat.receiver_id === user?.id) {
           setChats(prev => {
-            // If the chat was marked as deleted for the current user, remove it
-            const isDeletedForUser = 
+            // If the chat was marked as deleted for the current user, remove it immediately
+            const isDeletedForUser =
               (updatedChat.sender_id === user?.id && updatedChat.deleted_for_sender) ||
               (updatedChat.receiver_id === user?.id && updatedChat.deleted_for_receiver);
-            
+
             if (isDeletedForUser) {
+              console.log('Removing deleted chat from UI:', updatedChat.id);
               return prev.filter(chat => chat.id !== updatedChat.id);
             }
-            
+
             // Update existing chat or add if not exists
             const existingIndex = prev.findIndex(chat => chat.id === updatedChat.id);
             if (existingIndex >= 0) {
@@ -207,9 +223,9 @@ const Inbox = () => {
                 ...updated[existingIndex],
                 ...updatedChat
               };
-              
+
               // Sort by updated_at to keep most recent chats at top
-              return updated.sort((a, b) => 
+              return updated.sort((a, b) =>
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
               );
             } else {
@@ -232,7 +248,7 @@ const Inbox = () => {
           ...prev,
           [payload.new.chat_id]: (prev[payload.new.chat_id] || 0) + 1
         }));
-        
+
         // Update the last message for this chat
         await updateLastMessageForChat(payload.new.chat_id);
       })
@@ -258,9 +274,9 @@ const Inbox = () => {
         .eq('chat_id', chatId)
         .order('created_at', { ascending: false })
         .limit(5);
-      
+
       if (error || !messages) return;
-      
+
       // Find the latest visible message for the current user
       let lastVisible = null;
       for (const msg of messages) {
@@ -273,10 +289,10 @@ const Inbox = () => {
           break;
         }
       }
-      
+
       // Update the chat with the new last message
-      setChats(prev => prev.map(chat => 
-        chat.id === chatId 
+      setChats(prev => prev.map(chat =>
+        chat.id === chatId
           ? { ...chat, last_visible_message: lastVisible }
           : chat
       ));
@@ -287,7 +303,7 @@ const Inbox = () => {
 
   const getChatPartner = (chat: any) => {
     if (!chat || !user) return null;
-    
+
     if (chat.sender_id === user.id) {
       return chat.receiver;
     } else {
@@ -314,7 +330,7 @@ const Inbox = () => {
     const date = new Date(timestamp);
     const now = new Date();
     const diffInMinutes = (now.getTime() - date.getTime()) / (1000 * 60);
-    
+
     if (diffInMinutes < 1) {
       return "now";
     } else if (diffInMinutes < 60) {
@@ -341,7 +357,7 @@ const Inbox = () => {
       setShowMenu(null);
       return;
     }
-    
+
     // Show confirmation dialog
     setConfirmAction({
       type: 'deleteChat',
@@ -361,10 +377,10 @@ const Inbox = () => {
 
   const confirmDeleteChat = async () => {
     if (!user || !confirmAction) return;
-    
+
     try {
       const { chatId } = confirmAction;
-      
+
       // Find the chat to determine which field to update
       const chat = chats.find(c => c.id === chatId);
       if (!chat) return;
@@ -376,22 +392,33 @@ const Inbox = () => {
         });
         return;
       }
-      
+
+      console.log('Deleting chat:', chatId);
+
+      // Immediately remove from UI for better user experience
+      setChats(prev => prev.filter(c => c.id !== chatId));
+
       // Sender deletes for both users
       const { error } = await supabase
         .from('chats')
-        .update({ deleted_for_sender: true, deleted_for_receiver: true })
+        .update({
+          deleted_for_sender: true,
+          deleted_for_receiver: true,
+          // Add a timestamp to ensure the update is recognized
+          updated_at: new Date().toISOString()
+        })
         .eq('id', chatId);
-      
+
       if (error) {
         console.error('Error deleting chat:', error);
+        // Fetch chats again to restore the UI if there was an error
+        fetchChats();
         toast({
           title: 'Failed to delete chat',
           description: error.message || 'Please try again.',
           variant: 'destructive'
         });
       } else {
-        setChats(chats.filter(chat => chat.id !== chatId));
         toast({
           title: 'Chat deleted',
           description: 'The chat has been removed from both inboxes.',
@@ -413,10 +440,10 @@ const Inbox = () => {
 
   const checkForNewMessages = async () => {
     if (!user || chats.length === 0) return;
-    
+
     try {
       const chatIds = chats.map(chat => chat.id);
-      
+
       // Get the last message timestamp for each chat
       const { data: lastMessages, error } = await supabase
         .from('messages')
@@ -424,12 +451,12 @@ const Inbox = () => {
         .in('chat_id', chatIds)
         .order('created_at', { ascending: false })
         .limit(chatIds.length * 10); // Get recent messages for all chats
-      
+
       if (error) {
         console.error('Error checking for new messages:', error);
         return;
       }
-      
+
       // Group messages by chat and find the latest message for each
       const latestMessages = new Map();
       lastMessages?.forEach(message => {
@@ -437,18 +464,18 @@ const Inbox = () => {
           latestMessages.set(message.chat_id, message.created_at);
         }
       });
-      
+
       // Update unread counts based on last checked times
       const newUnreadCounts: { [chatId: string]: number } = {};
       chats.forEach(chat => {
         const lastMessageTime = latestMessages.get(chat.id);
         const lastCheckedTime = lastChecked[chat.id];
-        
+
         if (lastMessageTime && (!lastCheckedTime || new Date(lastMessageTime) > new Date(lastCheckedTime))) {
           newUnreadCounts[chat.id] = (unreadCounts[chat.id] || 0) + 1;
         }
       });
-      
+
       setUnreadCounts(prev => ({ ...prev, ...newUnreadCounts }));
     } catch (error) {
       console.error('Error checking for new messages:', error);
@@ -490,8 +517,8 @@ const Inbox = () => {
             <p className="text-white/70 mb-4">
               Start a conversation with someone!
             </p>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={fetchChats}
               className="border-white/20 text-white hover:bg-white/10"
             >
@@ -503,7 +530,7 @@ const Inbox = () => {
             {chats.map((chat) => {
               const partner = getChatPartner(chat);
               if (!partner) return null;
-              
+
               // In the chat list rendering, use:
               <p className="text-sm text-white/70 truncate">
                 {getLastMessage(chat)}
@@ -559,7 +586,7 @@ const Inbox = () => {
                     >
                       <MoreVertical size={16} />
                     </Button>
-                    
+
                     {/* Dropdown Menu */}
                     {showMenu === chat.id && (
                       <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] border border-white/10" data-dropdown>
@@ -574,32 +601,32 @@ const Inbox = () => {
                           Open Chat
                         </button>
                         {chat.sender_id === user?.id ? (
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteChat(chat.id);
-                          }}
-                        >
-                          <Trash2 size={14} />
-                          Delete Chat
-                        </button>
+                          <button
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteChat(chat.id);
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            Delete Chat
+                          </button>
                         ) : (
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toast({
-                              title: 'Not allowed',
-                              description: 'Only the creator of the chat can delete.',
-                              variant: 'destructive'
-                            });
-                            setShowMenu(null);
-                          }}
-                        >
-                          <Trash2 size={14} />
-                          Delete Chat
-                        </button>
+                          <button
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toast({
+                                title: 'Not allowed',
+                                description: 'Only the creator of the chat can delete.',
+                                variant: 'destructive'
+                              });
+                              setShowMenu(null);
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            Delete Chat
+                          </button>
                         )}
                       </div>
                     )}
