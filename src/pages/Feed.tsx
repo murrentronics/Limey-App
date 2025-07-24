@@ -1358,22 +1358,23 @@ const Feed = () => {
                               </Avatar>
                             </button>
                             {/* Follow Button */}
-                            {user && video.user_id !== user.id && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await handleFollow(video.user_id, getUsername(video));
-                                }}
-                                className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
-                                data-control
-                              >
-                                {followStatus[video.user_id] ? (
-                                  <span className="text-white font-bold text-xs">?</span>
-                                ) : (
-                                  <Plus size={8} className="text-white" />
-                                )}
-                              </button>
-                            )}
+                              {user && video.user_id !== user.id && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await handleFollow(video.user_id, getUsername(video));
+                                  }}
+                                  className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
+                                  data-control
+                                >
+                                  {followStatus[video.user_id] ? (
+                                    <span className="text-white font-bold text-sm">✓</span>
+                                  ) : (
+                                    <Plus size={14} className="text-white" />
+                                  )}
+                                </button>
+                              )}
+
                           </div>
                         </div>
 
@@ -1418,7 +1419,7 @@ const Feed = () => {
                           >
                             <Bookmark
                               size={28}
-                              className={`${savedStatus[video.id] ? 'text-green-500 fill-green-500' : 'text-white fill-white'} transition-colors`}
+                              className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
                             />
                           </button>
                         </div>
@@ -1561,16 +1562,17 @@ const Feed = () => {
                                   e.stopPropagation();
                                   await handleFollow(video.user_id, getUsername(video));
                                 }}
-                                className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
+                                className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
                                 data-control
                               >
                                 {followStatus[video.user_id] ? (
-                                  <span className="text-white font-bold text-xs">?</span>
+                                  <span className="text-white font-bold text-sm">✓</span>
                                 ) : (
-                                  <Plus size={8} className="text-white" />
+                                  <Plus size={14} className="text-white" />
                                 )}
                               </button>
                             )}
+
                           </div>
                         </div>
 
@@ -1613,7 +1615,7 @@ const Feed = () => {
                           >
                             <Bookmark
                               size={28}
-                              className={`${savedStatus[video.id] ? 'text-green-500 fill-green-500' : 'text-white fill-white'} transition-colors`}
+                              className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
                             />
                           </button>
                         </div>
