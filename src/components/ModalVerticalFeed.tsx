@@ -336,51 +336,12 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
               <div className="flex justify-between items-end">
                 {/* Left - User info & caption */}
                 <div className="flex-1 mr-4 space-y-3">
-                  {/* User Profile */}
-                  <div className="flex items-center space-x-3">
-                    <div className="relative">
-                      <Avatar className="w-12 h-12">
-                        <AvatarImage src={getAvatarUrl(video)} alt={getUsername(video)} />
-                        <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      {/* Follow Button */}
-                      {user && video.user_id !== user.id && (
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            await handleFollow(video);
-                          }}
-                          className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
-                          data-control
-                        >
-                          {followStatus[video.user_id] ? (
-                            <span className="text-white font-bold text-sm">✓</span>
-                          ) : (
-                            <Plus size={12} className="text-white" />
-                          )}
-                        </button>
-                      )}
-                    </div>
-                    <div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/profile/${getUsername(video)}`);
-                        }}
-                        className="text-white font-semibold text-lg hover:text-white/80 transition-colors"
-                      >
-                        @{getUsername(video)}
-                      </button>
-                    </div>
-                    {/* Vertical Menu removed */}
-                  </div>
+                  
+                    
                   {/* Caption */}
                   <div className="space-y-2 mt-2">
                     <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
-                    {/* Category badge */}
-                    {video.category && (
-                      <Badge className="bg-green-900 text-green-400 text-xs font-semibold mb-1">{video.category}</Badge>
-                    )}
+                    
                     {/* Description with hashtags */}
                     {video.description && (
                       <p className="text-white/90 text-sm leading-relaxed break-words">
@@ -391,64 +352,101 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
                 </div>
                 {/* Actions */}
                 <div className="flex flex-col items-center space-y-4">
+                {/* Profile Button */}
+                <div className="flex flex-col items-center">
+                          <div className="relative">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(getProfileUrl(video));
+                              }}
+                              className="hover:opacity-80 transition-opacity"
+                              aria-label={`View ${getUsername(video)}'s profile`}
+                              data-control
+                            >
+                              <Avatar className="w-12 h-12 rounded-full">
+                                <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
+                                <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                            </button>
+                            {/* Follow Button */}
+                              {user && video.user_id !== user.id && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await handleFollow(video);
+                                  }}
+                                  className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
+                                  data-control
+                                >
+                                  {followStatus[video.user_id] ? (
+                                    <span className="text-white font-bold text-sm">✓</span>
+                                  ) : (
+                                    <Plus size={14} className="text-white" />
+                                  )}
+                                </button>
+                              )}
+                              </div>
+                              </div>
+                
                   {/* Like Button */}
-                  <div className="flex flex-col items-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleLike(video.id);
-                      }}
-                      className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                      data-control
-                    >
-                      <Heart
-                        size={24}
-                        className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white'} transition-colors`}
-                      />
-                    </Button>
-                    <span className="text-white text-xs font-semibold mt-1">
-                      {likeCounts[video.id] || 0}
-                    </span>
-                  </div>
+<div className="flex flex-col items-center">
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleLike(video.id);
+    }}
+    className="p-0 bg-transparent border-none"
+    data-control
+  >
+    <Heart
+      size={28}
+      className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
+    />
+  </button>
+  <span className="text-white text-xs mt-1 font-medium">
+    {likeCounts[video.id] || 0}
+  </span>
+</div>
+
 
                   {/* View Count */}
-                  <div className="flex flex-col items-center">
-                    <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                      <Eye size={24} className="text-white" />
-                    </div>
-                    <span className="text-white text-xs font-semibold mt-1">
-                      {formatViews(viewCounts[video.id] || 0)}
-                    </span>
-                  </div>
+<div className="flex flex-col items-center">
+  <Eye size={28} className="text-white" />
+  <span className="text-white text-xs mt-1 font-medium">
+    {formatViews(viewCounts[video.id] || 0)}
+  </span>
+</div>
+
+
                   {/* Save Button */}
-                  <div className="flex flex-col items-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={e => { e.stopPropagation(); handleSave(video.id); }}
-                      className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                      data-control
-                    >
-                      {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
-                    </Button>
-                  </div>
-                  {/* Share Button */}
-                  <div className="flex flex-col items-center">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleShare(video);
-                      }}
-                      className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
-                      data-control
-                    >
-                      <Share2 size={24} className="text-white" />
-                    </Button>
-                  </div>
+<div className="flex flex-col items-center">
+  <button
+    onClick={e => { e.stopPropagation(); handleSave(video.id); }}
+    className="p-0 bg-transparent border-none"
+    data-control
+  >
+    <Bookmark
+      size={28}
+      className={`${savedStatus[video.id] ? 'text-green-500 fill-green-500' : 'text-white fill-white'} transition-colors`}
+    />
+  </button>
+</div>
+
+                  {/* Share */}
+<div className="flex flex-col items-center">
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleShare(video);
+    }}
+    className="p-0 bg-transparent border-none"
+    data-control
+  >
+    <Share2 size={28} className="text-white fill-white" />
+  </button>
+</div>
+
                 </div>
               </div>
             </div>
