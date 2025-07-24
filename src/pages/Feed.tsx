@@ -1378,65 +1378,67 @@ const Feed = () => {
                         </div>
 
                         {/* Like Button */}
-                        <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLike(video.id);
-                            }}
-                            className="p-2"
-                            data-control
-                          >
-                            <Heart
-                              size={24}
-                              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white'} transition-colors`}
-                            />
-                          </Button>
-                          <span className="text-white text-xs mt-1 font-medium">
-                            {likeCounts[video.id] || 0}
-                          </span>
-                        </div>
+                      <div className="flex flex-col items-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLike(video.id);
+                          }}
+                          className="p-0 bg-transparent border-none"
+                          data-control
+                        >
+                          <Heart
+                            size={28}
+                            className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
+                          />
+                        </button>
+                        <span className="text-white text-xs mt-1 font-medium">
+                          {likeCounts[video.id] || 0}
+                        </span>
+                      </div>
 
-                        {/* View Count */}
-                        <div className="flex flex-col items-center">
-                          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                            <Eye size={24} className="text-white" />
-                          </div>
-                          <span className="text-white text-xs mt-1 font-medium">
-                            {formatViews(viewCounts[video.id] || 0)}
-                          </span>
-                        </div>
 
-                        {/* Save Button */}
+                      {/* View Count */}
+                      <div className="flex flex-col items-center">
+                        <Eye size={24} className="text-white" />
+                        <span className="text-white text-xs mt-1 font-medium">
+                          {formatViews(viewCounts[video.id] || 0)}
+                        </span>
+                      </div>
+
+
+
+
+                       {/* Save Button */}
                         <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
                             onClick={e => { e.stopPropagation(); handleSave(video.id); }}
-                            className="p-2"
+                            className="p-0 bg-transparent border-none"
                             data-control
                           >
-                            {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
-                          </Button>
+                            <Bookmark
+                              size={28}
+                              className={`${savedStatus[video.id] ? 'text-green-500 fill-green-500' : 'text-white fill-white'} transition-colors`}
+                            />
+                          </button>
                         </div>
+
+
 
                         {/* Share */}
-                        <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleShare(video);
-                            }}
-                            className="p-2"
-                            data-control
-                          >
-                            <Share2 size={24} className="text-white" />
-                          </Button>
-                        </div>
+<div className="flex flex-col items-center">
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleShare(video);
+    }}
+    className="p-0 bg-transparent border-none"
+    data-control
+  >
+    <Share2 size={28} className="text-white fill-white" />
+  </button>
+</div>
+
                       </div>
                     </div>
                   </div>
@@ -1574,31 +1576,29 @@ const Feed = () => {
 
                         {/* Like Button */}
                         <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleLike(video.id);
                             }}
-                            className="p-2"
+                            className="p-0 bg-transparent border-none"
                             data-control
                           >
                             <Heart
-                              size={24}
-                              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white'} transition-colors`}
+                              size={28}
+                              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
                             />
-                          </Button>
+                          </button>
                           <span className="text-white text-xs mt-1 font-medium">
                             {likeCounts[video.id] || 0}
                           </span>
                         </div>
 
+
+
                         {/* View Count */}
                         <div className="flex flex-col items-center">
-                          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                            <Eye size={24} className="text-white" />
-                          </div>
+                          <Eye size={24} className="text-white" />
                           <span className="text-white text-xs mt-1 font-medium">
                             {formatViews(viewCounts[video.id] || 0)}
                           </span>
@@ -1606,31 +1606,31 @@ const Feed = () => {
 
                         {/* Save Button */}
                         <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
                             onClick={e => { e.stopPropagation(); handleSave(video.id); }}
-                            className="p-2"
+                            className="p-0 bg-transparent border-none"
                             data-control
                           >
-                            {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
-                          </Button>
+                            <Bookmark
+                              size={28}
+                              className={`${savedStatus[video.id] ? 'text-green-500 fill-green-500' : 'text-white fill-white'} transition-colors`}
+                            />
+                          </button>
                         </div>
+
 
                         {/* Share */}
                         <div className="flex flex-col items-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleShare(video);
                             }}
-                            className="p-2"
+                            className="p-0 bg-transparent border-none"
                             data-control
                           >
-                            <Share2 size={24} className="text-white" />
-                          </Button>
+                            <Share2 size={28} className="text-white fill-white" />
+                          </button>
                         </div>
                       </div>
                     </div>
