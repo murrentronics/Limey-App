@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical, Settings, Send, Wallet, Heart, Bookmark, Eye, ChevronDown } from "lucide-react";
+import { MoreVertical, Settings, Send, Wallet, Heart, Bookmark, Eye, ChevronDown, X } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import WalletModal from "@/components/WalletModal";
@@ -48,6 +48,7 @@ const Profile = () => {
   const [followers, setFollowers] = useState<any[]>([]);
   const [following, setFollowing] = useState<any[]>([]);
   const [loadingFollowers, setLoadingFollowers] = useState(false);
+  const [showProfileImageModal, setShowProfileImageModal] = useState(false);
   const [loadingFollowing, setLoadingFollowing] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -943,7 +944,15 @@ const Profile = () => {
           {/* Avatar */}
           <div className="relative mb-4">
             {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="Profile" className="w-24 h-24 rounded-full object-cover border-2 border-primary" />
+              <img 
+                src={profile.avatar_url} 
+                alt="Profile" 
+                className="w-24 h-24 rounded-full object-cover border-2 border-primary cursor-pointer hover:opacity-90 transition-opacity" 
+                onClick={() => {
+                  console.log('Profile image clicked');
+                  setShowProfileImageModal(true);
+                }}
+              />
             ) : (
               <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center text-3xl font-bold text-primary">
                 {profile?.username?.charAt(0)?.toUpperCase() || 'U'}
@@ -951,7 +960,10 @@ const Profile = () => {
             )}
           </div>
           <h2 className="text-2xl font-bold text-foreground mb-1">{profile?.display_name || profile?.username || 'User'}</h2>
-          <p className="text-muted-foreground mb-4">@{profile?.username || 'user'}</p>
+          <p className="text-muted-foreground mb-2">@{profile?.username || 'user'}</p>
+          {profile?.bio && (
+            <p className="text-foreground text-sm mb-4 max-w-xs text-center">{profile.bio}</p>
+          )}
           {isOwnProfile && (
             <>
               <div className="flex items-center space-x-2 mb-3">
@@ -1404,6 +1416,35 @@ const Profile = () => {
       </Sheet>
     </div>
   );
+  {/* Profile Image Modal - Fullscreen */}
+  {showProfileImageModal && profile?.avatar_url && (
+    <div 
+      className="fixed inset-0 z-50 bg-black flex flex-col"
+      onClick={() => setShowProfileImageModal(false)}
+    >
+      {/* Header with close button */}
+      <div className="p-4 flex justify-end">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowProfileImageModal(false)}
+          className="bg-black/50 hover:bg-black/70 text-white"
+        >
+          <X size={24} />
+        </Button>
+      </div>
+      
+      {/* Image container - takes full available height with bottom spacing */}
+      <div className="flex-1 flex items-center justify-center p-4 pb-24">
+        <img 
+          src={profile.avatar_url} 
+          alt="Profile" 
+          className="max-w-full max-h-full object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    </div>
+  )}
 }
 
 export default Profile;

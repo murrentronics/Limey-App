@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -251,6 +251,92 @@ const Feed = () => {
     }
   }, [showSearch]);
 
+  // Function to fetch latest profile data for videos
+  const fetchLatestProfileData = async (videosList: VideoData[]) => {
+    if (!videosList || videosList.length === 0) return;
+
+    try {
+      // Get unique user IDs from videos
+      const userIds = [...new Set(videosList.map(video => video.user_id))];
+
+      // Fetch latest profile data for these users
+      const { data: profilesData, error } = await supabase
+        .from('profiles')
+        .select('user_id, username, avatar_url')
+        .in('user_id', userIds);
+
+      if (error) {
+        console.error('Error fetching latest profile data:', error);
+        return;
+      }
+
+      if (profilesData && profilesData.length > 0) {
+        // Create a map of user_id to profile data
+        const profilesMap = new Map();
+        profilesData.forEach(p => profilesMap.set(p.user_id, p));
+
+        // Update videos with latest profile data
+        const updatedVideos = videosList.map(video => {
+          const latestProfile = profilesMap.get(video.user_id);
+          if (latestProfile) {
+            return {
+              ...video,
+              profiles: {
+                ...video.profiles,
+                username: latestProfile.username,
+                avatar_url: latestProfile.avatar_url
+              },
+              avatar_url: latestProfile.avatar_url
+            };
+          }
+          return video;
+        });
+
+        // Update state with latest profile data
+        if (searchResults !== null) {
+          setSearchResults(updatedVideos);
+        } else {
+          setVideos(updatedVideos);
+        }
+
+        console.log('Updated videos with latest profile data');
+      }
+    } catch (error) {
+      console.error('Error in fetchLatestProfileData:', error);
+    }
+  };
+
+  // Subscribe to profile changes
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to profiles table changes
+    const profilesChannel = supabase
+      .channel('profiles_changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles'
+      }, (payload) => {
+        console.log('Profile update received:', payload);
+
+        // Fetch latest profile data for all videos
+        if (searchResults !== null) {
+          fetchLatestProfileData(searchResults);
+        } else {
+          fetchLatestProfileData(videos);
+        }
+      })
+      .subscribe((status) => {
+        console.log('Profiles subscription status:', status);
+      });
+
+    return () => {
+      console.log('Cleaning up profiles subscription');
+      supabase.removeChannel(profilesChannel);
+    };
+  }, [user, videos, searchResults]);
+
   // Real-time subscriptions for likes and views
   useEffect(() => {
     if (!user) return;
@@ -462,6 +548,7 @@ const Feed = () => {
           profiles: profilesMap.get(video.user_id) || null
         }));
         setSearchResults(videosWithProfiles);
+        await fetchLatestProfileData(videosWithProfiles); // Fetch latest profile data
       } else {
         setSearchResults([]);
       }
@@ -470,6 +557,7 @@ const Feed = () => {
       // Also check like status for search results
       await checkLikeStatus(data || []);
       await checkSavedStatus(data || []);
+      await fetchLatestProfileData(data || []); // Fetch latest profile data
     }
     setSearchLoading(false);
   };
@@ -517,6 +605,7 @@ const Feed = () => {
       await checkLikeStatus(filtered);
       await checkViewCounts(filtered);
       await checkSavedStatus(filtered);
+      await fetchLatestProfileData(filtered); // Fetch latest profile data
     } catch (error) {
       console.error('Error in fetchVideos:', error);
       setError('Failed to load videos. Please try again.');
@@ -1077,7 +1166,7 @@ const Feed = () => {
                     key="all"
                     variant="outline"
                     size="sm"
-                    className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${activeCategory === "All" ? 'border-lime-400 text-lime-400' : 'border-white/50'
+                    className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 hover:text-lime-400 ${activeCategory === "All" ? 'border-lime-400 text-lime-400' : 'border-white/50'
                       }`}
                     onClick={() => {
                       setActiveCategory("All");
@@ -1092,7 +1181,7 @@ const Feed = () => {
                       key={category}
                       variant="outline"
                       size="sm"
-                      className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 ${activeCategory === category ? 'border-lime-400 text-lime-400' : 'border-white/50'
+                      className={`whitespace-nowrap bg-black border-white text-white hover:bg-black/80 hover:text-lime-400 ${activeCategory === category ? 'border-lime-400 text-lime-400' : 'border-white/50'
                         }`}
                       onClick={() => {
                         setActiveCategory(category);
@@ -1187,7 +1276,7 @@ const Feed = () => {
           ) : searchResults.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">🔍</span>
+                <span className="text-2xl">??</span>
               </div>
               <h3 className="text-lg font-semibold mb-2 text-white">No results found</h3>
               <p className="text-white/70 mb-4">Try searching with different keywords or hashtags</p>
@@ -1279,7 +1368,7 @@ const Feed = () => {
                                 data-control
                               >
                                 {followStatus[video.user_id] ? (
-                                  <span className="text-white font-bold text-xs">✓</span>
+                                  <span className="text-white font-bold text-xs">?</span>
                                 ) : (
                                   <Plus size={8} className="text-white" />
                                 )}
@@ -1297,7 +1386,7 @@ const Feed = () => {
                               e.stopPropagation();
                               handleLike(video.id);
                             }}
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            className="p-2"
                             data-control
                           >
                             <Heart
@@ -1326,7 +1415,7 @@ const Feed = () => {
                             variant="ghost"
                             size="sm"
                             onClick={e => { e.stopPropagation(); handleSave(video.id); }}
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            className="p-2"
                             data-control
                           >
                             {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
@@ -1342,7 +1431,7 @@ const Feed = () => {
                               e.stopPropagation();
                               handleShare(video);
                             }}
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            className="p-2"
                             data-control
                           >
                             <Share2 size={24} className="text-white" />
@@ -1359,7 +1448,7 @@ const Feed = () => {
           videos.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">📹</span>
+                <span className="text-2xl">??</span>
               </div>
               <h3 className="text-lg font-semibold mb-2 text-white">No videos yet</h3>
               <p className="text-white/70 mb-4">
@@ -1474,7 +1563,7 @@ const Feed = () => {
                                 data-control
                               >
                                 {followStatus[video.user_id] ? (
-                                  <span className="text-white font-bold text-xs">✓</span>
+                                  <span className="text-white font-bold text-xs">?</span>
                                 ) : (
                                   <Plus size={8} className="text-white" />
                                 )}
@@ -1492,7 +1581,7 @@ const Feed = () => {
                               e.stopPropagation();
                               handleLike(video.id);
                             }}
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            className="p-2"
                             data-control
                           >
                             <Heart
@@ -1521,7 +1610,7 @@ const Feed = () => {
                             variant="ghost"
                             size="sm"
                             onClick={e => { e.stopPropagation(); handleSave(video.id); }}
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            className="p-2"
                             data-control
                           >
                             {savedStatus[video.id] ? <BookmarkCheck size={24} className="text-green-400" /> : <Bookmark size={24} className="text-white" />}
@@ -1537,7 +1626,7 @@ const Feed = () => {
                               e.stopPropagation();
                               handleShare(video);
                             }}
-                            className="w-12 h-12 rounded-full p-0 bg-white/20 hover:bg-white/30 text-white"
+                            className="p-2"
                             data-control
                           >
                             <Share2 size={24} className="text-white" />

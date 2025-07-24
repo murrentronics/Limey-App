@@ -187,7 +187,9 @@ const EditProfile = () => {
                   onClick={e => e.stopPropagation()}
                 >
                   <button className="px-4 py-2 hover:bg-gray-100 text-left font-bold text-black" onClick={() => { setShowViewModal(true); setShowAvatarMenu(false); }}>View</button>
-                  <button className="px-4 py-2 hover:bg-gray-100 text-left font-bold text-black" onClick={() => { fileInputRef.current?.click(); setShowAvatarMenu(false); }}>Change</button>
+                  <button className="px-4 py-2 hover:bg-gray-100 text-left font-bold text-black" onClick={() => { fileInputRef.current?.click(); setShowAvatarMenu(false); }}>
+                    {uploading ? 'Uploading...' : 'Change'}
+                  </button>
                   <button className="px-4 py-2 hover:bg-red-100 text-left text-red-600" onClick={() => { setShowAvatarMenu(false); handleRemoveAvatar(); }}>Remove</button>
                 </div>
               </div>
@@ -195,31 +197,39 @@ const EditProfile = () => {
           </Popover>
         </div>
 
-        {/* View Modal */}
+        {/* View Modal - Regular size */}
         {showViewModal && avatarUrl ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowViewModal(false)}>
-            <button
-              className="absolute top-4 right-4 text-white text-2xl bg-black/60 rounded-full px-3 py-1 z-10"
-              onClick={e => { e.stopPropagation(); setShowViewModal(false); }}
-              aria-label="Close"
-            >
-              &times;
-            </button>
-            <img
-              src={avatarUrl}
-              alt="Profile"
-              className="max-w-xs max-h-[80vh] rounded-lg border-2 border-primary bg-white"
-              onClick={e => e.stopPropagation()}
-            />
+            <div className="relative">
+              <button
+                className="absolute top-2 right-2 text-white text-2xl bg-black/60 rounded-full w-8 h-8 flex items-center justify-center z-10"
+                onClick={(e) => { e.stopPropagation(); setShowViewModal(false); }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+              <img
+                src={avatarUrl}
+                alt="Profile"
+                className="max-w-xs max-h-[80vh] rounded-lg border-2 border-primary bg-white"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </div>
         ) : null}
 
         {/* Crop Modal */}
         <Dialog open={showCropModal} onOpenChange={setShowCropModal}>
           {showCropModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-              <div className="bg-white rounded-lg p-4 max-w-xs w-full flex flex-col items-center">
-                <div className="relative w-60 h-60 bg-gray-100 rounded-lg overflow-hidden">
+            <div className="fixed inset-0 z-50 bg-black flex flex-col">
+              {/* Header */}
+              <div className="p-4 bg-black text-white">
+                <h2 className="text-xl font-bold text-center">Crop Profile Photo</h2>
+              </div>
+              
+              {/* Cropper - takes full available height */}
+              <div className="flex-1 flex items-center justify-center bg-black">
+                <div className="relative w-full h-full max-w-md max-h-md">
                   <Cropper
                     image={selectedImage!}
                     crop={crop}
@@ -228,12 +238,28 @@ const EditProfile = () => {
                     onCropChange={setCrop}
                     onZoomChange={setZoom}
                     onCropComplete={onCropComplete}
+                    objectFit="contain"
                   />
                 </div>
-                <div className="flex gap-2 mt-4">
-                  <Button onClick={handleCropCancel} variant="outline">Cancel</Button>
-                  <Button onClick={handleCropConfirm} variant="neon">Upload</Button>
-                </div>
+              </div>
+              
+              {/* Footer with buttons - raised above bottom navigation */}
+              <div className="p-4 pb-24 bg-black border-t border-white/10 flex justify-between">
+                <Button 
+                  onClick={handleCropCancel} 
+                  variant="outline"
+                  className="flex-1 mr-2"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleCropConfirm} 
+                  variant="neon"
+                  disabled={uploading}
+                  className="flex-1 ml-2"
+                >
+                  {uploading ? 'Uploading...' : 'Upload'}
+                </Button>
               </div>
             </div>
           )}
@@ -260,8 +286,11 @@ const EditProfile = () => {
         onChange={e => setBio(e.target.value)}
         maxLength={200}
         />
-        <Button variant="neon" className="w-full" onClick={handleSave} disabled={uploading}>
+        <Button variant="neon" className="w-full mb-3" onClick={handleSave} disabled={uploading}>
         {uploading ? "Saving..." : "Save Changes"}
+        </Button>
+        <Button variant="outline" className="w-full" onClick={() => navigate('/profile')}>
+        Cancel
         </Button>
       </Card>
       </div>
