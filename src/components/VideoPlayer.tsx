@@ -1,4 +1,4 @@
-
+impor
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Volume2, VolumeX, Share, Play, Plus, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
@@ -248,42 +248,52 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
 
   // View handling functions
   const recordView = async () => {
-    if (viewRecorded) return;
+    console.log('VideoPlayer: recordView called for video:', video.id);
+    
+    if (viewRecorded) {
+      console.log('VideoPlayer: View already recorded for video:', video.id);
+      return;
+    }
     
     // Check if the current user is the creator of the video
     // If so, don't record the view (prevent self-views)
     if (user && video.user_id === user.id) {
-      console.log('Self-view detected, not recording view');
+      console.log('VideoPlayer: Self-view detected, not recording view for video:', video.id);
       setViewRecorded(true); // Mark as recorded to prevent further attempts
       return;
     }
+    
+    console.log('VideoPlayer: Calling record_video_view RPC for video:', video.id);
     
     try {
       const { data, error } = await supabase.rpc('record_video_view' as any, {
         video_uuid: video.id
       });
       
+      console.log('VideoPlayer: View recording response:', { data, error, videoId: video.id });
+      
       // The function returns a boolean indicating if the view was recorded
       // If there's no error, consider the view recorded
       if (error === null) {
         setViewRecorded(true);
+        console.log('VideoPlayer: Marked view as recorded for video:', video.id);
         
         // Update view count locally only if the view was actually recorded (data === true)
         // This ensures the UI is updated only for genuine views
         if (data === true) {
+          console.log('VideoPlayer: Incrementing local view count for video:', video.id);
           setViewCounts(prev => ({
             ...prev,
             [video.id]: (prev[video.id] || 0) + 1
           }));
-          
-          // If there's an onViewRecorded callback, call it
-          if (props.onViewRecorded) {
-            props.onViewRecorded(video.id);
-          }
+        } else {
+          console.log('VideoPlayer: View not recorded (returned false) for video:', video.id);
         }
+      } else {
+        console.error('VideoPlayer: Error recording view:', error);
       }
     } catch (error) {
-      console.error('Error recording view:', error);
+      console.error('VideoPlayer: Exception recording view:', error);
     }
   };
 
@@ -364,12 +374,24 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
     checkSavedStatus();
   }, [video.id, user]);
 
-  // Record view when video starts playing
+  // Record view when video has been playing for 5 seconds
   useEffect(() => {
+    console.log('View recording useEffect triggered - isPlaying:', isPlaying, 'viewRecorded:', viewRecorded);
+    
     if (isPlaying && !viewRecorded) {
-      recordView();
+      console.log('Starting 5-second view timer for video:', video.id);
+      
+      const timer = setTimeout(() => {
+        console.log('5-second timer completed, calling recordView() for video:', video.id);
+        recordView();
+      }, 5000); // 5 seconds delay
+      
+      return () => {
+        console.log('Clearing view timer for video:', video.id);
+        clearTimeout(timer);
+      };
     }
-  }, [isPlaying, viewRecorded]);
+  }, [isPlaying, viewRecorded, video.id]);
 
   useEffect(() => {
     const video = videoRef.current;

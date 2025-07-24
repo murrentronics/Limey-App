@@ -95,24 +95,38 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
   // Record view when video has been playing and visible for 5 seconds
   useEffect(() => {
     if (isVisible && isPlaying && !viewRecorded && videoId) {
+      console.log('Feed: Starting 5-second view timer for video:', videoId);
+
       const timer = setTimeout(async () => {
+        console.log('Feed: 5-second timer completed, recording view for video:', videoId);
+
         try {
           const { data, error } = await supabase.rpc('record_video_view', {
             video_uuid: videoId
           });
 
+          console.log('Feed: View recording response:', { data, error, videoId });
+
           if (!error && data) {
+            console.log('Feed: View successfully recorded for video:', videoId);
             setViewRecorded(true);
             if (onViewRecorded) {
               onViewRecorded(videoId);
             }
+          } else if (error) {
+            console.error('Feed: Error recording view:', error);
+          } else {
+            console.log('Feed: View not recorded (returned false) for video:', videoId);
           }
         } catch (error) {
-          console.error('Error recording view:', error);
+          console.error('Feed: Exception recording view:', error);
         }
       }, 5000); // 5 seconds delay
 
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('Feed: Clearing view timer for video:', videoId);
+        clearTimeout(timer);
+      };
     }
   }, [isVisible, isPlaying, viewRecorded, videoId, onViewRecorded]);
 
@@ -850,6 +864,7 @@ const Feed = () => {
       // and specify the expected response structure
       const response = await (supabase
         .from('saved_videos' as any)
+
         .select('video_id')
         .eq('user_id', user.id)
         .in('video_id', videoIds));
