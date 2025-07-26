@@ -620,29 +620,30 @@ const Profile = () => {
     }
   };
 
-  // Check if current user is following this profile
-  const checkFollowStatus = async () => {
-    if (!user || !profile?.user_id) return;
+// Check if current user is following this profile
+const checkFollowStatus = async () => {
+  if (!user || !profile?.user_id) return;
+  
+  console.log('Checking follow status for current user:', user.id, 'to profile:', profile.user_id);
+  
+  try {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('id')
+      .eq('follower_id', user.id)
+      .eq('following_id', profile.user_id)
+      .single();
     
-    console.log('Checking follow status for current user:', user.id, 'to profile:', profile.user_id);
+    const isCurrentlyFollowing = !error && data;
+    console.log('Follow status result:', isCurrentlyFollowing ? 'Following' : 'Not following');
     
-    try {
-      const { data, error } = await supabase
-        .from('follows' as any)
-        .select('id')
-        .eq('follower_id', user.id)
-        .eq('following_id', profile.user_id)
-        .single();
-      
-      const isCurrentlyFollowing = !error && data;
-      console.log('Follow status result:', isCurrentlyFollowing ? 'Following' : 'Not following');
-      
-      setIsFollowing(isCurrentlyFollowing);
-    } catch (err) {
-      console.error('Error checking follow status:', err);
-      setIsFollowing(false);
-    }
-  };
+    setIsFollowing(!!isCurrentlyFollowing);
+  } catch (err) {
+    console.error('Error checking follow status:', err);
+    setIsFollowing(false);
+  }
+};
+
 
   // Handle follow/unfollow
   const handleFollow = async () => {
@@ -755,114 +756,115 @@ const Profile = () => {
   };
 
   // Handle sending message
-  const handleSendMessage = async () => {
-    if (!messageText.trim() || !user || !profile?.user_id || sendingMessage) return;
+const handleSendMessage = async () => {
+  if (!messageText.trim() || !user || !profile?.user_id || sendingMessage) return;
+  
+  setSendingMessage(true);
+  try {
+    console.log('Sending message to user:', profile.username);
     
-    setSendingMessage(true);
-    try {
-      console.log('Sending message to user:', profile.username);
-      
-      // Check if chat already exists between user and profile.user_id
-      const { data: existingChats, error } = await supabase
-        .from('chats' as any)
-        .select('*')
-        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${profile.user_id}),and(sender_id.eq.${profile.user_id},receiver_id.eq.${user.id})`);
-      
-      if (error) {
-        console.error('Error checking for existing chat:', error);
-        toast({ title: 'Failed to send message', description: error.message, variant: 'destructive' });
-        return;
-      }
-      
-      console.log('Found existing chats:', existingChats);
-      
-      // Filter out deleted chats when looking for existing chats
-      const nonDeletedChats = existingChats?.filter(chat => {
-        if (chat.sender_id === user.id) {
-          return !chat.deleted_for_sender;
-        } else {
-          return !chat.deleted_for_receiver;
-        }
-      }) || [];
-      
-      const filteredExistingChat = nonDeletedChats.length > 0 ? nonDeletedChats[0] : null;
-      console.log('Using existing chat:', filteredExistingChat);
-      
-      let chatId;
-      
-      if (filteredExistingChat) {
-        console.log('Found existing non-deleted chat:', filteredExistingChat.id);
-        chatId = filteredExistingChat.id;
-        
-        // Update chat's last message and timestamp
-        const { error: updateError } = await supabase
-          .from('chats' as any)
-          .update({
-            last_message: messageText.trim(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', chatId);
-
-        if (updateError) {
-          console.error('Error updating existing chat:', updateError);
-          throw updateError;
-        }
+    // Check if chat already exists between user and profile.user_id
+    const { data: existingChats, error } = await supabase
+      .from('chats')
+      .select('*')
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${profile.user_id}),and(sender_id.eq.${profile.user_id},receiver_id.eq.${user.id})`);
+    
+    if (error) {
+      console.error('Error checking for existing chat:', error);
+      toast({ title: 'Failed to send message', description: error.message, variant: 'destructive' });
+      return;
+    }
+    
+    console.log('Found existing chats:', existingChats);
+    
+    // Filter out deleted chats when looking for existing chats
+    const nonDeletedChats = (existingChats || []).filter((chat: any) => {
+      if (chat.sender_id === user.id) {
+        return !chat.deleted_for_sender;
       } else {
-        // No non-deleted chat exists, create a completely new chat
-        console.log('Creating new chat between', user.id, 'and', profile.user_id);
-        
-        const { data: newChat, error: createError } = await supabase
-          .from('chats' as any)
-          .insert({
-            sender_id: user.id,
-            receiver_id: profile.user_id,
-            last_message: messageText.trim(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-          
-        if (createError) {
-          console.error('Error creating chat:', createError);
-          toast({ title: 'Failed to create chat', description: createError.message, variant: 'destructive' });
-          return;
-        }
-        console.log('Created new chat:', newChat);
-        chatId = newChat.id;
+        return !chat.deleted_for_receiver;
       }
+    });
+    
+    const filteredExistingChat = nonDeletedChats.length > 0 ? nonDeletedChats[0] : null;
+    console.log('Using existing chat:', filteredExistingChat);
+    
+    let chatId;
+    
+    if (filteredExistingChat) {
+      console.log('Found existing non-deleted chat:', filteredExistingChat.id);
+      chatId = filteredExistingChat.id;
       
-      // Send the message
-      const { error: messageError } = await supabase
-        .from('messages' as any)
+      // Update chat's last message and timestamp
+      const { error: updateError } = await supabase
+        .from('chats')
+        .update({
+          last_message: messageText.trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', chatId);
+
+      if (updateError) {
+        console.error('Error updating existing chat:', updateError);
+        throw updateError;
+      }
+    } else {
+      // No non-deleted chat exists, create a completely new chat
+      console.log('Creating new chat between', user.id, 'and', profile.user_id);
+      
+      const { data: newChat, error: createError } = await supabase
+        .from('chats')
         .insert({
-          chat_id: chatId,
           sender_id: user.id,
           receiver_id: profile.user_id,
-          content: messageText.trim(),
-          created_at: new Date().toISOString()
-        });
-      
-      if (messageError) {
-        console.error('Error sending message:', messageError);
-        toast({ title: 'Failed to send message', description: messageError.message, variant: 'destructive' });
+          last_message: messageText.trim(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+        
+      if (createError) {
+        console.error('Error creating chat:', createError);
+        toast({ title: 'Failed to create chat', description: createError.message, variant: 'destructive' });
         return;
       }
-      
-      console.log('Message sent successfully, navigating to chat:', chatId);
-      
-      // Close sheet and navigate to chat
-      setShowMessageModal(false);
-      setMessageText("");
-      navigate(`/chat/${chatId}`);
-      
-    } catch (error) {
-      console.error('Error sending message:', error);
-      toast({ title: 'Failed to send message', description: 'An unexpected error occurred', variant: 'destructive' });
-    } finally {
-      setSendingMessage(false);
+      console.log('Created new chat:', newChat);
+      chatId = newChat.id;
     }
-  };
+    
+    // Send the message
+    const { error: messageError } = await supabase
+      .from('messages')
+      .insert({
+        chat_id: chatId,
+        sender_id: user.id,
+        receiver_id: profile.user_id,
+        content: messageText.trim(),
+        created_at: new Date().toISOString()
+      });
+    
+    if (messageError) {
+      console.error('Error sending message:', messageError);
+      toast({ title: 'Failed to send message', description: messageError.message, variant: 'destructive' });
+      return;
+    }
+    
+    console.log('Message sent successfully, navigating to chat:', chatId);
+    
+    // Close sheet and navigate to chat
+    setShowMessageModal(false);
+    setMessageText("");
+    navigate(`/chat/${chatId}`);
+    
+  } catch (error) {
+    console.error('Error sending message:', error);
+    toast({ title: 'Failed to send message', description: 'An unexpected error occurred', variant: 'destructive' });
+  } finally {
+    setSendingMessage(false);
+  }
+};
+
 
   if (loading) {
     return (

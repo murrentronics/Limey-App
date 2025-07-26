@@ -9,6 +9,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 
+// Move this to the top after the imports
+interface SavedVideoRow {
+  video_id: string;
+}
+
 interface ModalVerticalFeedProps {
   videos: any[];
   startIndex: number;
@@ -107,47 +112,60 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
     checkLikeStatus();
   }, [user, modalVideos]);
 
-  const checkSavedStatus = async () => {
-    if (!user || modalVideos.length === 0) return;
-    try {
-      const videoIds = modalVideos.map(video => video.id);
-      const { data: saved } = await supabase
+// Then update the function:
+const checkSavedStatus = async () => {
+  if (!user || modalVideos.length === 0) return;
+  try {
+    const videoIds = modalVideos.map(video => video.id);
+    
+    const { data: saved, error } = await (supabase as any)
+      .from('saved_videos')
+      .select('video_id')
+      .eq('user_id', user.id)
+      .in('video_id', videoIds);
+    
+    if (error) {
+      console.error('Error fetching saved videos:', error);
+      return;
+    }
+    
+    const savedVideoIds = new Set((saved as SavedVideoRow[] || []).map(row => row.video_id));
+    const newSavedStatus: { [key: string]: boolean } = {};
+    modalVideos.forEach(video => {
+      newSavedStatus[video.id] = savedVideoIds.has(video.id);
+    });
+    setSavedStatus(newSavedStatus);
+  } catch (error) {
+    console.error('Error checking saved status:', error);
+  }
+};
+
+
+
+const handleSave = async (videoId: string) => {
+  if (!user) return;
+  try {
+    if (savedStatus[videoId]) {
+      await (supabase as any)
         .from('saved_videos')
-        .select('video_id')
+        .delete()
         .eq('user_id', user.id)
-        .in('video_id', videoIds);
-      const savedVideoIds = new Set(saved?.map(row => row.video_id) || []);
-      const newSavedStatus: { [key: string]: boolean } = {};
-      modalVideos.forEach(video => {
-        newSavedStatus[video.id] = savedVideoIds.has(video.id);
-      });
-      setSavedStatus(newSavedStatus);
-    } catch (error) {
-      console.error('Error checking saved status:', error);
+        .eq('video_id', videoId);
+      setSavedStatus(prev => ({ ...prev, [videoId]: false }));
+      // Optionally show toast
+    } else {
+      await (supabase as any)
+        .from('saved_videos')
+        .insert({ user_id: user.id, video_id: videoId });
+      setSavedStatus(prev => ({ ...prev, [videoId]: true }));
+      // Optionally show toast
     }
-  };
-  const handleSave = async (videoId: string) => {
-    if (!user) return;
-    try {
-      if (savedStatus[videoId]) {
-        await supabase
-          .from('saved_videos')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('video_id', videoId);
-        setSavedStatus(prev => ({ ...prev, [videoId]: false }));
-        // Optionally show toast
-      } else {
-        await supabase
-          .from('saved_videos')
-          .insert({ user_id: user.id, video_id: videoId });
-        setSavedStatus(prev => ({ ...prev, [videoId]: true }));
-        // Optionally show toast
-      }
-    } catch (error) {
-      // Optionally show error toast
-    }
-  };
+  } catch (error) {
+    console.error('Error saving/unsaving video:', error);
+    // Optionally show error toast
+  }
+};
+
 
   useEffect(() => {
     checkSavedStatus();
@@ -248,6 +266,14 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
 
   const getUsername = (video: any) => video.profiles?.username || video.username || (video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown');
   const getAvatarUrl = (video: any) => video.profiles?.avatar_url || video.avatar_url || undefined;
+  const getProfileUrl = (video: any) => {
+    const username = getUsername(video);
+    if (user && video.user_id === user.id) {
+      return '/profile';
+    }
+    return `/profile/${username}`;
+  };
+  
 
   const renderDescription = (desc: string) => {
     if (!desc) return null;

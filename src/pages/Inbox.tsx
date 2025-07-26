@@ -69,7 +69,7 @@ const Inbox = () => {
     try {
       setLoading(true);
       // Fetch chats where current user is either sender or receiver
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('chats')
         .select(`*,
           sender:profiles!chats_sender_id_fkey(username, avatar_url, deactivated),
@@ -77,7 +77,7 @@ const Inbox = () => {
         `)
         .or(`sender_id.eq.${user?.id},receiver_id.eq.${user?.id}`)
         .order('updated_at', { ascending: false });
-
+  
       if (error) {
         console.error('Error fetching chats:', error);
         toast({
@@ -87,26 +87,26 @@ const Inbox = () => {
         });
       } else {
         // Filter out chats that the current user has deleted or where users are deactivated
-        const filteredChats = (data || []).filter(chat => {
+        const filteredChats = (data || []).filter((chat: any) => {
           // Filter out chats with deactivated users
           if (chat.sender?.deactivated || chat.receiver?.deactivated) {
             return false;
           }
-
+  
           // Filter out chats that the current user has deleted
           if ((chat.sender_id === user?.id && chat.deleted_for_sender) ||
             (chat.receiver_id === user?.id && chat.deleted_for_receiver)) {
             return false;
           }
-
+  
           return true;
         });
-
+  
         console.log('Filtered chats:', filteredChats.length, 'out of', data?.length || 0);
         setChats(filteredChats);
-
+  
         // For each chat, fetch the latest visible message for the current user
-        const chatIds = filteredChats.map(chat => chat.id);
+        const chatIds = filteredChats.map((chat: any) => chat.id);
         let lastMessages = [];
         if (chatIds.length > 0) {
           // Fetch up to 5 recent messages per chat (to handle edge cases)
@@ -121,9 +121,9 @@ const Inbox = () => {
           }
         }
         // Attach last visible message to each chat
-        const chatsWithLastVisible = filteredChats.map(chat => {
+        const chatsWithLastVisible = filteredChats.map((chat: any) => {
           // Find the latest message for this chat that is visible to the user
-          const messages = lastMessages.filter(m => m.chat_id === chat.id);
+          const messages = lastMessages.filter((m: any) => m.chat_id === chat.id);
           let lastVisible = null;
           for (const msg of messages) {
             const isOwn = msg.sender_id === user?.id;
@@ -150,7 +150,7 @@ const Inbox = () => {
       setLoading(false);
     }
   };
-
+  
   const subscribeToChats = () => {
     console.log('Setting up real-time subscription for chats');
 
