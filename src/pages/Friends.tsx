@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Settings, MessageCircle, Share2, Play, Volume2, VolumeX, TrendingUp, Users } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useToast } from "@/hooks/use-toast";
+import ShareModal from "@/components/ShareModal";
 
 // --- AutoPlayVideo component ---
 const AutoPlayVideo = ({ src, className, globalMuted, ...props }: { src: string; className: string; globalMuted: boolean;[key: string]: any }) => {
@@ -103,10 +105,13 @@ const Friends = () => {
 
 
   const [globalMuted, setGlobalMuted] = useState(false); // Start unmuted (sound ON)
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareVideo, setShareVideo] = useState<any>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
 
 
 
@@ -153,18 +158,9 @@ const Friends = () => {
 
 
 
-  const handleShare = async (video: any) => {
-    const videoUrl = `${window.location.origin}/video/${video.id}`;
-    try {
-      await navigator.share({
-        title: video.title,
-        text: video.description,
-        url: videoUrl
-      });
-    } catch (error) {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(videoUrl);
-    }
+  const handleShare = (video: any) => {
+    setShareVideo(video);
+    setShareModalOpen(true);
   };
 
 
@@ -408,6 +404,18 @@ const Friends = () => {
 
       {/* Bottom Navigation */}
       <BottomNavigation />
+      
+      {/* Share Modal */}
+      {shareVideo && (
+        <ShareModal
+          isOpen={shareModalOpen}
+          onClose={() => {
+            setShareModalOpen(false);
+            setShareVideo(null);
+          }}
+          video={shareVideo}
+        />
+      )}
     </div>
   );
 };

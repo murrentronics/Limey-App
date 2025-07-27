@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck, MessageCircle } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useToast } from "@/hooks/use-toast";
+import ShareModal from "@/components/ShareModal";
 import React from "react";
 
 // Define interfaces for better type safety
@@ -44,11 +46,12 @@ interface AutoPlayVideoProps {
   className?: string;
   globalMuted: boolean;
   videoId: string;
+  user?: any;
   onViewRecorded?: (videoId: string) => void;
   [key: string]: any;
 }
 
-const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMuted, videoId, onViewRecorded, ...props }) => {
+const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMuted, videoId, user, onViewRecorded, ...props }) => {
   const videoRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -94,6 +97,8 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
 
   // Record view when video has been playing and visible for 5 seconds
   useEffect(() => {
+    console.log('Feed: View effect triggered:', { isVisible, isPlaying, viewRecorded, videoId });
+
     if (isVisible && isPlaying && !viewRecorded && videoId) {
       console.log('Feed: Starting 5-second view timer for video:', videoId);
 
@@ -101,22 +106,28 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
         console.log('Feed: 5-second timer completed, recording view for video:', videoId);
 
         try {
+          // Use the RPC function to record the view
           const { data, error } = await supabase.rpc('record_video_view', {
             video_uuid: videoId
           });
 
-          console.log('Feed: View recording response:', { data, error, videoId });
+          console.log('Feed: RPC function result:', { data, error, videoId });
 
-          if (!error && data) {
-            console.log('Feed: View successfully recorded for video:', videoId);
+          if (!error) {
+            // Always mark as viewed to prevent repeated attempts
             setViewRecorded(true);
-            if (onViewRecorded) {
-              onViewRecorded(videoId);
+
+            if (data) {
+              console.log('Feed: New view successfully recorded for video:', videoId);
+              // Only update UI if it was a new view
+              if (onViewRecorded) {
+                onViewRecorded(videoId);
+              }
+            } else {
+              console.log('Feed: View already exists for video:', videoId, '- not recording duplicate');
             }
-          } else if (error) {
-            console.error('Feed: Error recording view:', error);
           } else {
-            console.log('Feed: View not recorded (returned false) for video:', videoId);
+            console.error('Feed: Error recording view:', error);
           }
         } catch (error) {
           console.error('Feed: Exception recording view:', error);
@@ -211,12 +222,16 @@ const Feed = () => {
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
   const [globalMuted, setGlobalMuted] = useState<boolean>(false);
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareVideo, setShareVideo] = useState<VideoData | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { signOut } = useAuth();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();
 
   const categories = [
     "Soca", "Dancehall", "Carnival", "Comedy", "Dance", "Music", "Local News"
@@ -241,6 +256,34 @@ const Feed = () => {
     console.log("Feed - fetching videos for category:", activeCategory);
     fetchVideos();
   }, [activeCategory]);
+
+  // Handle shared video auto-scroll
+  useEffect(() => {
+    const videoId = searchParams.get('video');
+    if (videoId && videos.length > 0) {
+      console.log('Auto-scrolling to shared video:', videoId);
+      
+      // Find the video index
+      const videoIndex = videos.findIndex(v => v.id === videoId);
+      if (videoIndex !== -1) {
+        // Scroll to the video
+        setTimeout(() => {
+          const videoElement = document.querySelector(`[data-video-id="${videoId}"]`);
+          if (videoElement) {
+            videoElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setCurrentVideoIndex(videoIndex);
+          }
+        }, 500);
+        
+        // Clear the video parameter from URL
+        setSearchParams(prev => {
+          const newParams = new URLSearchParams(prev);
+          newParams.delete('video');
+          return newParams;
+        });
+      }
+    }
+  }, [videos, searchParams, setSearchParams]);
 
 
 
@@ -425,15 +468,50 @@ const Feed = () => {
         event: 'INSERT',
         schema: 'public',
         table: 'video_views'
-      }, (payload) => {
-        console.log('View change detected:', payload);
+      }, async (payload) => {
+        console.log('View change detected via real-time:', payload);
         const newView = payload.new;
 
-        // Update view count
-        setViewCounts(prev => ({
-          ...prev,
-          [newView.video_id]: (prev[newView.video_id] || 0) + 1
-        }));
+        if (newView && newView.video_id) {
+          console.log('Updating view count for video:', newView.video_id);
+
+          // Get the genuine view count from the database
+          try {
+            const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+              video_uuid: newView.video_id
+            });
+
+            if (!error && typeof genuineCount === 'number') {
+              setViewCounts(prev => {
+                console.log('View count updated via real-time:', newView.video_id, 'to', genuineCount);
+                return {
+                  ...prev,
+                  [newView.video_id]: genuineCount
+                };
+              });
+            } else {
+              // Fallback to incrementing
+              setViewCounts(prev => {
+                const newCount = (prev[newView.video_id] || 0) + 1;
+                console.log('View count updated (fallback):', newView.video_id, 'from', prev[newView.video_id] || 0, 'to', newCount);
+                return {
+                  ...prev,
+                  [newView.video_id]: newCount
+                };
+              });
+            }
+          } catch (error) {
+            console.error('Error getting genuine view count:', error);
+            // Fallback to incrementing
+            setViewCounts(prev => {
+              const newCount = (prev[newView.video_id] || 0) + 1;
+              return {
+                ...prev,
+                [newView.video_id]: newCount
+              };
+            });
+          }
+        }
       })
       .subscribe();
 
@@ -692,18 +770,9 @@ const Feed = () => {
 
 
 
-  const handleShare = async (video: VideoData) => {
-    const videoUrl = `${window.location.origin}/video/${video.id}`;
-    try {
-      await navigator.share({
-        title: video.title,
-        text: video.description,
-        url: videoUrl
-      });
-    } catch (error) {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(videoUrl);
-    }
+  const handleShare = (video: VideoData) => {
+    setShareVideo(video);
+    setShareModalOpen(true);
   };
 
   // Follow function
@@ -913,9 +982,24 @@ const Feed = () => {
     try {
       const newViewCounts: { [key: string]: number } = {};
 
-      videosArr.forEach(video => {
-        newViewCounts[video.id] = video.view_count || 0;
-      });
+      // Get genuine view counts from the database function
+      for (const video of videosArr) {
+        try {
+          const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+            video_uuid: video.id
+          });
+
+          if (!error && typeof genuineCount === 'number') {
+            newViewCounts[video.id] = genuineCount;
+          } else {
+            // Fallback to the view_count from the video record
+            newViewCounts[video.id] = video.view_count || 0;
+          }
+        } catch (err) {
+          console.error(`Error getting view count for video ${video.id}:`, err);
+          newViewCounts[video.id] = video.view_count || 0;
+        }
+      }
 
       setViewCounts(prev => ({ ...prev, ...newViewCounts }));
 
@@ -924,12 +1008,34 @@ const Feed = () => {
     }
   };
 
-  const onViewRecorded = (videoId: string) => {
-    // Update view count when a view is recorded
-    setViewCounts(prev => ({
-      ...prev,
-      [videoId]: (prev[videoId] || 0) + 1
-    }));``
+  const onViewRecorded = async (videoId: string) => {
+    // Get the updated view count from the database
+    try {
+      const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+        video_uuid: videoId
+      });
+
+      if (!error && typeof genuineCount === 'number') {
+        setViewCounts(prev => ({
+          ...prev,
+          [videoId]: genuineCount
+        }));
+        console.log(`Updated view count for video ${videoId}: ${genuineCount}`);
+      } else {
+        // Fallback to incrementing the current count
+        setViewCounts(prev => ({
+          ...prev,
+          [videoId]: (prev[videoId] || 0) + 1
+        }));
+      }
+    } catch (error) {
+      console.error('Error updating view count:', error);
+      // Fallback to incrementing the current count
+      setViewCounts(prev => ({
+        ...prev,
+        [videoId]: (prev[videoId] || 0) + 1
+      }));
+    }
   };
 
   // Format view count for display
@@ -1295,7 +1401,7 @@ const Feed = () => {
           ) : (
             <div className="space-y-0">
               {searchResults.map((video) => (
-                <div key={video.id} className="relative h-screen snap-start snap-always flex items-center justify-center">  {/* Black space for top menu */}
+                <div key={video.id} data-video-id={video.id} className="relative h-screen snap-start snap-always flex items-center justify-center">  {/* Black space for top menu */}
                   <div className="absolute top-0 left-0 right-0 h-16 bg-black z-10"></div>
 
                   {/* Video container with fixed height - stops above the text area */}
@@ -1306,6 +1412,7 @@ const Feed = () => {
                       className="w-full h-full object-cover"
                       globalMuted={globalMuted}
                       videoId={video.id}
+                      user={user}
                       onViewRecorded={onViewRecorded}
                     />
                   </div>
@@ -1358,59 +1465,59 @@ const Feed = () => {
                               </Avatar>
                             </button>
                             {/* Follow Button */}
-                              {user && video.user_id !== user.id && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    await handleFollow(video.user_id, getUsername(video));
-                                  }}
-                                  className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
-                                  data-control
-                                >
-                                  {followStatus[video.user_id] ? (
-                                    <span className="text-white font-bold text-sm">✓</span>
-                                  ) : (
-                                    <Plus size={14} className="text-white" />
-                                  )}
-                                </button>
-                              )}
+                            {user && video.user_id !== user.id && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await handleFollow(video.user_id, getUsername(video));
+                                }}
+                                className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
+                                data-control
+                              >
+                                {followStatus[video.user_id] ? (
+                                  <span className="text-white font-bold text-sm">✓</span>
+                                ) : (
+                                  <Plus size={14} className="text-white" />
+                                )}
+                              </button>
+                            )}
 
                           </div>
                         </div>
 
                         {/* Like Button */}
-                      <div className="flex flex-col items-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLike(video.id);
-                          }}
-                          className="p-0 bg-transparent border-none"
-                          data-control
-                        >
-                          <Heart
-                            size={28}
-                            className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
-                          />
-                        </button>
-                        <span className="text-white text-xs mt-1 font-medium">
-                          {likeCounts[video.id] || 0}
-                        </span>
-                      </div>
+                        <div className="flex flex-col items-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLike(video.id);
+                            }}
+                            className="p-0 bg-transparent border-none"
+                            data-control
+                          >
+                            <Heart
+                              size={28}
+                              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
+                            />
+                          </button>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {likeCounts[video.id] || 0}
+                          </span>
+                        </div>
 
 
-                      {/* View Count */}
-                      <div className="flex flex-col items-center">
-                        <Eye size={24} className="text-white" />
-                        <span className="text-white text-xs mt-1 font-medium">
-                          {formatViews(viewCounts[video.id] || 0)}
-                        </span>
-                      </div>
+                        {/* View Count */}
+                        <div className="flex flex-col items-center">
+                          <Eye size={24} className="text-white" />
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {formatViews(viewCounts[video.id] || 0)}
+                          </span>
+                        </div>
 
 
 
 
-                       {/* Save Button */}
+                        {/* Save Button */}
                         <div className="flex flex-col items-center">
                           <button
                             onClick={e => { e.stopPropagation(); handleSave(video.id); }}
@@ -1427,18 +1534,18 @@ const Feed = () => {
 
 
                         {/* Share */}
-<div className="flex flex-col items-center">
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      handleShare(video);
-    }}
-    className="p-0 bg-transparent border-none"
-    data-control
-  >
-    <Share2 size={28} className="text-white fill-white" />
-  </button>
-</div>
+                        <div className="flex flex-col items-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShare(video);
+                            }}
+                            className="p-0 bg-transparent border-none"
+                            data-control
+                          >
+                            <Share2 size={28} className="text-white fill-white" />
+                          </button>
+                        </div>
 
                       </div>
                     </div>
@@ -1472,6 +1579,7 @@ const Feed = () => {
               {filteredVideos.map((video) => (
                 <div
                   key={video.id}
+                  data-video-id={video.id}
                   className="relative h-screen snap-start snap-always flex items-center justify-center"
                   onClick={e => {
                     // Only trigger play/pause if not clicking on a control
@@ -1504,6 +1612,7 @@ const Feed = () => {
                       className="w-full h-full object-cover"
                       globalMuted={globalMuted}
                       videoId={video.id}
+                      user={user}
                       onViewRecorded={onViewRecorded}
                     />
                   </div>
@@ -1645,6 +1754,18 @@ const Feed = () => {
       </div>
       {/* Bottom Navigation */}
       <BottomNavigation />
+      
+      {/* Share Modal */}
+      {shareVideo && (
+        <ShareModal
+          isOpen={shareModalOpen}
+          onClose={() => {
+            setShareModalOpen(false);
+            setShareVideo(null);
+          }}
+          video={shareVideo}
+        />
+      )}
     </div>
   );
 };

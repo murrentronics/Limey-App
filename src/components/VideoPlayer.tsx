@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import ShareModal from "@/components/ShareModal";
 
 interface Video {
   id: string;
@@ -48,6 +49,7 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
   const [duration, setDuration] = useState(0);
   const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
   const [latestProfileData, setLatestProfileData] = useState<{ username?: string; avatar_url?: string } | null>(null);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -56,21 +58,8 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
 
 
   // Restore handleShare function
-  const handleShare = async () => {
-    try {
-      await navigator.share({
-        title: video.title,
-        text: video.description,
-        url: window.location.href
-      });
-    } catch (error) {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(window.location.href);
-      toast({
-        title: "Link copied!",
-        description: "Video link copied to clipboard"
-      });
-    }
+  const handleShare = () => {
+    setShareModalOpen(true);
   };
 
 
@@ -676,7 +665,12 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
         )}
       </div>
 
-
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        video={video}
+      />
     </div>
   );
 };

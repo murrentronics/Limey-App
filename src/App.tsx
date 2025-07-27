@@ -24,6 +24,7 @@ import LinkAccount from "@/pages/LinkAccount";
 import Wallet from "@/pages/Wallet";
 import CreateVideoPage from "./pages/CreateVideoPage";
 import Deactivated from "./pages/Deactivated";
+import VideoShare from "./pages/VideoShare";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
             <Route path="/create-video" element={<ProtectedRoute><CreateVideoPage /></ProtectedRoute>} />
             <Route path="/deactivated" element={<Deactivated />} />
+            <Route path="/video/:videoId" element={<VideoShare />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

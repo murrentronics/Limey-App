@@ -7,6 +7,8 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
+import ShareModal from "@/components/ShareModal";
 import { Badge } from "@/components/ui/badge";
 
 // Move this to the top after the imports
@@ -24,6 +26,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [globalMuted, setGlobalMuted] = useState(false);
 
@@ -33,6 +36,8 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
   const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
   const [modalVideos, setModalVideos] = useState(videos);
   const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareVideo, setShareVideo] = useState<any>(null);
 
   // Only update modalVideos when videos prop changes
   useEffect(() => {
@@ -92,83 +97,175 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
         // Update like status and counts
         const newLikeStatus: { [key: string]: boolean } = {};
         const newLikeCounts: { [key: string]: number } = {};
-        const newViewCounts: { [key: string]: number } = {};
 
         modalVideos.forEach(video => {
           newLikeStatus[video.id] = likedVideoIds.has(video.id);
           newLikeCounts[video.id] = video.like_count || 0;
-          newViewCounts[video.id] = video.view_count || 0;
         });
 
         setLikeStatus(newLikeStatus);
         setLikeCounts(newLikeCounts);
-        setViewCounts(newViewCounts);
 
       } catch (error) {
         console.error('Error checking like status:', error);
       }
     };
 
+    const checkViewCounts = async () => {
+      try {
+        const newViewCounts: { [key: string]: number } = {};
+
+        // Get genuine view counts from the database function
+        for (const video of modalVideos) {
+          try {
+            const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+              video_uuid: video.id
+            });
+
+            if (!error && typeof genuineCount === 'number') {
+              newViewCounts[video.id] = genuineCount;
+            } else {
+              // Fallback to the view_count from the video record
+              newViewCounts[video.id] = video.view_count || 0;
+            }
+          } catch (err) {
+            console.error(`Error getting view count for video ${video.id}:`, err);
+            newViewCounts[video.id] = video.view_count || 0;
+          }
+        }
+
+        setViewCounts(newViewCounts);
+
+      } catch (error) {
+        console.error('Error checking view counts:', error);
+      }
+    };
+
     checkLikeStatus();
+    checkViewCounts();
   }, [user, modalVideos]);
 
-// Then update the function:
-const checkSavedStatus = async () => {
-  if (!user || modalVideos.length === 0) return;
-  try {
-    const videoIds = modalVideos.map(video => video.id);
-    
-    const { data: saved, error } = await (supabase as any)
-      .from('saved_videos')
-      .select('video_id')
-      .eq('user_id', user.id)
-      .in('video_id', videoIds);
-    
-    if (error) {
-      console.error('Error fetching saved videos:', error);
-      return;
-    }
-    
-    const savedVideoIds = new Set((saved as SavedVideoRow[] || []).map(row => row.video_id));
-    const newSavedStatus: { [key: string]: boolean } = {};
-    modalVideos.forEach(video => {
-      newSavedStatus[video.id] = savedVideoIds.has(video.id);
-    });
-    setSavedStatus(newSavedStatus);
-  } catch (error) {
-    console.error('Error checking saved status:', error);
-  }
-};
+  // Then update the function:
+  const checkSavedStatus = async () => {
+    if (!user || modalVideos.length === 0) return;
+    try {
+      const videoIds = modalVideos.map(video => video.id);
 
-
-
-const handleSave = async (videoId: string) => {
-  if (!user) return;
-  try {
-    if (savedStatus[videoId]) {
-      await (supabase as any)
+      const { data: saved, error } = await (supabase as any)
         .from('saved_videos')
-        .delete()
+        .select('video_id')
         .eq('user_id', user.id)
-        .eq('video_id', videoId);
-      setSavedStatus(prev => ({ ...prev, [videoId]: false }));
-      // Optionally show toast
-    } else {
-      await (supabase as any)
-        .from('saved_videos')
-        .insert({ user_id: user.id, video_id: videoId });
-      setSavedStatus(prev => ({ ...prev, [videoId]: true }));
-      // Optionally show toast
+        .in('video_id', videoIds);
+
+      if (error) {
+        console.error('Error fetching saved videos:', error);
+        return;
+      }
+
+      const savedVideoIds = new Set((saved as SavedVideoRow[] || []).map(row => row.video_id));
+      const newSavedStatus: { [key: string]: boolean } = {};
+      modalVideos.forEach(video => {
+        newSavedStatus[video.id] = savedVideoIds.has(video.id);
+      });
+      setSavedStatus(newSavedStatus);
+    } catch (error) {
+      console.error('Error checking saved status:', error);
     }
-  } catch (error) {
-    console.error('Error saving/unsaving video:', error);
-    // Optionally show error toast
-  }
-};
+  };
+
+
+
+  const handleSave = async (videoId: string) => {
+    if (!user) return;
+    try {
+      if (savedStatus[videoId]) {
+        await (supabase as any)
+          .from('saved_videos')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('video_id', videoId);
+        setSavedStatus(prev => ({ ...prev, [videoId]: false }));
+        // Optionally show toast
+      } else {
+        await (supabase as any)
+          .from('saved_videos')
+          .insert({ user_id: user.id, video_id: videoId });
+        setSavedStatus(prev => ({ ...prev, [videoId]: true }));
+        // Optionally show toast
+      }
+    } catch (error) {
+      console.error('Error saving/unsaving video:', error);
+      // Optionally show error toast
+    }
+  };
 
 
   useEffect(() => {
     checkSavedStatus();
+  }, [user, modalVideos]);
+
+  // Real-time subscriptions for likes and views
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to video_views changes
+    const viewsChannel = supabase
+      .channel('modal_video_views_realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'video_views'
+      }, async (payload) => {
+        console.log('ModalVerticalFeed: View change detected via real-time:', payload);
+        const newView = payload.new;
+
+        if (newView && newView.video_id) {
+          console.log('ModalVerticalFeed: Updating view count for video:', newView.video_id);
+
+          // Get the genuine view count from the database
+          try {
+            const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+              video_uuid: newView.video_id
+            });
+
+            if (!error && typeof genuineCount === 'number') {
+              setViewCounts(prev => {
+                console.log('ModalVerticalFeed: View count updated via real-time:', newView.video_id, 'to', genuineCount);
+                return {
+                  ...prev,
+                  [newView.video_id]: genuineCount
+                };
+              });
+            } else {
+              // Fallback to incrementing
+              setViewCounts(prev => {
+                const newCount = (prev[newView.video_id] || 0) + 1;
+                console.log('ModalVerticalFeed: View count updated (fallback):', newView.video_id, 'from', prev[newView.video_id] || 0, 'to', newCount);
+                return {
+                  ...prev,
+                  [newView.video_id]: newCount
+                };
+              });
+            }
+          } catch (error) {
+            console.error('ModalVerticalFeed: Error getting genuine view count:', error);
+            // Fallback to incrementing
+            setViewCounts(prev => {
+              const newCount = (prev[newView.video_id] || 0) + 1;
+              return {
+                ...prev,
+                [newView.video_id]: newCount
+              };
+            });
+          }
+        }
+      })
+      .subscribe();
+
+    // Cleanup subscriptions
+    return () => {
+      supabase.removeChannel(viewsChannel);
+    };
   }, [user, modalVideos]);
 
 
@@ -205,17 +302,9 @@ const handleSave = async (videoId: string) => {
     }
   };
 
-  const handleShare = async (video: any) => {
-    const videoUrl = `${window.location.origin}/video/${video.id}`;
-    try {
-      await navigator.share({
-        title: video.title,
-        text: video.description,
-        url: videoUrl
-      });
-    } catch (error) {
-      navigator.clipboard.writeText(videoUrl);
-    }
+  const handleShare = (video: any) => {
+    setShareVideo(video);
+    setShareModalOpen(true);
   };
 
   const handleLike = async (videoId: string) => {
@@ -257,6 +346,37 @@ const handleSave = async (videoId: string) => {
     // Optionally: show toast
   };
 
+  // Handle view recording
+  const onViewRecorded = async (videoId: string) => {
+    // Get the updated view count from the database
+    try {
+      const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+        video_uuid: videoId
+      });
+
+      if (!error && typeof genuineCount === 'number') {
+        setViewCounts(prev => ({
+          ...prev,
+          [videoId]: genuineCount
+        }));
+        console.log(`Updated view count for video ${videoId}: ${genuineCount}`);
+      } else {
+        // Fallback to incrementing the current count
+        setViewCounts(prev => ({
+          ...prev,
+          [videoId]: (prev[videoId] || 0) + 1
+        }));
+      }
+    } catch (error) {
+      console.error('Error updating view count:', error);
+      // Fallback to incrementing the current count
+      setViewCounts(prev => ({
+        ...prev,
+        [videoId]: (prev[videoId] || 0) + 1
+      }));
+    }
+  };
+
   // Format view count for display
   const formatViews = (count: number) => {
     if (count < 1000) return count.toString();
@@ -273,7 +393,7 @@ const handleSave = async (videoId: string) => {
     }
     return `/profile/${username}`;
   };
-  
+
 
   const renderDescription = (desc: string) => {
     if (!desc) return null;
@@ -356,18 +476,21 @@ const handleSave = async (videoId: string) => {
               src={video.video_url}
               className="w-full h-full object-cover"
               globalMuted={globalMuted}
+              videoId={video.id}
+              user={user}
+              onViewRecorded={onViewRecorded}
             />
             {/* Overlay UI */}
             <div className="absolute bottom-20 left-0 right-0 p-6 text-white">
               <div className="flex justify-between items-end">
                 {/* Left - User info & caption */}
                 <div className="flex-1 mr-4 space-y-3">
-                  
-                    
+
+
                   {/* Caption */}
                   <div className="space-y-2 mt-2">
                     <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
-                    
+
                     {/* Description with hashtags */}
                     {video.description && (
                       <p className="text-white/90 text-sm leading-relaxed break-words">
@@ -378,100 +501,100 @@ const handleSave = async (videoId: string) => {
                 </div>
                 {/* Actions */}
                 <div className="flex flex-col items-center space-y-4">
-                {/* Profile Button */}
-                <div className="flex flex-col items-center">
-                          <div className="relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(getProfileUrl(video));
-                              }}
-                              className="hover:opacity-80 transition-opacity"
-                              aria-label={`View ${getUsername(video)}'s profile`}
-                              data-control
-                            >
-                              <Avatar className="w-12 h-12 rounded-full">
-                                <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
-                                <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
-                              </Avatar>
-                            </button>
-                            {/* Follow Button */}
-                              {user && video.user_id !== user.id && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    await handleFollow(video);
-                                  }}
-                                  className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
-                                  data-control
-                                >
-                                  {followStatus[video.user_id] ? (
-                                    <span className="text-white font-bold text-sm">✓</span>
-                                  ) : (
-                                    <Plus size={14} className="text-white" />
-                                  )}
-                                </button>
-                              )}
-                              </div>
-                              </div>
-                
+                  {/* Profile Button */}
+                  <div className="flex flex-col items-center">
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(getProfileUrl(video));
+                        }}
+                        className="hover:opacity-80 transition-opacity"
+                        aria-label={`View ${getUsername(video)}'s profile`}
+                        data-control
+                      >
+                        <Avatar className="w-12 h-12 rounded-full">
+                          <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
+                          <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                      </button>
+                      {/* Follow Button */}
+                      {user && video.user_id !== user.id && (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await handleFollow(video);
+                          }}
+                          className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
+                          data-control
+                        >
+                          {followStatus[video.user_id] ? (
+                            <span className="text-white font-bold text-sm">✓</span>
+                          ) : (
+                            <Plus size={14} className="text-white" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Like Button */}
-<div className="flex flex-col items-center">
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      handleLike(video.id);
-    }}
-    className="p-0 bg-transparent border-none"
-    data-control
-  >
-    <Heart
-      size={28}
-      className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
-    />
-  </button>
-  <span className="text-white text-xs mt-1 font-medium">
-    {likeCounts[video.id] || 0}
-  </span>
-</div>
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLike(video.id);
+                      }}
+                      className="p-0 bg-transparent border-none"
+                      data-control
+                    >
+                      <Heart
+                        size={28}
+                        className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
+                      />
+                    </button>
+                    <span className="text-white text-xs mt-1 font-medium">
+                      {likeCounts[video.id] || 0}
+                    </span>
+                  </div>
 
 
                   {/* View Count */}
-<div className="flex flex-col items-center">
-  <Eye size={28} className="text-white" />
-  <span className="text-white text-xs mt-1 font-medium">
-    {formatViews(viewCounts[video.id] || 0)}
-  </span>
-</div>
+                  <div className="flex flex-col items-center">
+                    <Eye size={28} className="text-white" />
+                    <span className="text-white text-xs mt-1 font-medium">
+                      {formatViews(viewCounts[video.id] || 0)}
+                    </span>
+                  </div>
 
 
                   {/* Save Button */}
-<div className="flex flex-col items-center">
-  <button
-    onClick={e => { e.stopPropagation(); handleSave(video.id); }}
-    className="p-0 bg-transparent border-none"
-    data-control
-  >
-    <Bookmark
-      size={28}
-      className={`${savedStatus[video.id] ? 'text-green-500 fill-green-500' : 'text-white fill-white'} transition-colors`}
-    />
-  </button>
-</div>
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={e => { e.stopPropagation(); handleSave(video.id); }}
+                      className="p-0 bg-transparent border-none"
+                      data-control
+                    >
+                      <Bookmark
+                        size={28}
+                        className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
+                      />
+                    </button>
+                  </div>
 
                   {/* Share */}
-<div className="flex flex-col items-center">
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      handleShare(video);
-    }}
-    className="p-0 bg-transparent border-none"
-    data-control
-  >
-    <Share2 size={28} className="text-white fill-white" />
-  </button>
-</div>
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleShare(video);
+                      }}
+                      className="p-0 bg-transparent border-none"
+                      data-control
+                    >
+                      <Share2 size={28} className="text-white fill-white" />
+                    </button>
+                  </div>
 
                 </div>
               </div>
@@ -479,6 +602,18 @@ const handleSave = async (videoId: string) => {
           </div>
         ))}
       </div>
+
+      {/* Share Modal */}
+      {shareVideo && (
+        <ShareModal
+          isOpen={shareModalOpen}
+          onClose={() => {
+            setShareModalOpen(false);
+            setShareVideo(null);
+          }}
+          video={shareVideo}
+        />
+      )}
     </div>
   );
 };

@@ -88,14 +88,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem('wp_jwt_token', data.token);
+        localStorage.setItem('wp_jwt_validated', 'true');
+        localStorage.setItem('wp_jwt_validation_time', Date.now().toString());
         console.log('WordPress JWT token set:', data.token);
+        return true; // JWT validation successful
       } else {
         localStorage.removeItem('wp_jwt_token');
+        localStorage.setItem('wp_jwt_validated', 'false');
         console.error('No WordPress JWT token received:', data);
+        return false; // JWT validation failed
       }
     } catch (err) {
       localStorage.removeItem('wp_jwt_token');
+      localStorage.setItem('wp_jwt_validated', 'false');
       console.error('Error fetching WordPress JWT token:', err);
+      return false; // JWT validation failed
     }
   }
 
@@ -125,6 +132,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const { error } = await supabase.auth.signOut();
       localStorage.removeItem('wp_jwt_token');
+      localStorage.removeItem('wp_jwt_validated');
+      localStorage.removeItem('wp_jwt_validation_time');
       setUser(null);
       setSession(null);
       if (error) {

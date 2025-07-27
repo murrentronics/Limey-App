@@ -14,6 +14,19 @@ const Chat = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [messages, setMessages] = useState<any[]>([]);
+
+  // Utility function to deduplicate messages
+  const deduplicateMessages = (messages: any[]) => {
+    const seen = new Set();
+    return messages.filter(message => {
+      if (seen.has(message.id)) {
+        console.log('Removing duplicate message:', message.id);
+        return false;
+      }
+      seen.add(message.id);
+      return true;
+    }).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  };
   const [chat, setChat] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -234,7 +247,9 @@ const Chat = () => {
         console.error('Error fetching messages:', error);
       } else {
         console.log('Messages data:', data);
-        setMessages(data || []);
+        const uniqueMessages = deduplicateMessages(data || []);
+        console.log('Unique messages after deduplication:', uniqueMessages.length);
+        setMessages(uniqueMessages);
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -283,14 +298,10 @@ const Chat = () => {
         console.log('Chat ID from subscription:', chatId);
         console.log('Message chat ID:', payload.new.chat_id);
         setMessages(prev => {
-          // Check if message already exists to avoid duplicates
-          const exists = prev.some(msg => msg.id === payload.new.id);
-          if (exists) {
-            console.log('Message already exists, skipping duplicate');
-            return prev;
-          }
-          console.log('Adding new message to state, new count will be:', prev.length + 1);
-          return [...prev, payload.new];
+          const newMessages = [...prev, payload.new];
+          const uniqueMessages = deduplicateMessages(newMessages);
+          console.log('Adding new message via real-time, total unique messages:', uniqueMessages.length);
+          return uniqueMessages;
         });
       })
       .on('postgres_changes', {
@@ -410,8 +421,10 @@ const Chat = () => {
         
         // Add the new message to local state immediately
         setMessages(prev => {
-          console.log('Adding message to local state, new count will be:', prev.length + 1);
-          return [...prev, data];
+          const newMessages = [...prev, data];
+          const uniqueMessages = deduplicateMessages(newMessages);
+          console.log('Adding sent message to local state, total unique messages:', uniqueMessages.length);
+          return uniqueMessages;
         });
         
         // Update chat's last message and timestamp
@@ -932,13 +945,16 @@ const Chat = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {messages.map((message) => {
+            {messages.map((message, index) => {
               const isOwnMessage = message.sender_id === user?.id;
               // Hide messages that were deleted for everyone or deleted for the current user
               const isDeletedForEveryone = message.deleted_for_everyone === true;
               const isDeletedForSender = isOwnMessage && message.deleted_for_sender === true;
               const isDeletedForReceiver = !isOwnMessage && message.deleted_for_receiver === true;
               const isDeleted = isDeletedForEveryone || isDeletedForSender || isDeletedForReceiver;
+
+              // Create a unique key using message ID and index as fallback
+              const messageKey = message.id || `message-${index}-${message.created_at}`;
 
               // Debug logging
               if (message.deleted_for_sender || message.deleted_for_everyone) {
@@ -953,7 +969,7 @@ const Chat = () => {
 
               if (isDeleted) {
                 return (
-                  <div key={message.id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                  <div key={`${messageKey}-deleted`} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
                     <span className="text-xs text-white/40 italic">
                       Message deleted
                     </span>
@@ -963,7 +979,7 @@ const Chat = () => {
 
               return (
                 <div
-                  key={message.id}
+                  key={messageKey}
                   className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
                 >
                   <div className="relative flex items-start">

@@ -59,6 +59,7 @@ const Profile = () => {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [followingCount, setFollowingCount] = useState(0);
   const [followersCount, setFollowersCount] = useState(0);
+  const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
 
   const location = useLocation();
 
@@ -97,6 +98,10 @@ const Profile = () => {
                 video.id === payload.new.id ? { ...video, ...payload.new } : video
               )
             );
+            // Refresh view count for the updated video
+            if (payload.new.id) {
+              fetchViewCounts([payload.new]);
+            }
           } else if (payload.eventType === 'DELETE') {
             // For deletes, remove the video from the list
             setUserVideos(prev => prev.filter(video => video.id !== payload.old.id));
@@ -116,11 +121,17 @@ const Profile = () => {
               } else if (newVideoData) {
                 // Add the new video to the beginning of the list
                 setUserVideos(prev => [newVideoData, ...prev]);
+                // Fetch view count for the new video
+                fetchViewCounts([newVideoData]);
               }
             } catch (err) {
               console.error('Error handling video insert:', err);
               // Fall back to using the payload data
               setUserVideos(prev => [payload.new, ...prev]);
+              // Try to fetch view count for the new video
+              if (payload.new) {
+                fetchViewCounts([payload.new]);
+              }
             }
           }
         }
@@ -130,6 +141,72 @@ const Profile = () => {
     return () => {
       console.log('Cleaning up real-time subscription for videos');
       supabase.removeChannel(channel);
+    };
+  }, [profile?.user_id]);
+
+  // Real-time subscription for view counts
+  useEffect(() => {
+    if (!profile?.user_id) return;
+
+    console.log('Setting up real-time subscription for view counts');
+
+    // Subscribe to video_views changes
+    const viewsChannel = supabase
+      .channel('profile_video_views_realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'video_views'
+      }, async (payload) => {
+        console.log('Profile: View change detected via real-time:', payload);
+        const newView = payload.new;
+
+        if (newView && newView.video_id) {
+          console.log('Profile: Updating view count for video:', newView.video_id);
+          
+          // Get the genuine view count from the database
+          try {
+            const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+              video_uuid: newView.video_id
+            });
+
+            if (!error && typeof genuineCount === 'number') {
+              setViewCounts(prev => {
+                console.log('Profile: View count updated via real-time:', newView.video_id, 'to', genuineCount);
+                return {
+                  ...prev,
+                  [newView.video_id]: genuineCount
+                };
+              });
+            } else {
+              // Fallback to incrementing
+              setViewCounts(prev => {
+                const newCount = (prev[newView.video_id] || 0) + 1;
+                console.log('Profile: View count updated (fallback):', newView.video_id, 'from', prev[newView.video_id] || 0, 'to', newCount);
+                return {
+                  ...prev,
+                  [newView.video_id]: newCount
+                };
+              });
+            }
+          } catch (error) {
+            console.error('Profile: Error getting genuine view count:', error);
+            // Fallback to incrementing
+            setViewCounts(prev => {
+              const newCount = (prev[newView.video_id] || 0) + 1;
+              return {
+                ...prev,
+                [newView.video_id]: newCount
+              };
+            });
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      console.log('Cleaning up real-time subscription for view counts');
+      supabase.removeChannel(viewsChannel);
     };
   }, [profile?.user_id]);
 
@@ -368,6 +445,44 @@ const Profile = () => {
     }
   };
 
+  // Format view count for display
+  const formatViews = (count: number) => {
+    if (count < 1000) return count.toString();
+    if (count < 1000000) return (count / 1000).toFixed(1) + 'K';
+    return (count / 1000000).toFixed(1) + 'M';
+  };
+
+  // Fetch genuine view counts for videos
+  const fetchViewCounts = async (videos: any[]) => {
+    try {
+      const newViewCounts: { [key: string]: number } = {};
+
+      // Get genuine view counts from the database function
+      for (const video of videos) {
+        try {
+          const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
+            video_uuid: video.id
+          });
+
+          if (!error && typeof genuineCount === 'number') {
+            newViewCounts[video.id] = genuineCount;
+          } else {
+            // Fallback to the view_count from the video record
+            newViewCounts[video.id] = video.view_count || 0;
+          }
+        } catch (err) {
+          console.error(`Error getting view count for video ${video.id}:`, err);
+          newViewCounts[video.id] = video.view_count || 0;
+        }
+      }
+
+      setViewCounts(prev => ({ ...prev, ...newViewCounts }));
+
+    } catch (error) {
+      console.error('Error checking view counts:', error);
+    }
+  };
+
   // Fetch user videos from the new videos table only (all assets in limeytt-uploads)
   const fetchUserVideos = async (targetUserId: string) => {
     try {
@@ -386,6 +501,11 @@ const Profile = () => {
       
       console.log('User videos fetched:', dbVideos?.length || 0, 'videos');
       setUserVideos(dbVideos || []);
+      
+      // Fetch view counts for the videos
+      if (dbVideos && dbVideos.length > 0) {
+        await fetchViewCounts(dbVideos);
+      }
     } catch (err) {
       console.error('Error fetching user videos:', err);
       setUserVideos([]);
@@ -404,7 +524,13 @@ const Profile = () => {
         setSavedVideos([]);
         return;
       }
-      setSavedVideos((data || []).map((row: any) => row.video));
+      const videos = (data || []).map((row: any) => row.video);
+      setSavedVideos(videos);
+      
+      // Fetch view counts for saved videos
+      if (videos && videos.length > 0) {
+        await fetchViewCounts(videos);
+      }
     } catch (err) {
       setSavedVideos([]);
     }
@@ -1102,7 +1228,7 @@ const handleSendMessage = async () => {
                     {/* Views icon and count top left */}
                     <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/70 rounded-full px-2 py-1">
                       <Eye size={16} className="text-white" />
-                      <span className="text-xs text-white font-semibold">{video.view_count || 0}</span>
+                      <span className="text-xs text-white font-semibold">{formatViews(viewCounts[video.id] || 0)}</span>
                     </div>
                     {/* 3-dots menu - Only show for own videos, top right */}
                     {isOwnProfile && (
@@ -1183,7 +1309,7 @@ const handleSendMessage = async () => {
                     {/* Views icon and count top left */}
                     <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-black/70 rounded-full px-2 py-1">
                       <Eye size={16} className="text-white" />
-                      <span className="text-xs text-white font-semibold">{video.view_count || 0}</span>
+                      <span className="text-xs text-white font-semibold">{formatViews(viewCounts[video.id] || 0)}</span>
                     </div>
                     {video.thumbnail_url ? (
                       <img 

@@ -1,20 +1,30 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Play } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AutoPlayVideoProps {
   src: string;
   className?: string;
   globalMuted?: boolean;
+  videoId?: string;
+  user?: any;
+  onViewRecorded?: (videoId: string) => void;
+  [key: string]: any;
 }
 
 const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
   src,
   className,
   globalMuted = false,
+  videoId,
+  user,
+  onViewRecorded,
+  ...props
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [viewRecorded, setViewRecorded] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -58,6 +68,50 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     };
   }, []);
 
+  // Record view when video has been playing and visible for 5 seconds
+  useEffect(() => {
+    if (isVisible && isPlaying && !viewRecorded && videoId) {
+      console.log('AutoPlayVideo: Starting 5-second view timer for video:', videoId);
+
+      const timer = setTimeout(async () => {
+        console.log('AutoPlayVideo: 5-second timer completed, recording view for video:', videoId);
+
+        try {
+          // Use the RPC function to record the view
+          const { data, error } = await supabase.rpc('record_video_view', {
+            video_uuid: videoId
+          });
+
+          console.log('AutoPlayVideo: RPC function result:', { data, error, videoId });
+
+          if (!error) {
+            // Always mark as viewed to prevent repeated attempts
+            setViewRecorded(true);
+
+            if (data) {
+              console.log('AutoPlayVideo: New view successfully recorded for video:', videoId);
+              // Only update UI if it was a new view
+              if (onViewRecorded) {
+                onViewRecorded(videoId);
+              }
+            } else {
+              console.log('AutoPlayVideo: View already exists for video:', videoId, '- not recording duplicate');
+            }
+          } else {
+            console.error('AutoPlayVideo: Error recording view:', error);
+          }
+        } catch (error) {
+          console.error('AutoPlayVideo: Exception recording view:', error);
+        }
+      }, 5000); // 5 seconds delay
+
+      return () => {
+        console.log('AutoPlayVideo: Clearing view timer for video:', videoId);
+        clearTimeout(timer);
+      };
+    }
+  }, [isVisible, isPlaying, viewRecorded, videoId, onViewRecorded]);
+
   return (
     <div className="relative w-full h-full">
       <video
@@ -69,6 +123,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
         controls={false}
         className={className}
         style={{ pointerEvents: 'auto' }}
+        {...props}
       />
       <style>{`
         video::-webkit-media-controls {
