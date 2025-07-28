@@ -1,15 +1,13 @@
 import AutoPlayVideo from "@/components/AutoPlayVideo";
-import React, { useRef, useEffect, useState } from "react";
-import { X, MessageCircle, Share2, Volume2, VolumeX, Plus, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
+import { useRef, useEffect, useState } from "react";
+import { X, Share2, Volume2, VolumeX, Plus, Heart, Eye, Bookmark } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
 import ShareModal from "@/components/ShareModal";
-import { Badge } from "@/components/ui/badge";
+
 
 // Move this to the top after the imports
 interface SavedVideoRow {
@@ -26,14 +24,14 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [globalMuted, setGlobalMuted] = useState(false);
 
   const [followStatus, setFollowStatus] = useState<{ [key: string]: boolean }>({});
   const [likeStatus, setLikeStatus] = useState<{ [key: string]: boolean }>({});
   const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
   const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
+  const [shareCounts, setShareCounts] = useState<{ [key: string]: number }>({});
+  const [saveCounts, setSaveCounts] = useState<{ [key: string]: number }>({});
   const [modalVideos, setModalVideos] = useState(videos);
   const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -44,9 +42,8 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
     setModalVideos(videos);
   }, [videos]);
 
-  // Only update currentIndex and scroll when startIndex changes
+  // Scroll to start index when it changes
   useEffect(() => {
-    setCurrentIndex(startIndex);
     if (containerRef.current) {
       const child = containerRef.current.children[startIndex] as HTMLElement;
       if (child) child.scrollIntoView({ behavior: "auto" });
@@ -97,14 +94,20 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
         // Update like status and counts
         const newLikeStatus: { [key: string]: boolean } = {};
         const newLikeCounts: { [key: string]: number } = {};
+        const newShareCounts: { [key: string]: number } = {};
+        const newSaveCounts: { [key: string]: number } = {};
 
         modalVideos.forEach(video => {
           newLikeStatus[video.id] = likedVideoIds.has(video.id);
           newLikeCounts[video.id] = video.like_count || 0;
+          newShareCounts[video.id] = video.share_count || 0;
+          newSaveCounts[video.id] = video.save_count || 0;
         });
 
         setLikeStatus(newLikeStatus);
         setLikeCounts(newLikeCounts);
+        setShareCounts(newShareCounts);
+        setSaveCounts(newSaveCounts);
 
       } catch (error) {
         console.error('Error checking like status:', error);
@@ -179,23 +182,34 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
     if (!user) return;
     try {
       if (savedStatus[videoId]) {
+        // Remove from saved videos
         await (supabase as any)
           .from('saved_videos')
           .delete()
           .eq('user_id', user.id)
           .eq('video_id', videoId);
+
+        // Update local state
         setSavedStatus(prev => ({ ...prev, [videoId]: false }));
-        // Optionally show toast
+        setSaveCounts(prev => ({
+          ...prev,
+          [videoId]: Math.max((prev[videoId] || 0) - 1, 0)
+        }));
       } else {
+        // Add to saved videos
         await (supabase as any)
           .from('saved_videos')
           .insert({ user_id: user.id, video_id: videoId });
+
+        // Update local state
         setSavedStatus(prev => ({ ...prev, [videoId]: true }));
-        // Optionally show toast
+        setSaveCounts(prev => ({
+          ...prev,
+          [videoId]: (prev[videoId] || 0) + 1
+        }));
       }
     } catch (error) {
       console.error('Error saving/unsaving video:', error);
-      // Optionally show error toast
     }
   };
 
@@ -262,9 +276,44 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
       })
       .subscribe();
 
+    // Subscribe to videos table changes for share and save counts
+    const videosChannel = supabase
+      .channel('modal_videos_realtime')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'videos'
+      }, async (payload) => {
+        console.log('ModalVerticalFeed: Video change detected via real-time:', payload);
+
+        if (payload.new && payload.old) {
+          const videoId = payload.new.id;
+          const newShareCount = payload.new.share_count || 0;
+          const newSaveCount = payload.new.save_count || 0;
+
+          // Update share count if changed
+          if (payload.new.share_count !== payload.old.share_count) {
+            setShareCounts(prev => ({
+              ...prev,
+              [videoId]: newShareCount
+            }));
+          }
+
+          // Update save count if changed
+          if (payload.new.save_count !== payload.old.save_count) {
+            setSaveCounts(prev => ({
+              ...prev,
+              [videoId]: newSaveCount
+            }));
+          }
+        }
+      })
+      .subscribe();
+
     // Cleanup subscriptions
     return () => {
       supabase.removeChannel(viewsChannel);
+      supabase.removeChannel(videosChannel);
     };
   }, [user, modalVideos]);
 
@@ -302,7 +351,27 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
     }
   };
 
-  const handleShare = (video: any) => {
+  const handleShare = async (video: any) => {
+    try {
+      // Increment share count directly in database
+      const { error } = await supabase
+        .from('videos')
+        .update({
+          share_count: (video.share_count || 0) + 1
+        })
+        .eq('id', video.id);
+
+      if (!error) {
+        // Update local share count
+        setShareCounts(prev => ({
+          ...prev,
+          [video.id]: (prev[video.id] || 0) + 1
+        }));
+      }
+    } catch (error) {
+      console.error('Error incrementing share count:', error);
+    }
+
     setShareVideo(video);
     setShareModalOpen(true);
   };
@@ -339,12 +408,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
     }
   };
 
-  const handleDelete = async (video: any) => {
-    if (!user || video.user_id !== user.id) return;
-    await supabase.from('videos').delete().eq('id', video.id);
-    // Optionally: remove from UI
-    // Optionally: show toast
-  };
+
 
   // Handle view recording
   const onViewRecorded = async (videoId: string) => {
@@ -385,7 +449,6 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
   };
 
   const getUsername = (video: any) => video.profiles?.username || video.username || (video.user_id ? `user_${video.user_id.slice(0, 8)}` : 'unknown');
-  const getAvatarUrl = (video: any) => video.profiles?.avatar_url || video.avatar_url || undefined;
   const getProfileUrl = (video: any) => {
     const username = getUsername(video);
     if (user && video.user_id === user.id) {
@@ -445,10 +508,10 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
         className="flex-1 overflow-y-auto snap-y snap-mandatory"
         style={{ scrollSnapType: "y mandatory" }}
       >
-        {modalVideos.map((video, idx) => (
+        {modalVideos.map((video) => (
           <div
             key={video.id}
-            className="relative h-screen flex items-center justify-center snap-start"
+            className="relative h-screen snap-start snap-always flex items-center justify-center"
             style={{ scrollSnapAlign: "start" }}
             onClick={e => {
               // Only trigger play/pause if not clicking on a control
@@ -471,36 +534,48 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
               }
             }}
           >
-            {/* Video */}
-            <AutoPlayVideo
-              src={video.video_url}
-              className="w-full h-full object-cover"
-              globalMuted={globalMuted}
-              videoId={video.id}
-              user={user}
-              onViewRecorded={onViewRecorded}
-            />
-            {/* Overlay UI */}
-            <div className="absolute bottom-20 left-0 right-0 p-6 text-white">
+            {/* Black space for top menu */}
+            <div className="absolute top-0 left-0 right-0 h-16 bg-black z-10"></div>
+
+            {/* Video container with fixed height - stops above the text area */}
+            <div className="absolute inset-0 top-16 bottom-32 overflow-hidden">
+              {/* Video */}
+              <AutoPlayVideo
+                src={video.video_url}
+                className="w-full h-full object-cover"
+                globalMuted={globalMuted}
+                videoId={video.id}
+                user={user}
+                onViewRecorded={onViewRecorded}
+              />
+            </div>
+
+            {/* Separator line */}
+            <div className="absolute bottom-32 left-0 right-0 h-[1px] bg-white/20 z-10"></div>
+
+            {/* Text area with black background */}
+            <div className="absolute bottom-16 left-0 right-0 h-16 bg-black z-10"></div>
+
+            {/* Black space for bottom navigation */}
+            <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-10"></div>
+
+            {/* Video Info Overlay - positioned in the text area */}
+            <div className="absolute bottom-16 left-0 right-0 p-4 text-white z-20">
               <div className="flex justify-between items-end">
                 {/* Left - User info & caption */}
                 <div className="flex-1 mr-4 space-y-3">
-
-
                   {/* Caption */}
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-2">
                     <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
-
-                    {/* Description with hashtags */}
                     {video.description && (
-                      <p className="text-white/90 text-sm leading-relaxed break-words">
+                      <p className="text-white/90 text-sm leading-relaxed">
                         {renderDescription(video.description)}
                       </p>
                     )}
                   </div>
                 </div>
-                {/* Actions */}
-                <div className="flex flex-col items-center space-y-4">
+                {/* Right actions */}
+                <div className="flex flex-col items-center space-y-6">
                   {/* Profile Button */}
                   <div className="flex flex-col items-center">
                     <div className="relative">
@@ -580,6 +655,9 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
                         className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
                       />
                     </button>
+                    <span className="text-white text-xs mt-1 font-medium">
+                      {saveCounts[video.id] || 0}
+                    </span>
                   </div>
 
                   {/* Share */}
@@ -594,6 +672,9 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
                     >
                       <Share2 size={28} className="text-white fill-white" />
                     </button>
+                    <span className="text-white text-xs mt-1 font-medium">
+                      {shareCounts[video.id] || 0}
+                    </span>
                   </div>
 
                 </div>

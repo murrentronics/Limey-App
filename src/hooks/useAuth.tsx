@@ -94,13 +94,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return true; // JWT validation successful
       } else {
         localStorage.removeItem('wp_jwt_token');
-        localStorage.setItem('wp_jwt_validated', 'false');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
         console.error('No WordPress JWT token received:', data);
         return false; // JWT validation failed
       }
     } catch (err) {
       localStorage.removeItem('wp_jwt_token');
-      localStorage.setItem('wp_jwt_validated', 'false');
+      localStorage.removeItem('wp_jwt_validated');
+      localStorage.removeItem('wp_jwt_validation_time');
       console.error('Error fetching WordPress JWT token:', err);
       return false; // JWT validation failed
     }

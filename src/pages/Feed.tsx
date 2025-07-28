@@ -24,6 +24,8 @@ interface VideoData {
   created_at: string;
   like_count?: number;
   view_count?: number;
+  share_count?: number;
+  save_count?: number;
   comment_count?: number;
   duration?: number;
   tags?: string[];
@@ -219,6 +221,8 @@ const Feed = () => {
   const [followStatus, setFollowStatus] = useState<Record<string, boolean>>({});
   const [likeStatus, setLikeStatus] = useState<Record<string, boolean>>({});
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
+  const [shareCounts, setShareCounts] = useState<Record<string, number>>({});
+  const [saveCounts, setSaveCounts] = useState<Record<string, number>>({});
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
   const [globalMuted, setGlobalMuted] = useState<boolean>(false);
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
@@ -398,16 +402,30 @@ const Feed = () => {
           if (payload.new && payload.new.id) {
             const videoId = payload.new.id;
             const newLikeCount = payload.new.like_count || 0;
+            const newShareCount = payload.new.share_count || 0;
+            const newSaveCount = payload.new.save_count || 0;
             const oldLikeCount = payload.old?.like_count || 0;
+            const oldShareCount = payload.old?.share_count || 0;
+            const oldSaveCount = payload.old?.save_count || 0;
 
-            // Always update the like count, even if it appears unchanged
+            // Always update the counts, even if they appear unchanged
             // This ensures the UI stays in sync with the database
-            console.log(`Like count for video ${videoId}: ${oldLikeCount} -> ${newLikeCount}`);
+            console.log(`Counts for video ${videoId}: likes ${oldLikeCount} -> ${newLikeCount}, shares ${oldShareCount} -> ${newShareCount}, saves ${oldSaveCount} -> ${newSaveCount}`);
 
-            // Update like count based on the payload
+            // Update counts based on the payload
             setLikeCounts(prev => ({
               ...prev,
               [videoId]: newLikeCount
+            }));
+            
+            setShareCounts(prev => ({
+              ...prev,
+              [videoId]: newShareCount
+            }));
+            
+            setSaveCounts(prev => ({
+              ...prev,
+              [videoId]: newSaveCount
             }));
           }
         } catch (error) {
@@ -647,7 +665,7 @@ const Feed = () => {
       setError(null);
       let query = supabase
         .from('videos')
-        .select(`*, like_count, view_count`)
+        .select(`*, like_count, view_count, share_count, save_count`)
         .order('created_at', { ascending: false })
         .limit(100);
       if (activeCategory !== "All") {
