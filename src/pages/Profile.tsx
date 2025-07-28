@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical, Settings, Send, Wallet, Heart, Bookmark, Eye, ChevronDown, X } from "lucide-react";
+import { MoreVertical, Settings, Send, Wallet, Heart, Bookmark, Eye, ChevronDown, X, TrendingUp, Trash2 } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import WalletModal from "@/components/WalletModal";
@@ -16,9 +16,10 @@ import { Avatar } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import clsx from "clsx";
+import { getUserSponsoredAds } from "@/lib/adminUtils";
 
 const Profile = () => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin } = useAuth();
   const { username } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -60,6 +61,8 @@ const Profile = () => {
   const [followingCount, setFollowingCount] = useState(0);
   const [followersCount, setFollowersCount] = useState(0);
   const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
+  const [sponsoredAds, setSponsoredAds] = useState<any[]>([]);
+  const [showAdMenu, setShowAdMenu] = useState<string | null>(null);
 
   const location = useLocation();
 
@@ -305,7 +308,10 @@ const Profile = () => {
 
   useEffect(() => {
     fetchProfile();
-    if (isOwnProfile) fetchSavedVideos();
+    if (isOwnProfile) {
+      fetchSavedVideos();
+      if (user?.id) fetchUserSponsoredAds(user.id);
+    }
   }, [username, user, isOwnProfile]);
 
   // Fetch follow counts when profile loads
@@ -509,6 +515,17 @@ const Profile = () => {
     } catch (err) {
       console.error('Error fetching user videos:', err);
       setUserVideos([]);
+    }
+  };
+
+  const fetchUserSponsoredAds = async (targetUserId: string) => {
+    if (!isOwnProfile) return; // Only fetch for own profile
+    try {
+      const ads = await getUserSponsoredAds(targetUserId);
+      setSponsoredAds(ads || []);
+    } catch (error) {
+      console.error('Error fetching sponsored ads:', error);
+      setSponsoredAds([]);
     }
   };
 
@@ -1058,6 +1075,11 @@ const handleSendMessage = async () => {
               <>
                 <Button variant="ghost" size="sm" onClick={() => setShowWalletModal(true)}><Wallet size={16} /></Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}><Settings size={16} /></Button>
+                {isAdmin && (
+                  <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} title="Admin Dashboard">
+                    👑
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={signOut}>Logout</Button>
               </>
             ) : (
@@ -1100,14 +1122,24 @@ const handleSendMessage = async () => {
                   TT${walletBalance !== null ? walletBalance.toFixed(2) : '0.00'}
                 </Badge>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => navigate('/edit-profile')} 
-                className="mb-4"
-              >
-                Edit Profile
-              </Button>
+              <div className="flex gap-2 mb-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => navigate('/edit-profile')} 
+                  className="flex-1"
+                >
+                  Edit Profile
+                </Button>
+                <Button 
+                  variant="neon" 
+                  size="sm" 
+                  onClick={() => navigate('/boost')}
+                  className="flex-1"
+                >
+                  Boost
+                </Button>
+              </div>
             </>
           )}
           {isOwnProfile && (
@@ -1214,8 +1246,8 @@ const handleSendMessage = async () => {
             <TabsTrigger value="videos" className={!isOwnProfile ? 'justify-center' : ''}>Videos</TabsTrigger>
             {isOwnProfile && (
               <>
-                <TabsTrigger value="likes">Liked</TabsTrigger>
                 <TabsTrigger value="saved"><Bookmark className="inline mr-1" size={16}/>Saved</TabsTrigger>
+                <TabsTrigger value="ads"><TrendingUp className="inline mr-1" size={16}/>My Ads</TabsTrigger>
               </>
             )}
           </TabsList>
@@ -1292,12 +1324,142 @@ const handleSendMessage = async () => {
               </div>
             )}
           </TabsContent>
-          {/* Likes tab for own profile only */}
+          {/* My Ads tab for own profile only */}
           {isOwnProfile && (
-            <TabsContent value="likes" className="mt-4">
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">Your liked videos will appear here</p>
-              </div>
+            <TabsContent value="ads" className="mt-4">
+              {sponsoredAds.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {sponsoredAds.map((ad) => (
+                    <Card 
+                      key={ad.id} 
+                      className="relative aspect-[9/16] cursor-pointer group bg-black/10 overflow-hidden hover:bg-black/20 transition-colors"
+                      onClick={() => navigate(`/campaign/${ad.id}`)}
+                    >
+                      {/* Status badge top left */}
+                      <div className="absolute top-2 left-2 z-10">
+                        <Badge 
+                          variant="secondary" 
+                          className={`text-xs ${
+                            ad.status === 'active' ? 'bg-green-900 text-green-400' :
+                            ad.status === 'pending' ? 'bg-yellow-900 text-yellow-400' :
+                            ad.status === 'approved' ? 'bg-blue-900 text-blue-400' :
+                            ad.status === 'rejected' ? 'bg-red-900 text-red-400' :
+                            ad.status === 'expired' ? 'bg-gray-900 text-gray-400' :
+                            'bg-purple-900 text-purple-400'
+                          }`}
+                        >
+                          {ad.status === 'active' ? '🟢' :
+                           ad.status === 'pending' ? '⏳' :
+                           ad.status === 'approved' ? '✅' :
+                           ad.status === 'rejected' ? '❌' :
+                           ad.status === 'expired' ? '⏰' : '📝'}
+                        </Badge>
+                      </div>
+                      
+                      {/* 3-dots menu top right */}
+                      <div className="absolute top-2 right-2 z-10">
+                        <div className="relative">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="p-1 bg-black/70 hover:bg-black/90 rounded-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAdMenu(showAdMenu === ad.id ? null : ad.id);
+                            }}
+                          >
+                            <MoreVertical size={16} className="text-white" />
+                          </Button>
+                          
+                          {/* Dropdown Menu */}
+                          {showAdMenu === ad.id && (
+                            <div className="absolute right-0 top-8 bg-black/90 backdrop-blur-md border border-white/10 rounded-lg py-2 min-w-[120px] z-20">
+                              <button
+                                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/campaign/${ad.id}`);
+                                  setShowAdMenu(null);
+                                }}
+                              >
+                                <TrendingUp size={14} />
+                                Statistics
+                              </button>
+                              <button
+                                className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-white/10 flex items-center gap-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // TODO: Add delete ad functionality
+                                  setShowAdMenu(null);
+                                }}
+                              >
+                                <Trash2 size={14} />
+                                Delete Ad
+                              </button>
+                              <button
+                                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowAdMenu(null);
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Ad thumbnail */}
+                      {ad.thumbnail_url ? (
+                        <img 
+                          src={ad.thumbnail_url} 
+                          alt={ad.title} 
+                          className="w-full h-full object-cover rounded" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/placeholder-thumbnail.png';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">
+                          No Cover
+                        </div>
+                      )}
+
+                      {/* Duration badge bottom right */}
+                      <div className="absolute bottom-2 right-2">
+                        <Badge variant="secondary" className="bg-black/70 text-white text-xs">
+                          {ad.duration}s
+                        </Badge>
+                      </div>
+
+                      {/* Ad title bottom left */}
+                      <div className="absolute bottom-2 left-2 right-12">
+                        <p className="text-xs text-white font-medium truncate bg-black/70 px-2 py-1 rounded">
+                          {ad.title}
+                        </p>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <TrendingUp size={32} className="text-white/70" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2 text-white">No ads yet</h3>
+                  <p className="text-white/70 mb-4">
+                    Create your first sponsored ad to reach more viewers
+                  </p>
+                  <Button
+                    onClick={() => navigate('/boost')}
+                    variant="neon"
+                    className="bg-primary text-black hover:bg-primary/90"
+                  >
+                    Create Your First Ad
+                  </Button>
+                </div>
+              )}
             </TabsContent>
           )}
           {isOwnProfile && (

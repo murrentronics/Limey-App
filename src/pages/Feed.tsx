@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck, MessageCircle, Video } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck, MessageCircle, Video, ExternalLink, X } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import ShareModal from "@/components/ShareModal";
+import { trackAdImpression, trackAdClick } from "@/lib/adminUtils";
 import React from "react";
 
 // Define interfaces for better type safety
@@ -40,6 +41,23 @@ interface VideoData {
   follower_count?: number;
   // Add any other properties that might be returned from Supabase
   [key: string]: any; // This allows for additional properties
+}
+
+interface SponsoredAdData {
+  id: string;
+  title: string;
+  description?: string;
+  video_url: string;
+  thumbnail_url?: string;
+  duration: number;
+  business_name?: string;
+  contact_number?: string;
+  website_url?: string;
+  support_email?: string;
+  price_info?: string;
+  impressions: number;
+  clicks: number;
+  isSponsored: true; // Flag to identify sponsored content
 }
 
 // --- AutoPlayVideo component ---
@@ -177,20 +195,20 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    
+
     const onPlay = () => {
       setIsPlaying(true);
       requestWakeLock(); // Prevent screen sleep when video plays
     };
-    
+
     const onPause = () => {
       setIsPlaying(false);
       releaseWakeLock(); // Allow screen sleep when video pauses
     };
-    
+
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
-    
+
     return () => {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
@@ -264,18 +282,58 @@ const Feed = () => {
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareVideo, setShareVideo] = useState<VideoData | null>(null);
+  const [sponsoredAds, setSponsoredAds] = useState<SponsoredAdData[]>([]);
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [selectedAd, setSelectedAd] = useState<SponsoredAdData | null>(null);
+  const [adCountdowns, setAdCountdowns] = useState<Record<string, number>>({});
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { signOut } = useAuth();
   const { user } = useAuth();
+
+  // Add fire animation styles for trending button
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fire-glow {
+        0%, 100% { 
+          filter: drop-shadow(0 0 5px #ff6b35) drop-shadow(0 0 10px #ff8c42) drop-shadow(0 0 15px #ffa726);
+          transform: rotate(-1deg) scale(1);
+        }
+        25% { 
+          filter: drop-shadow(0 0 8px #ff5722) drop-shadow(0 0 15px #ff7043) drop-shadow(0 0 20px #ffab40);
+          transform: rotate(1deg) scale(1.05);
+        }
+        50% { 
+          filter: drop-shadow(0 0 6px #ff6b35) drop-shadow(0 0 12px #ff8c42) drop-shadow(0 0 18px #ffa726);
+          transform: rotate(-0.5deg) scale(1.02);
+        }
+        75% { 
+          filter: drop-shadow(0 0 9px #ff5722) drop-shadow(0 0 16px #ff7043) drop-shadow(0 0 22px #ffab40);
+          transform: rotate(0.5deg) scale(1.03);
+        }
+      }
+      
+      .animate-fire {
+        animation: fire-glow 2s ease-in-out infinite;
+        display: inline-block;
+        transform-origin: center bottom;
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
   const categories = [
-    "Anime", "Bar Limes", "Cartoon", "Carnival", "Comedy", "Dance", "Dancehall", 
-    "DIY Projects", "Educational", "Events", "Fete", "Funny Vids", "HOW TOs", 
+    "Anime", "Bar Limes", "Cartoon", "Carnival", "Comedy", "Dance", "Dancehall",
+    "DIY Projects", "Educational", "Events", "Fete", "Funny Vids", "HOW TOs",
     "Local News", "Music Vids", "Parties", "Soca", "Trini Celebs"
   ];
 
@@ -696,6 +754,84 @@ const Feed = () => {
     setSearchLoading(false);
   };
 
+  // Fetch active sponsored ads
+  const fetchSponsoredAds = async (): Promise<SponsoredAdData[]> => {
+    try {
+      const { data, error } = await supabase.rpc('get_active_sponsored_ads');
+
+      if (error) {
+        console.error('Error fetching sponsored ads:', error);
+        return [];
+      }
+
+      return (data || []).map((ad: any) => ({
+        ...ad,
+        isSponsored: true
+      }));
+    } catch (error) {
+      console.error('Error fetching sponsored ads:', error);
+      return [];
+    }
+  };
+
+  // Smart algorithm to merge sponsored ads with regular videos
+  const mergeVideosWithAds = (videos: VideoData[], ads: SponsoredAdData[]): (VideoData | SponsoredAdData)[] => {
+    if (ads.length === 0) return videos;
+
+    const merged: (VideoData | SponsoredAdData)[] = [];
+    let adIndex = 0;
+
+    // Insert ads randomly every 8-12 videos
+    const getNextAdPosition = () => Math.floor(Math.random() * 5) + 8; // Random between 8-12
+    let nextAdPosition = getNextAdPosition();
+
+    videos.forEach((video, index) => {
+      merged.push(video);
+
+      // Insert ad at random intervals, but only in home feed (All category)
+      if (activeCategory === "All" &&
+        index === nextAdPosition &&
+        adIndex < ads.length) {
+        merged.push(ads[adIndex]);
+        adIndex++;
+        nextAdPosition = index + getNextAdPosition();
+      }
+    });
+
+    return merged;
+  };
+
+  // Initialize countdown for sponsored ads
+  const initializeAdCountdown = (ad: SponsoredAdData) => {
+    if (adCountdowns[ad.id]) return; // Already initialized
+
+    const duration = ad.duration || 30;
+    setAdCountdowns(prev => ({ ...prev, [ad.id]: duration }));
+
+    const interval = setInterval(() => {
+      setAdCountdowns(prev => {
+        const newCount = (prev[ad.id] || 0) - 1;
+        if (newCount <= 0) {
+          clearInterval(interval);
+          return { ...prev, [ad.id]: 0 };
+        }
+        return { ...prev, [ad.id]: newCount };
+      });
+    }, 1000);
+  };
+
+  // Handle Learn More click
+  const handleLearnMoreClick = async (ad: SponsoredAdData) => {
+    await trackAdClick(ad.id, user?.id);
+    setSelectedAd(ad);
+    setShowAdModal(true);
+  };
+
+  // Track ad impression when video starts playing
+  const trackAdView = async (ad: SponsoredAdData, viewDuration: number = 0) => {
+    await trackAdImpression(ad.id, user?.id, viewDuration);
+  };
+
   const fetchVideos = async () => {
     console.log("Feed - fetchVideos called");
     try {
@@ -740,7 +876,13 @@ const Feed = () => {
         const profileData = v as unknown as { profiles?: { deactivated?: boolean } };
         return !profileData.profiles?.deactivated;
       });
-      setVideos(filtered as VideoData[]);
+      // Fetch sponsored ads and merge with regular videos
+      const ads = await fetchSponsoredAds();
+      setSponsoredAds(ads);
+
+      const mergedContent = mergeVideosWithAds(filtered as VideoData[], ads);
+      setVideos(mergedContent as VideoData[]);
+
       await checkFollowStatus(filtered as VideoData[]);
       await checkLikeStatus(filtered as VideoData[]);
       await checkViewCounts(filtered as VideoData[]);
@@ -1258,7 +1400,7 @@ const Feed = () => {
               className="text-white hover:bg-white/10"
               aria-label="Trending"
             >
-              <TrendingUp size={20} />
+              <span className="animate-fire text-xl">🔥</span>
             </Button>
             {/* Live Button */}
             <Button
@@ -1644,190 +1786,322 @@ const Feed = () => {
             </div>
           ) : (
             <div className="space-y-0">
-              {filteredVideos.map((video) => (
-                <div
-                  key={video.id}
-                  data-video-id={video.id}
-                  className="relative h-screen snap-start snap-always flex items-center justify-center"
-                  onClick={e => {
-                    // Only trigger play/pause if not clicking on a control
-                    const controlSelectors = ['button[data-control]'];
-                    let el = e.target as HTMLElement;
-                    while (el && el !== e.currentTarget) {
-                      if (controlSelectors.some(sel => el.matches(sel))) {
-                        return;
+              {filteredVideos.map((video) => {
+                const isSponsored = (video as any).isSponsored;
+                const sponsoredAd = isSponsored ? (video as unknown as SponsoredAdData) : null;
+
+                return (
+                  <div
+                    key={video.id}
+                    data-video-id={video.id}
+                    className="relative h-screen snap-start snap-always flex items-center justify-center"
+                    onClick={e => {
+                      // Only trigger play/pause if not clicking on a control
+                      const controlSelectors = ['button[data-control]'];
+                      let el = e.target as HTMLElement;
+                      while (el && el !== e.currentTarget) {
+                        if (controlSelectors.some(sel => el.matches(sel))) {
+                          return;
+                        }
+                        el = el.parentElement;
                       }
-                      el = el.parentElement;
-                    }
-                    // Find the video element and toggle play/pause
-                    const videoElement = e.currentTarget.querySelector('video');
-                    if (videoElement) {
-                      if (videoElement.paused) {
-                        videoElement.play();
-                      } else {
-                        videoElement.pause();
+                      // Find the video element and toggle play/pause
+                      const videoElement = e.currentTarget.querySelector('video');
+                      if (videoElement) {
+                        if (videoElement.paused) {
+                          videoElement.play();
+                          // Track ad view if it's a sponsored ad
+                          if (sponsoredAd) {
+                            trackAdView(sponsoredAd);
+                            initializeAdCountdown(sponsoredAd);
+                          }
+                        } else {
+                          videoElement.pause();
+                        }
                       }
-                    }
-                  }}
-                >  {/* Black space for top menu */}
-                  <div className="absolute top-0 left-0 right-0 h-16 bg-black z-10"></div>
+                    }}
+                  >
+                    {/* Black space for top menu */}
+                    <div className="absolute top-0 left-0 right-0 h-16 bg-black z-10"></div>
 
-                  {/* Video container with fixed height - stops above the text area */}
-                  <div className="absolute inset-0 top-16 bottom-32 overflow-hidden">
-                    {/* Video */}
-                    <AutoPlayVideo
-                      src={video.video_url}
-                      className="w-full h-full object-cover"
-                      globalMuted={globalMuted}
-                      videoId={video.id}
-                      user={user}
-                      onViewRecorded={onViewRecorded}
-                    />
-                  </div>
-
-                  {/* Separator line */}
-                  <div className="absolute bottom-32 left-0 right-0 h-[1px] bg-white/20 z-10"></div>
-
-                  {/* Text area with black background */}
-                  <div className="absolute bottom-16 left-0 right-0 h-16 bg-black z-10"></div>
-
-                  {/* Black space for bottom navigation */}
-                  <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-10"></div>
-
-                  {/* Overlay UI - positioned in the text area */}
-                  <div className="absolute bottom-16 left-0 right-0 p-4 text-white z-20">
-                    <div className="flex justify-between items-end">
-                      {/* Left - User info & caption */}
-                      <div className="flex-1 mr-4 space-y-3">
-                        {/* Title and description without user profile */}
-
-                        {/* Caption */}
-                        <div className="space-y-2">
-                          <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
-                          {video.description && (
-                            <p className="text-white/90 text-sm leading-relaxed">
-                              {renderDescriptionWithHashtags(video.description)}
-                            </p>
-                          )}
-                          {/* Category badge removed */}
+                    {/* Sponsored Banner for ads */}
+                    {isSponsored && (
+                      <div className="absolute top-20 left-4 right-4 z-20 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-yellow-600 text-black font-bold">
+                            SPONSORED
+                          </Badge>
+                          <div className="bg-black/70 px-2 py-1 rounded text-white text-sm">
+                            {adCountdowns[video.id] || sponsoredAd?.duration || 30}s
+                          </div>
                         </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-white/90 text-black hover:bg-white border-none"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (sponsoredAd) handleLearnMoreClick(sponsoredAd);
+                          }}
+                          data-control
+                        >
+                          <ExternalLink size={14} className="mr-1" />
+                          Learn More
+                        </Button>
                       </div>
+                    )}
 
-                      {/* Actions */}
-                      <div className="flex flex-col items-center space-y-6">
-                        {/* Profile Button */}
-                        <div className="flex flex-col items-center">
-                          <div className="relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(getProfileUrl(video));
-                              }}
-                              className="hover:opacity-80 transition-opacity"
-                              aria-label={`View ${getUsername(video)}'s profile`}
-                              data-control
-                            >
-                              <Avatar className="w-12 h-12 rounded-full">
-                                <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
-                                <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
-                              </Avatar>
-                            </button>
-                            {/* Follow Button */}
-                            {user && video.user_id !== user.id && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await handleFollow(video.user_id, getUsername(video));
-                                }}
-                                className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
-                                data-control
-                              >
-                                {followStatus[video.user_id] ? (
-                                  <span className="text-white font-bold text-sm">✓</span>
-                                ) : (
-                                  <Plus size={14} className="text-white" />
-                                )}
-                              </button>
+                    {/* Video container with fixed height - stops above the text area */}
+                    <div className="absolute inset-0 top-16 bottom-32 overflow-hidden">
+                      {/* Video */}
+                      <AutoPlayVideo
+                        src={video.video_url}
+                        className="w-full h-full object-cover"
+                        globalMuted={globalMuted}
+                        videoId={video.id}
+                        user={user}
+                        onViewRecorded={isSponsored ? undefined : onViewRecorded}
+                      />
+                    </div>
+
+                    {/* Separator line */}
+                    <div className="absolute bottom-32 left-0 right-0 h-[1px] bg-white/20 z-10"></div>
+
+                    {/* Text area with black background */}
+                    <div className="absolute bottom-16 left-0 right-0 h-16 bg-black z-10"></div>
+
+                    {/* Black space for bottom navigation */}
+                    <div className="absolute bottom-0 left-0 right-0 h-16 bg-black z-10"></div>
+
+                    {/* Overlay UI - positioned in the text area */}
+                    <div className="absolute bottom-16 left-0 right-0 p-4 text-white z-20">
+                      <div className="flex justify-between items-end">
+                        {/* Left - User info & caption */}
+                        <div className="flex-1 mr-4 space-y-3">
+                          {/* Title and description without user profile */}
+
+                          {/* Caption */}
+                          <div className="space-y-2">
+                            <h3 className="text-white font-semibold text-base leading-tight">{video.title}</h3>
+                            {video.description && (
+                              <p className="text-white/90 text-sm leading-relaxed">
+                                {renderDescriptionWithHashtags(video.description)}
+                              </p>
                             )}
-
+                            {/* Category badge removed */}
                           </div>
                         </div>
 
-                        {/* Like Button */}
-                        <div className="flex flex-col items-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLike(video.id);
-                            }}
-                            className="p-0 bg-transparent border-none"
-                            data-control
-                          >
-                            <Heart
-                              size={28}
-                              className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
-                            />
-                          </button>
-                          <span className="text-white text-xs mt-1 font-medium">
-                            {likeCounts[video.id] || 0}
-                          </span>
-                        </div>
+                        {/* Actions - Hidden for sponsored ads */}
+                        {!isSponsored && (
+                          <div className="flex flex-col items-center space-y-6">
+                            {/* Profile Button */}
+                            <div className="flex flex-col items-center">
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(getProfileUrl(video));
+                                  }}
+                                  className="hover:opacity-80 transition-opacity"
+                                  aria-label={`View ${getUsername(video)}'s profile`}
+                                  data-control
+                                >
+                                  <Avatar className="w-12 h-12 rounded-full">
+                                    <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
+                                    <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                </button>
+                                {/* Follow Button */}
+                                {user && video.user_id !== user.id && (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await handleFollow(video.user_id, getUsername(video));
+                                    }}
+                                    className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-600 rounded-full flex items-center justify-center shadow-lg hover:bg-red-700 transition-colors"
+                                    data-control
+                                  >
+                                    {followStatus[video.user_id] ? (
+                                      <span className="text-white font-bold text-sm">✓</span>
+                                    ) : (
+                                      <Plus size={14} className="text-white" />
+                                    )}
+                                  </button>
+                                )}
+
+                              </div>
+                            </div>
+
+                            {/* Like Button */}
+                            <div className="flex flex-col items-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLike(video.id);
+                                }}
+                                className="p-0 bg-transparent border-none"
+                                data-control
+                              >
+                                <Heart
+                                  size={28}
+                                  className={`${likeStatus[video.id] ? 'text-red-500 fill-red-500' : 'text-white fill-white'} transition-colors`}
+                                />
+                              </button>
+                              <span className="text-white text-xs mt-1 font-medium">
+                                {likeCounts[video.id] || 0}
+                              </span>
+                            </div>
 
 
 
-                        {/* View Count */}
-                        <div className="flex flex-col items-center">
-                          <Eye size={24} className="text-white" />
-                          <span className="text-white text-xs mt-1 font-medium">
-                            {formatViews(viewCounts[video.id] || 0)}
-                          </span>
-                        </div>
+                            {/* View Count */}
+                            <div className="flex flex-col items-center">
+                              <Eye size={24} className="text-white" />
+                              <span className="text-white text-xs mt-1 font-medium">
+                                {formatViews(viewCounts[video.id] || 0)}
+                              </span>
+                            </div>
 
-                        {/* Save Button */}
-                        <div className="flex flex-col items-center">
-                          <button
-                            onClick={e => { e.stopPropagation(); handleSave(video.id); }}
-                            className="p-0 bg-transparent border-none"
-                            data-control
-                          >
-                            <Bookmark
-                              size={28}
-                              className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
-                            />
-                          </button>
-                          <span className="text-white text-xs mt-1 font-medium">
-                            {saveCounts[video.id] || 0}
-                          </span>
-                        </div>
+                            {/* Save Button */}
+                            <div className="flex flex-col items-center">
+                              <button
+                                onClick={e => { e.stopPropagation(); handleSave(video.id); }}
+                                className="p-0 bg-transparent border-none"
+                                data-control
+                              >
+                                <Bookmark
+                                  size={28}
+                                  className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
+                                />
+                              </button>
+                              <span className="text-white text-xs mt-1 font-medium">
+                                {saveCounts[video.id] || 0}
+                              </span>
+                            </div>
 
 
-                        {/* Share */}
-                        <div className="flex flex-col items-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleShare(video);
-                            }}
-                            className="p-0 bg-transparent border-none"
-                            data-control
-                          >
-                            <Share2 size={28} className="text-white fill-white" />
-                          </button>
-                          <span className="text-white text-xs mt-1 font-medium">
-                            {shareCounts[video.id] || 0}
-                          </span>
-                        </div>
+                            {/* Share */}
+                            <div className="flex flex-col items-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleShare(video);
+                                }}
+                                className="p-0 bg-transparent border-none"
+                                data-control
+                              >
+                                <Share2 size={28} className="text-white fill-white" />
+                              </button>
+                              <span className="text-white text-xs mt-1 font-medium">
+                                {shareCounts[video.id] || 0}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )
         )}
       </div>
       {/* Bottom Navigation */}
       <BottomNavigation />
+
+      {/* Ad Details Modal */}
+      {selectedAd && (
+        <div className={`fixed inset-0 z-50 ${showAdModal ? 'block' : 'hidden'}`}>
+          <div className="absolute inset-0 bg-black/80" onClick={() => setShowAdModal(false)} />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-background rounded-lg max-w-md w-full max-h-[80vh] overflow-y-auto">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <h2 className="text-lg font-semibold text-white">Business Details</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAdModal(false)}
+                  className="p-2"
+                >
+                  <X size={20} className="text-white" />
+                </Button>
+              </div>
+
+              {/* Content */}
+              <div className="p-4 space-y-4">
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">{selectedAd.title}</h3>
+                  {selectedAd.description && (
+                    <p className="text-muted-foreground mb-4">{selectedAd.description}</p>
+                  )}
+                </div>
+
+                {selectedAd.business_name && (
+                  <div>
+                    <h4 className="font-semibold text-white mb-1">Business Name</h4>
+                    <p className="text-muted-foreground">{selectedAd.business_name}</p>
+                  </div>
+                )}
+
+                {selectedAd.contact_number && (
+                  <div>
+                    <h4 className="font-semibold text-white mb-1">Contact Number</h4>
+                    <a
+                      href={`tel:${selectedAd.contact_number}`}
+                      className="text-blue-400 hover:text-blue-300"
+                    >
+                      {selectedAd.contact_number}
+                    </a>
+                  </div>
+                )}
+
+                {selectedAd.website_url && (
+                  <div>
+                    <h4 className="font-semibold text-white mb-1">Website</h4>
+                    <a
+                      href={selectedAd.website_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                    >
+                      {selectedAd.website_url}
+                      <ExternalLink size={14} />
+                    </a>
+                  </div>
+                )}
+
+                {selectedAd.support_email && (
+                  <div>
+                    <h4 className="font-semibold text-white mb-1">Email</h4>
+                    <a
+                      href={`mailto:${selectedAd.support_email}`}
+                      className="text-blue-400 hover:text-blue-300"
+                    >
+                      {selectedAd.support_email}
+                    </a>
+                  </div>
+                )}
+
+                {selectedAd.price_info && (
+                  <div>
+                    <h4 className="font-semibold text-white mb-1">Pricing</h4>
+                    <p className="text-muted-foreground">{selectedAd.price_info}</p>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t border-border">
+                  <p className="text-xs text-muted-foreground text-center">
+                    This is a sponsored advertisement
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Share Modal */}
       {shareVideo && (

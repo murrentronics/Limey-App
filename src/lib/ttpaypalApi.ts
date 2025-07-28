@@ -133,7 +133,7 @@ export async function getTrincreditsBalance(userId: string): Promise<number> {
     // Calculate balance from transactions
     let balance = 0;
     transactions?.forEach(transaction => {
-      if (transaction.transaction_type === 'deposit') {
+      if (transaction.transaction_type === 'deposit' || transaction.transaction_type === 'refund' || transaction.transaction_type === 'reward') {
         balance += transaction.amount;
       } else if (transaction.transaction_type === 'withdrawal') {
         balance -= transaction.amount;
@@ -180,7 +180,7 @@ export async function recordTrincreditsTransaction({
     let newBalance = currentBalance;
 
     // Calculate new balance based on transaction type
-    if (transactionType === 'deposit') {
+    if (transactionType === 'deposit' || transactionType === 'refund' || transactionType === 'reward') {
       newBalance = currentBalance + amount;
     } else if (transactionType === 'withdrawal') {
       newBalance = currentBalance - amount;
@@ -239,6 +239,38 @@ export async function getTransactionHistory(userId: string) {
   }
 
   return data;
+}
+
+// Function to deduct TriniCredits for boost payments
+export async function deductTrincredits(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get current balance
+    const currentBalance = await getTrincreditsBalance(userId);
+    
+    if (currentBalance < amount) {
+      return { 
+        success: false, 
+        error: `Insufficient balance. You have TT$${currentBalance.toFixed(2)} but need TT$${amount.toFixed(2)}` 
+      };
+    }
+
+    // Record the deduction transaction
+    await recordTrincreditsTransaction({
+      userId,
+      transactionType: 'withdrawal',
+      amount,
+      description: `Boost campaign payment - TT$${amount.toFixed(2)}`,
+      referenceId: `boost_${Date.now()}`
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deducting TriniCredits:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to deduct TriniCredits' 
+    };
+  }
 }
 
 export async function deleteUserAccount(userId: string) {

@@ -25,6 +25,10 @@ import Wallet from "@/pages/Wallet";
 import CreateVideoPage from "./pages/CreateVideoPage";
 import Deactivated from "./pages/Deactivated";
 import VideoShare from "./pages/VideoShare";
+import Boost from "./pages/Boost";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdStats from "./pages/AdStats";
+import CampaignDetail from "./pages/CampaignDetail";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +60,10 @@ const App = () => (
             <Route path="/create-video" element={<ProtectedRoute><CreateVideoPage /></ProtectedRoute>} />
             <Route path="/deactivated" element={<Deactivated />} />
             <Route path="/video/:videoId" element={<VideoShare />} />
+            <Route path="/boost" element={<ProtectedRoute><Boost /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/ad-stats" element={<ProtectedRoute><AdStats /></ProtectedRoute>} />
+            <Route path="/campaign/:campaignId" element={<ProtectedRoute><CampaignDetail /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
