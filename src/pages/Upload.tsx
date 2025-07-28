@@ -20,7 +20,7 @@ const Upload = () => {
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
-  const [category, setCategory] = useState<string>('All');
+  const [category, setCategory] = useState<string>('Anime');
   const { toast } = useToast();
   const { user } = useAuth();
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
@@ -550,11 +550,10 @@ const Upload = () => {
                 </label>
                 <select
                 className="w-full border rounded px-3 py-2 bg-background text-foreground"
-                value={category || 'All'}
+                value={category || 'Anime'}
                 onChange={e => setCategory(e.target.value)}
                 required
               >
-                <option value="All">All</option>
                 <option value="Anime">Anime</option>
                 <option value="Bar Limes">Bar Limes</option>
                 <option value="Cartoon">Cartoon</option>

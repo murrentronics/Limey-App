@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck, MessageCircle } from "lucide-react";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck, MessageCircle, Video } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
@@ -274,7 +274,9 @@ const Feed = () => {
   const { toast } = useToast();
 
   const categories = [
-    "Soca", "Dancehall", "Carnival", "Comedy", "Dance", "Music", "Local News"
+    "Anime", "Bar Limes", "Cartoon", "Carnival", "Comedy", "Dance", "Dancehall", 
+    "DIY Projects", "Educational", "Events", "Fete", "Funny Vids", "HOW TOs", 
+    "Local News", "Music Vids", "Parties", "Soca", "Trini Celebs"
   ];
 
   const currentVideos = searchResults !== null ? searchResults : videos;
@@ -1340,7 +1342,7 @@ const Feed = () => {
                       setSearchResults(null);
                     }}
                   >
-                    All Videos
+                    All
                   </Button>
                   {categories.map((category) => (
                     <Button
@@ -1442,7 +1444,7 @@ const Feed = () => {
           ) : searchResults.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">??</span>
+                <Video size={32} className="text-white/70" />
               </div>
               <h3 className="text-lg font-semibold mb-2 text-white">No results found</h3>
               <p className="text-white/70 mb-4">Try searching with different keywords or hashtags</p>
@@ -1624,7 +1626,7 @@ const Feed = () => {
           videos.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">??</span>
+                <Video size={32} className="text-white/70" />
               </div>
               <h3 className="text-lg font-semibold mb-2 text-white">No videos yet</h3>
               <p className="text-white/70 mb-4">

@@ -5,9 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import BottomNavigation from "@/components/BottomNavigation";
 
 const Live = () => {
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState("Anime");
   
-  const categories = ["All", "Music", "Dance", "Comedy", "Gaming", "Talk"];
+  const categories = ["Anime", "Bar Limes", "Cartoon", "Carnival", "Comedy", "Dance", "Dancehall", 
+    "DIY Projects", "Educational", "Events", "Fete", "Funny Vids", "HOW TOs", 
+    "Local News", "Music Vids", "Parties", "Soca", "Trini Celebs"];
 
   const liveStreams = [
     {
@@ -44,9 +46,7 @@ const Live = () => {
     }
   ];
 
-  const filteredStreams = activeCategory === "All" 
-    ? liveStreams 
-    : liveStreams.filter(stream => stream.category === activeCategory);
+  const filteredStreams = liveStreams.filter(stream => stream.category === activeCategory);
 
   return (
     <div className="min-h-screen bg-background pb-20">
