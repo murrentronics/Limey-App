@@ -25,6 +25,31 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewRecorded, setViewRecorded] = useState(false);
+  const wakeLockRef = useRef<any>(null);
+
+  // Wake Lock API to prevent screen from sleeping
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        console.log('Wake lock activated');
+      }
+    } catch (err) {
+      console.error('Failed to request wake lock:', err);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+        console.log('Wake lock released');
+      } catch (err) {
+        console.error('Failed to release wake lock:', err);
+      }
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -58,13 +83,24 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    
+    const onPlay = () => {
+      setIsPlaying(true);
+      requestWakeLock(); // Prevent screen sleep when video plays
+    };
+    
+    const onPause = () => {
+      setIsPlaying(false);
+      releaseWakeLock(); // Allow screen sleep when video pauses
+    };
+    
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
+    
     return () => {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
+      releaseWakeLock(); // Clean up wake lock on unmount
     };
   }, []);
 

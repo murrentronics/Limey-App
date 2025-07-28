@@ -58,6 +58,31 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [viewRecorded, setViewRecorded] = useState(false);
+  const wakeLockRef = useRef<any>(null);
+
+  // Wake Lock API to prevent screen from sleeping
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        console.log('Wake lock activated');
+      }
+    } catch (err) {
+      console.error('Failed to request wake lock:', err);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+        console.log('Wake lock released');
+      } catch (err) {
+        console.error('Failed to release wake lock:', err);
+      }
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -152,13 +177,24 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    
+    const onPlay = () => {
+      setIsPlaying(true);
+      requestWakeLock(); // Prevent screen sleep when video plays
+    };
+    
+    const onPause = () => {
+      setIsPlaying(false);
+      releaseWakeLock(); // Allow screen sleep when video pauses
+    };
+    
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
+    
     return () => {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
+      releaseWakeLock(); // Clean up wake lock on unmount
     };
   }, []);
 
@@ -266,7 +302,7 @@ const Feed = () => {
     const videoId = searchParams.get('video');
     if (videoId && videos.length > 0) {
       console.log('Auto-scrolling to shared video:', videoId);
-      
+
       // Find the video index
       const videoIndex = videos.findIndex(v => v.id === videoId);
       if (videoIndex !== -1) {
@@ -278,7 +314,7 @@ const Feed = () => {
             setCurrentVideoIndex(videoIndex);
           }
         }, 500);
-        
+
         // Clear the video parameter from URL
         setSearchParams(prev => {
           const newParams = new URLSearchParams(prev);
@@ -417,12 +453,12 @@ const Feed = () => {
               ...prev,
               [videoId]: newLikeCount
             }));
-            
+
             setShareCounts(prev => ({
               ...prev,
               [videoId]: newShareCount
             }));
-            
+
             setSaveCounts(prev => ({
               ...prev,
               [videoId]: newSaveCount
@@ -649,11 +685,11 @@ const Feed = () => {
         setSearchResults([]);
       }
     } else {
-      setSearchResults(data || []);
+      setSearchResults((data as VideoData[]) || []);
       // Also check like status for search results
-      await checkLikeStatus(data || []);
-      await checkSavedStatus(data || []);
-      await fetchLatestProfileData(data || []); // Fetch latest profile data
+      await checkLikeStatus((data as VideoData[]) || []);
+      await checkSavedStatus((data as VideoData[]) || []);
+      await fetchLatestProfileData((data as VideoData[]) || []); // Fetch latest profile data
     }
     setSearchLoading(false);
   };
@@ -681,14 +717,20 @@ const Feed = () => {
 
       console.log('Videos fetched:', data);
 
-      // Initialize like counts from the fetched data
+      // Initialize counts from the fetched data
       const initialLikeCounts = {};
+      const initialShareCounts = {};
+      const initialSaveCounts = {};
       data?.forEach(video => {
         initialLikeCounts[video.id] = video.like_count || 0;
+        initialShareCounts[video.id] = video.share_count || 0;
+        initialSaveCounts[video.id] = video.save_count || 0;
       });
 
-      // Update like counts immediately
+      // Update counts immediately
       setLikeCounts(prev => ({ ...prev, ...initialLikeCounts }));
+      setShareCounts(prev => ({ ...prev, ...initialShareCounts }));
+      setSaveCounts(prev => ({ ...prev, ...initialSaveCounts }));
 
       // After fetching, filter out videos where profiles.deactivated is true//
       const filtered = (data || []).filter(v => {
@@ -696,12 +738,12 @@ const Feed = () => {
         const profileData = v as unknown as { profiles?: { deactivated?: boolean } };
         return !profileData.profiles?.deactivated;
       });
-      setVideos(filtered);
-      await checkFollowStatus(filtered);
-      await checkLikeStatus(filtered);
-      await checkViewCounts(filtered);
-      await checkSavedStatus(filtered);
-      await fetchLatestProfileData(filtered); // Fetch latest profile data
+      setVideos(filtered as VideoData[]);
+      await checkFollowStatus(filtered as VideoData[]);
+      await checkLikeStatus(filtered as VideoData[]);
+      await checkViewCounts(filtered as VideoData[]);
+      await checkSavedStatus(filtered as VideoData[]);
+      await fetchLatestProfileData(filtered as VideoData[]); // Fetch latest profile data
     } catch (error) {
       console.error('Error in fetchVideos:', error);
       setError('Failed to load videos. Please try again.');
@@ -1547,6 +1589,9 @@ const Feed = () => {
                               className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
                             />
                           </button>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {saveCounts[video.id] || 0}
+                          </span>
                         </div>
 
 
@@ -1563,6 +1608,9 @@ const Feed = () => {
                           >
                             <Share2 size={28} className="text-white fill-white" />
                           </button>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {shareCounts[video.id] || 0}
+                          </span>
                         </div>
 
                       </div>
@@ -1745,6 +1793,9 @@ const Feed = () => {
                               className={`${savedStatus[video.id] ? 'text-yellow-500 fill-yellow-500' : 'text-white fill-white'} transition-colors`}
                             />
                           </button>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {saveCounts[video.id] || 0}
+                          </span>
                         </div>
 
 
@@ -1760,6 +1811,9 @@ const Feed = () => {
                           >
                             <Share2 size={28} className="text-white fill-white" />
                           </button>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {shareCounts[video.id] || 0}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1772,7 +1826,7 @@ const Feed = () => {
       </div>
       {/* Bottom Navigation */}
       <BottomNavigation />
-      
+
       {/* Share Modal */}
       {shareVideo && (
         <ShareModal
