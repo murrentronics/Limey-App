@@ -74,235 +74,43 @@ const Profile = () => {
     // eslint-disable-next-line
   }, [location.pathname]);
 
-  // Real-time subscription for video updates
+  // Real-time subscription for video updates - DISABLED to prevent resource exhaustion
   useEffect(() => {
     if (!profile?.user_id) return;
 
-    console.log('Setting up real-time subscription for videos of user:', profile.user_id);
-
-    // Subscribe to video updates for this user
-    const channel = supabase
-      .channel(`videos-${profile.user_id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'videos',
-          filter: `user_id=eq.${profile.user_id}`
-        },
-        async (payload) => {
-          console.log('Video update received:', payload);
-          
-          if (payload.eventType === 'UPDATE') {
-            // For updates, merge the new data with existing video
-            setUserVideos(prev => 
-              prev.map(video => 
-                video.id === payload.new.id ? { ...video, ...payload.new } : video
-              )
-            );
-            // Refresh view count for the updated video
-            if (payload.new.id) {
-              fetchViewCounts([payload.new]);
-            }
-          } else if (payload.eventType === 'DELETE') {
-            // For deletes, remove the video from the list
-            setUserVideos(prev => prev.filter(video => video.id !== payload.old.id));
-          } else if (payload.eventType === 'INSERT') {
-            // For inserts, fetch the complete video data including profiles
-            try {
-              const { data: newVideoData, error } = await supabase
-                .from('videos' as any)
-                .select('*')
-                .eq('id', payload.new.id)
-                .single();
-                
-              if (error) {
-                console.error('Error fetching new video data:', error);
-                // Fall back to using the payload data
-                setUserVideos(prev => [payload.new, ...prev]);
-              } else if (newVideoData) {
-                // Add the new video to the beginning of the list
-                setUserVideos(prev => [newVideoData, ...prev]);
-                // Fetch view count for the new video
-                fetchViewCounts([newVideoData]);
-              }
-            } catch (err) {
-              console.error('Error handling video insert:', err);
-              // Fall back to using the payload data
-              setUserVideos(prev => [payload.new, ...prev]);
-              // Try to fetch view count for the new video
-              if (payload.new) {
-                fetchViewCounts([payload.new]);
-              }
-            }
-          }
-        }
-      )
-      .subscribe();
-
+    console.log('Real-time video subscription DISABLED to prevent resource exhaustion');
+    
+    // TODO: Re-enable real-time subscriptions once resource issue is resolved
+    // For now, we'll rely on manual refresh or page reloads for updates
+    
     return () => {
-      console.log('Cleaning up real-time subscription for videos');
-      supabase.removeChannel(channel);
+      console.log('No real-time subscription to clean up');
     };
   }, [profile?.user_id]);
 
-  // Real-time subscription for view counts
+  // Real-time subscription for view counts - DISABLED to prevent resource exhaustion
   useEffect(() => {
     if (!profile?.user_id) return;
 
-    console.log('Setting up real-time subscription for view counts');
-
-    // Subscribe to video_views changes
-    const viewsChannel = supabase
-      .channel('profile_video_views_realtime')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'video_views'
-      }, async (payload) => {
-        console.log('Profile: View change detected via real-time:', payload);
-        const newView = payload.new;
-
-        if (newView && newView.video_id) {
-          console.log('Profile: Updating view count for video:', newView.video_id);
-          
-          // Get the genuine view count from the database
-          try {
-            const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
-              video_uuid: newView.video_id
-            });
-
-            if (!error && typeof genuineCount === 'number') {
-              setViewCounts(prev => {
-                console.log('Profile: View count updated via real-time:', newView.video_id, 'to', genuineCount);
-                return {
-                  ...prev,
-                  [newView.video_id]: genuineCount
-                };
-              });
-            } else {
-              // Fallback to incrementing
-              setViewCounts(prev => {
-                const newCount = (prev[newView.video_id] || 0) + 1;
-                console.log('Profile: View count updated (fallback):', newView.video_id, 'from', prev[newView.video_id] || 0, 'to', newCount);
-                return {
-                  ...prev,
-                  [newView.video_id]: newCount
-                };
-              });
-            }
-          } catch (error) {
-            console.error('Profile: Error getting genuine view count:', error);
-            // Fallback to incrementing
-            setViewCounts(prev => {
-              const newCount = (prev[newView.video_id] || 0) + 1;
-              return {
-                ...prev,
-                [newView.video_id]: newCount
-              };
-            });
-          }
-        }
-      })
-      .subscribe();
-
+    console.log('Real-time view count subscription DISABLED to prevent resource exhaustion');
+    
+    // TODO: Re-enable real-time subscriptions once resource issue is resolved
+    
     return () => {
-      console.log('Cleaning up real-time subscription for view counts');
-      supabase.removeChannel(viewsChannel);
+      console.log('No real-time view count subscription to clean up');
     };
   }, [profile?.user_id]);
 
-  // Real-time subscription for follows updates
+  // Real-time subscription for follows updates - DISABLED to prevent resource exhaustion
   useEffect(() => {
     if (!profile?.user_id) return;
 
-    console.log('Setting up real-time subscription for follows of user:', profile.user_id);
-
-    // Subscribe to follows table changes that affect this user
-    const followsChannel = supabase
-      .channel(`follows-${profile.user_id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'follows'
-        },
-        async (payload) => {
-          console.log('Follow update received:', payload);
-          
-          // Handle different event types explicitly
-          if (payload.eventType === 'INSERT') {
-            // New follow created
-            const newFollowerId = payload.new?.follower_id;
-            const newFollowingId = payload.new?.following_id;
-            
-            // Check if this follow affects the current profile
-            const affectsThisProfile = 
-              newFollowerId === profile.user_id || 
-              newFollowingId === profile.user_id;
-            
-            if (affectsThisProfile) {
-              console.log('New follow affects this profile, updating counts');
-              // Refresh follow counts for any profile view
-              fetchFollowCounts();
-              
-              // If this is another user's profile and they just followed the current user
-              if (!isOwnProfile && user && newFollowerId === profile.user_id && newFollowingId === user.id) {
-                checkFollowStatus();
-              }
-            }
-          } 
-          else if (payload.eventType === 'DELETE') {
-            // Follow removed
-            const oldFollowerId = payload.old?.follower_id;
-            const oldFollowingId = payload.old?.following_id;
-            
-            // Check if this unfollow affects the current profile
-            const affectsThisProfile = 
-              oldFollowerId === profile.user_id || 
-              oldFollowingId === profile.user_id;
-            
-            if (affectsThisProfile) {
-              console.log('Unfollow affects this profile, updating counts');
-              // Refresh follow counts for any profile view
-              fetchFollowCounts();
-              
-              // If this is another user's profile and they just unfollowed the current user
-              if (!isOwnProfile && user && oldFollowerId === profile.user_id && oldFollowingId === user.id) {
-                checkFollowStatus();
-              }
-            }
-          }
-          else if (payload.eventType === 'UPDATE') {
-            // Follow updated (unlikely but handle it anyway)
-            const affectsThisProfile = 
-              payload.new?.follower_id === profile.user_id || 
-              payload.new?.following_id === profile.user_id;
-            
-            if (affectsThisProfile) {
-              console.log('Follow update affects this profile, updating counts');
-              fetchFollowCounts();
-              
-              // If viewing another user's profile and the update affects the current user
-              if (!isOwnProfile && user) {
-                const affectsCurrentUser = 
-                  (payload.new?.follower_id === profile.user_id && payload.new?.following_id === user.id);
-                
-                if (affectsCurrentUser) {
-                  checkFollowStatus();
-                }
-              }
-            }
-          }
-        }
-      )
-      .subscribe();
-
+    console.log('Real-time follows subscription DISABLED to prevent resource exhaustion');
+    
+    // TODO: Re-enable real-time subscriptions once resource issue is resolved
+    
     return () => {
-      console.log('Cleaning up real-time subscription for follows');
-      supabase.removeChannel(followsChannel);
+      console.log('No real-time follows subscription to clean up');
     };
   }, [profile?.user_id, isOwnProfile, user]);
 
@@ -1704,37 +1512,38 @@ const handleSendMessage = async () => {
           </div>
         </SheetContent>
       </Sheet>
+      
+      {/* Profile Image Modal - Fullscreen */}
+      {showProfileImageModal && profile?.avatar_url && (
+        <div 
+          className="fixed inset-0 z-50 bg-black flex flex-col"
+          onClick={() => setShowProfileImageModal(false)}
+        >
+          {/* Header with close button */}
+          <div className="p-4 flex justify-end">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowProfileImageModal(false)}
+              className="bg-black/50 hover:bg-black/70 text-white"
+            >
+              <X size={24} />
+            </Button>
+          </div>
+          
+          {/* Image container - takes full available height with bottom spacing */}
+          <div className="flex-1 flex items-center justify-center p-4 pb-24">
+            <img 
+              src={profile.avatar_url} 
+              alt="Profile" 
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
-  {/* Profile Image Modal - Fullscreen */}
-  {showProfileImageModal && profile?.avatar_url && (
-    <div 
-      className="fixed inset-0 z-50 bg-black flex flex-col"
-      onClick={() => setShowProfileImageModal(false)}
-    >
-      {/* Header with close button */}
-      <div className="p-4 flex justify-end">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowProfileImageModal(false)}
-          className="bg-black/50 hover:bg-black/70 text-white"
-        >
-          <X size={24} />
-        </Button>
-      </div>
-      
-      {/* Image container - takes full available height with bottom spacing */}
-      <div className="flex-1 flex items-center justify-center p-4 pb-24">
-        <img 
-          src={profile.avatar_url} 
-          alt="Profile" 
-          className="max-w-full max-h-full object-contain"
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
-    </div>
-  )}
 }
 
 export default Profile;

@@ -45,6 +45,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     console.log("Setting up auth state listener");
     
+
+    
+    // Set a timeout to prevent infinite loading (10 seconds)
+    const loadingTimeout = setTimeout(() => {
+      console.warn('Auth loading timeout - forcing loading to false');
+      setLoading(false);
+    }, 10000);
+    
+    // Test Supabase connection
+    console.log('Testing Supabase connection...');
+    supabase.auth.getSession().then(({ data, error }) => {
+      console.log('Supabase connection test result:', { data: !!data.session, error });
+    }).catch(err => {
+      console.error('Supabase connection test failed:', err);
+    });
+    
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -59,6 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setIsAdmin(false);
         }
         
+        clearTimeout(loadingTimeout);
         setLoading(false);
       }
     );
@@ -76,10 +93,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsAdmin(false);
       }
       
+      clearTimeout(loadingTimeout);
+      setLoading(false);
+    }).catch((error) => {
+      console.error('Error getting session:', error);
+      clearTimeout(loadingTimeout);
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(loadingTimeout);
+    };
   }, []);
 
   const signUp = async (email: string, password: string, username: string) => {
