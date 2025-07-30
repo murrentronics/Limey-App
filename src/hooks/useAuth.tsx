@@ -25,11 +25,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const checkAdminStatus = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      // Use a timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Admin check timeout')), 2000)
+      );
+      
+      const queryPromise = supabase
         .from('profiles')
         .select('is_admin')
         .eq('user_id', userId)
         .single();
+      
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
       
       if (!error && data) {
         setIsAdmin(data.is_admin || false);
@@ -37,40 +44,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsAdmin(false);
       }
     } catch (error) {
-      console.error('Error checking admin status:', error);
+      // Silently fail and default to false
       setIsAdmin(false);
     }
   };
 
   useEffect(() => {
-    console.log("Setting up auth state listener");
-    
-
-    
-    // Set a timeout to prevent infinite loading (10 seconds)
+    // Set a shorter timeout to prevent infinite loading (3 seconds)
     const loadingTimeout = setTimeout(() => {
-      console.warn('Auth loading timeout - forcing loading to false');
       setLoading(false);
-    }, 10000);
-    
-    // Test Supabase connection
-    console.log('Testing Supabase connection...');
-    supabase.auth.getSession().then(({ data, error }) => {
-      console.log('Supabase connection test result:', { data: !!data.session, error });
-    }).catch(err => {
-      console.error('Supabase connection test failed:', err);
-    });
+    }, 3000);
     
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("Auth state change:", event, "Session:", !!session, "User:", session?.user?.email);
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Check admin status when user changes
+        // Check admin status when user changes (non-blocking)
         if (session?.user) {
-          await checkAdminStatus(session.user.id);
+          checkAdminStatus(session.user.id).catch(() => {
+            // Silently handle admin check errors
+            setIsAdmin(false);
+          });
         } else {
           setIsAdmin(false);
         }
@@ -82,21 +78,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // THEN check for existing session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log("Initial session check:", !!session, "User:", session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
       
-      // Check admin status for existing session
+      // Check admin status for existing session (non-blocking)
       if (session?.user) {
-        await checkAdminStatus(session.user.id);
+        checkAdminStatus(session.user.id).catch(() => {
+          // Silently handle admin check errors
+          setIsAdmin(false);
+        });
       } else {
         setIsAdmin(false);
       }
       
       clearTimeout(loadingTimeout);
       setLoading(false);
-    }).catch((error) => {
-      console.error('Error getting session:', error);
+    }).catch(() => {
       clearTimeout(loadingTimeout);
       setLoading(false);
     });
@@ -142,30 +139,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Add this function to fetch and store the WordPress JWT token
   async function fetchWpJwtToken(email: string, password: string) {
     try {
-      const res = await fetch('https://ttpaypal.com/wp-json/jwt-auth/v1/token', {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      
+      const res = await fetch('https://theronm18.sg-host.com/wp-json/jwt-auth/v1/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: email, password })
+        body: JSON.stringify({ username: email, password }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       const data = await res.json();
+      
       if (data.token) {
         localStorage.setItem('wp_jwt_token', data.token);
         localStorage.setItem('wp_jwt_validated', 'true');
         localStorage.setItem('wp_jwt_validation_time', Date.now().toString());
-        console.log('WordPress JWT token set:', data.token);
         return true; // JWT validation successful
       } else {
         localStorage.removeItem('wp_jwt_token');
         localStorage.removeItem('wp_jwt_validated');
         localStorage.removeItem('wp_jwt_validation_time');
-        console.error('No WordPress JWT token received:', data);
         return false; // JWT validation failed
       }
     } catch (err) {
       localStorage.removeItem('wp_jwt_token');
       localStorage.removeItem('wp_jwt_validated');
       localStorage.removeItem('wp_jwt_validation_time');
-      console.error('Error fetching WordPress JWT token:', err);
       return false; // JWT validation failed
     }
   }
@@ -177,8 +179,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     if (!error) {
-      // Fetch and store the WordPress JWT token after successful Supabase login
-      await fetchWpJwtToken(email, password);
+      // Fetch and store the WordPress JWT token after successful Supabase login (non-blocking)
+      fetchWpJwtToken(email, password).catch((err) => {
+        console.error('JWT token fetch failed:', err);
+        // Clear any existing tokens on failure
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+      });
     }
 
     if (error) {

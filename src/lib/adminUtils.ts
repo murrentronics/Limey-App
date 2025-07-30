@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { recordTrincreditsTransaction } from "@/lib/trinepayApi";
 
 // Check if current user is admin
 export const isAdmin = async (userId: string): Promise<boolean> => {
@@ -8,12 +9,12 @@ export const isAdmin = async (userId: string): Promise<boolean> => {
       .select('is_admin')
       .eq('user_id', userId)
       .single();
-    
+
     if (error) {
       console.error('Error checking admin status:', error);
       return false;
     }
-    
+
     return data?.is_admin || false;
   } catch (error) {
     console.error('Error checking admin status:', error);
@@ -29,12 +30,12 @@ export const getAdminUserId = async (): Promise<string | null> => {
       .select('user_id')
       .eq('is_admin', true)
       .single();
-    
+
     if (error) {
       console.error('Error getting admin user:', error);
       return null;
     }
-    
+
     return data?.user_id || null;
   } catch (error) {
     console.error('Error getting admin user:', error);
@@ -89,9 +90,9 @@ export const transferBoostPaymentToAdmin = async (
       return { success: false, error: 'Failed to record transaction' };
     }
 
-    // TODO: Integrate with ttpaypal API to actually transfer funds to admin wallet
+    // TODO: Integrate with trinepay API to actually transfer funds to admin wallet
     // For now, we'll just record the transaction
-    
+
     return { success: true };
   } catch (error) {
     console.error('Error transferring boost payment:', error);
@@ -100,6 +101,7 @@ export const transferBoostPaymentToAdmin = async (
 };
 
 // Create sponsored ad
+// Around line 95, change the function signature:
 export const createSponsoredAd = async (adData: {
   title: string;
   description: string;
@@ -113,7 +115,9 @@ export const createSponsoredAd = async (adData: {
   price_info?: string;
   boost_duration: BoostDuration;
   user_id: string;
+  status?: string; // Add this line
 }): Promise<{ success: boolean; adId?: string; error?: string }> => {
+
   try {
     const cost = BOOST_PRICING[adData.boost_duration];
     const startDate = new Date();
@@ -126,7 +130,7 @@ export const createSponsoredAd = async (adData: {
         boost_cost: cost,
         campaign_start: startDate.toISOString(),
         campaign_end: endDate.toISOString(),
-        status: 'pending' // Will need admin approval
+        status: adData.status || 'pending' // Use provided status or default to pending
       })
       .select('id')
       .single();
@@ -167,8 +171,7 @@ export const getUserSponsoredAds = async (userId: string) => {
 // Admin functions
 export const getAllSponsoredAds = async () => {
   try {
-    console.log('Fetching all sponsored ads for admin...');
-    
+
     // First, get all sponsored ads without the relationship
     const { data: adsData, error: adsError } = await (supabase as any)
       .from('sponsored_ads')
@@ -181,13 +184,12 @@ export const getAllSponsoredAds = async () => {
     }
 
     if (!adsData || adsData.length === 0) {
-      console.log('No sponsored ads found');
       return [];
     }
 
     // Get unique user IDs
-    const userIds = [...new Set(adsData.map((ad: any) => ad.user_id))];
-    
+    const userIds = [...new Set(adsData.map((ad: any) => ad.user_id).filter(Boolean))] as string[];
+
     // Fetch profiles separately
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
@@ -197,7 +199,6 @@ export const getAllSponsoredAds = async () => {
     if (profilesError) {
       console.error('Error fetching profiles:', profilesError);
       // Return ads without profile data
-      console.log('Fetched sponsored ads (no profiles):', adsData.length, 'ads');
       return adsData;
     }
 
@@ -212,8 +213,6 @@ export const getAllSponsoredAds = async () => {
       ...ad,
       profiles: profilesMap.get(ad.user_id) || null
     }));
-
-    console.log('Fetched sponsored ads with profiles:', adsWithProfiles.length, 'ads');
     return adsWithProfiles;
   } catch (error) {
     console.error('Error fetching all sponsored ads:', error);
@@ -236,6 +235,15 @@ export const approveSponsoredAd = async (adId: string): Promise<{ success: boole
       return { success: false, error: 'Failed to fetch ad details' };
     }
 
+    // Get user profile for username
+    const { data: userProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('username, display_name')
+      .eq('user_id', adData.user_id)
+      .single();
+
+    const username = userProfile?.username || userProfile?.display_name || 'Unknown User';
+
     // Get admin user ID
     const adminId = await getAdminUserId();
     if (!adminId) {
@@ -245,7 +253,7 @@ export const approveSponsoredAd = async (adId: string): Promise<{ success: boole
     // Update ad status to approved
     const { error: updateError } = await (supabase as any)
       .from('sponsored_ads')
-      .update({ 
+      .update({
         status: 'approved',
         updated_at: new Date().toISOString()
       })
@@ -256,23 +264,18 @@ export const approveSponsoredAd = async (adId: string): Promise<{ success: boole
       return { success: false, error: 'Failed to approve ad' };
     }
 
-    // Transfer the boost payment to admin's TriniCredits
+    // Transfer the boost payment to admin's Wallet Bal
     try {
-      const { recordTrincreditsTransaction } = await import('@/lib/ttpaypalApi');
-      
       await recordTrincreditsTransaction({
         userId: adminId,
         transactionType: 'deposit',
         amount: adData.boost_cost,
-        description: `Boost revenue from "${adData.title}" - TT$${adData.boost_cost.toFixed(2)}`,
+        description: `Ad Payment from ${username}`,
         referenceId: `boost_revenue_${adId}`
       });
-
-      console.log(`Admin credited TT$${adData.boost_cost} for approving ad: ${adData.title}`);
     } catch (paymentError) {
       console.error('Error crediting admin:', paymentError);
-      // Don't fail the approval if payment fails, but log it
-      // The ad is still approved, but admin payment needs manual handling
+      return { success: false, error: 'Failed to process admin payment. Please try again.' };
     }
 
     return { success: true };
@@ -300,7 +303,7 @@ export const rejectSponsoredAd = async (adId: string): Promise<{ success: boolea
     // Update ad status to rejected
     const { error: updateError } = await (supabase as any)
       .from('sponsored_ads')
-      .update({ 
+      .update({
         status: 'rejected',
         updated_at: new Date().toISOString()
       })
@@ -311,10 +314,8 @@ export const rejectSponsoredAd = async (adId: string): Promise<{ success: boolea
       return { success: false, error: 'Failed to reject ad' };
     }
 
-    // Refund the user's TriniCredits
+    // Refund the user's Wallet Bal
     try {
-      const { recordTrincreditsTransaction } = await import('@/lib/ttpaypalApi');
-      
       await recordTrincreditsTransaction({
         userId: adData.user_id,
         transactionType: 'refund',
@@ -322,12 +323,9 @@ export const rejectSponsoredAd = async (adId: string): Promise<{ success: boolea
         description: `Boost refund for "${adData.title}" - TT$${adData.boost_cost.toFixed(2)}`,
         referenceId: `boost_refund_${adId}`
       });
-
-      console.log(`User refunded TT$${adData.boost_cost} for rejected ad: ${adData.title}`);
     } catch (refundError) {
       console.error('Error refunding user:', refundError);
-      // Don't fail the rejection if refund fails, but log it
-      // The ad is still rejected, but refund needs manual handling
+      return { success: false, error: 'Failed to process user refund. Please try again.' };
     }
 
     return { success: true };

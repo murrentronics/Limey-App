@@ -245,11 +245,17 @@ const AdStats = () => {
                                     <Card
                                         key={ad.id}
                                         className="p-4 cursor-pointer hover:bg-muted/20 transition-colors"
-                                        onClick={() => navigate(`/campaign/${ad.id}`)}
-                                    >
+                                        onClick={() => {
+                                            if (ad.status === 'draft') {
+                                                navigate(`/boost?draft=${ad.id}`);
+                                            } else {
+                                                navigate(`/campaign/${ad.id}`);
+                                            }
+                                        }}
+                                    >                                   
                                         <div className="flex gap-4">
                                             {/* Thumbnail */}
-                                            <div className="w-20 h-28 bg-black rounded overflow-hidden flex-shrink-0">
+                                            <div className="w-20 h-28 bg-black rounded overflow-hidden flex-shrink-0 relative">
                                                 {ad.thumbnail_url ? (
                                                     <img
                                                         src={ad.thumbnail_url}
@@ -259,6 +265,14 @@ const AdStats = () => {
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                                                         <BarChart3 size={24} />
+                                                    </div>
+                                                )}
+                                                {/* Draft Banner */}
+                                                {ad.status === 'draft' && (
+                                                    <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                                                        <div className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold">
+                                                            DRAFT
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>

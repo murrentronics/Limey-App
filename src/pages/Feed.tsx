@@ -83,7 +83,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
     try {
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        console.log('Wake lock activated');
+
       }
     } catch (err) {
       console.error('Failed to request wake lock:', err);
@@ -95,7 +95,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
       try {
         await wakeLockRef.current.release();
         wakeLockRef.current = null;
-        console.log('Wake lock released');
+
       } catch (err) {
         console.error('Failed to release wake lock:', err);
       }
@@ -115,7 +115,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
           setIsVisible(true);
           // Try to play the video
           video.play().catch(error => {
-            console.log('Autoplay prevented:', error);
+
             // Video will remain paused until user interaction
           });
         } else {
@@ -142,45 +142,33 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
 
   // Record view when video has been playing and visible for 5 seconds
   useEffect(() => {
-    console.log('Feed: View effect triggered:', { isVisible, isPlaying, viewRecorded, videoId });
+
 
     if (isVisible && isPlaying && !viewRecorded && videoId) {
-      console.log('Feed: Starting 5-second view timer for video:', videoId);
-
       const timer = setTimeout(async () => {
-        console.log('Feed: 5-second timer completed, recording view for video:', videoId);
-
         try {
           // Use the RPC function to record the view
           const { data, error } = await supabase.rpc('record_video_view', {
             video_uuid: videoId
           });
 
-          console.log('Feed: RPC function result:', { data, error, videoId });
-
           if (!error) {
             // Always mark as viewed to prevent repeated attempts
             setViewRecorded(true);
 
             if (data) {
-              console.log('Feed: New view successfully recorded for video:', videoId);
               // Only update UI if it was a new view
               if (onViewRecorded) {
                 onViewRecorded(videoId);
               }
-            } else {
-              console.log('Feed: View already exists for video:', videoId, '- not recording duplicate');
             }
-          } else {
-            console.error('Feed: Error recording view:', error);
           }
         } catch (error) {
-          console.error('Feed: Exception recording view:', error);
+          // Silently handle view recording errors
         }
       }, 5000); // 5 seconds delay
 
       return () => {
-        console.log('Feed: Clearing view timer for video:', videoId);
         clearTimeout(timer);
       };
     }
@@ -353,7 +341,7 @@ const Feed = () => {
 
 
   useEffect(() => {
-    console.log("Feed - fetching videos for category:", activeCategory);
+
     fetchVideos();
   }, [activeCategory]);
 
@@ -361,7 +349,7 @@ const Feed = () => {
   useEffect(() => {
     const videoId = searchParams.get('video');
     if (videoId && videos.length > 0) {
-      console.log('Auto-scrolling to shared video:', videoId);
+
 
       // Find the video index
       const videoIndex = videos.findIndex(v => v.id === videoId);
@@ -409,7 +397,7 @@ const Feed = () => {
         .in('user_id', userIds);
 
       if (error) {
-        console.error('Error fetching latest profile data:', error);
+        // Silently handle profile data fetch errors
         return;
       }
 
@@ -441,11 +429,9 @@ const Feed = () => {
         } else {
           setVideos(updatedVideos);
         }
-
-        console.log('Updated videos with latest profile data');
       }
     } catch (error) {
-      console.error('Error in fetchLatestProfileData:', error);
+      // Silently handle fetchLatestProfileData errors
     }
   };
 
@@ -461,7 +447,6 @@ const Feed = () => {
         schema: 'public',
         table: 'profiles'
       }, (payload) => {
-        console.log('Profile update received:', payload);
 
         // Fetch latest profile data for all videos
         if (searchResults !== null) {
@@ -471,11 +456,9 @@ const Feed = () => {
         }
       })
       .subscribe((status) => {
-        console.log('Profiles subscription status:', status);
       });
 
     return () => {
-      console.log('Cleaning up profiles subscription');
       supabase.removeChannel(profilesChannel);
     };
   }, [user, videos, searchResults]);
@@ -492,21 +475,12 @@ const Feed = () => {
         schema: 'public',
         table: 'videos'
       }, async (payload) => {
-        console.log('Video updated:', payload);
-
         try {
           if (payload.new && payload.new.id) {
             const videoId = payload.new.id;
             const newLikeCount = payload.new.like_count || 0;
             const newShareCount = payload.new.share_count || 0;
             const newSaveCount = payload.new.save_count || 0;
-            const oldLikeCount = payload.old?.like_count || 0;
-            const oldShareCount = payload.old?.share_count || 0;
-            const oldSaveCount = payload.old?.save_count || 0;
-
-            // Always update the counts, even if they appear unchanged
-            // This ensures the UI stays in sync with the database
-            console.log(`Counts for video ${videoId}: likes ${oldLikeCount} -> ${newLikeCount}, shares ${oldShareCount} -> ${newShareCount}, saves ${oldSaveCount} -> ${newSaveCount}`);
 
             // Update counts based on the payload
             setLikeCounts(prev => ({
@@ -530,7 +504,7 @@ const Feed = () => {
       })
       .subscribe();
 
-    // Also subscribe to video_likes table for direct like status updates
+    // Subscribe to video_likes table for direct like status updates
     const likesChannel = supabase
       .channel('likes_realtime')
       .on('postgres_changes', {
@@ -538,31 +512,15 @@ const Feed = () => {
         schema: 'public',
         table: 'video_likes'
       }, async (payload) => {
-        console.log('Like change detected:', payload);
-
         try {
           if (payload.eventType === 'INSERT' && payload.new?.user_id === user.id) {
-            // Handle INSERT events - user liked a video
             setLikeStatus(prev => ({
               ...prev,
               [payload.new.video_id]: true
             }));
           } else if (payload.eventType === 'DELETE') {
-            // For DELETE events, we need to handle them differently
-            console.log('DELETE event detected, payload:', payload);
-
-            // Since we can't get the video_id from the payload due to REPLICA IDENTITY settings,
-            // we'll use the videos update event to determine which video was unliked
-
-            // We don't need to do anything here - the videos update event will handle updating the like count
-            // and we'll use the optimistic update in handleLike to update the like status
-
-            // This is just a fallback in case we do have the video_id in the payload
             if (payload.old && payload.old.video_id) {
               const videoId = payload.old.video_id;
-              console.log('Found video_id in DELETE payload:', videoId);
-
-              // Update like status for the specific video - assume it's the current user's action
               setLikeStatus(prev => ({
                 ...prev,
                 [videoId]: false
@@ -583,31 +541,22 @@ const Feed = () => {
         schema: 'public',
         table: 'video_views'
       }, async (payload) => {
-        console.log('View change detected via real-time:', payload);
         const newView = payload.new;
 
         if (newView && newView.video_id) {
-          console.log('Updating view count for video:', newView.video_id);
-
-          // Get the genuine view count from the database
           try {
             const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
               video_uuid: newView.video_id
             });
 
             if (!error && typeof genuineCount === 'number') {
-              setViewCounts(prev => {
-                console.log('View count updated via real-time:', newView.video_id, 'to', genuineCount);
-                return {
-                  ...prev,
-                  [newView.video_id]: genuineCount
-                };
-              });
+              setViewCounts(prev => ({
+                ...prev,
+                [newView.video_id]: genuineCount
+              }));
             } else {
-              // Fallback to incrementing
               setViewCounts(prev => {
                 const newCount = (prev[newView.video_id] || 0) + 1;
-                console.log('View count updated (fallback):', newView.video_id, 'from', prev[newView.video_id] || 0, 'to', newCount);
                 return {
                   ...prev,
                   [newView.video_id]: newCount
@@ -616,7 +565,6 @@ const Feed = () => {
             }
           } catch (error) {
             console.error('Error getting genuine view count:', error);
-            // Fallback to incrementing
             setViewCounts(prev => {
               const newCount = (prev[newView.video_id] || 0) + 1;
               return {
@@ -637,7 +585,6 @@ const Feed = () => {
         schema: 'public',
         table: 'saved_videos'
       }, async (payload) => {
-        console.log('Saved video change detected:', payload);
         try {
           if (payload.eventType === 'INSERT' && payload.new?.user_id === user.id) {
             setSavedStatus(prev => ({
@@ -701,7 +648,7 @@ const Feed = () => {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error searching videos with profiles:', error);
+      // Silently handle search errors
       // fallback search without profiles
       let fallbackQuery = supabase
         .from('videos')
@@ -722,7 +669,7 @@ const Feed = () => {
       const { data: fallbackData, error: fallbackError } = await fallbackQuery;
 
       if (fallbackError) {
-        console.error('Error searching videos without profiles:', fallbackError);
+        // Silently handle fallback search errors
         setSearchResults([]);
       } else if (fallbackData && fallbackData.length > 0) {
         // fetch profiles
@@ -760,37 +707,42 @@ const Feed = () => {
       const { data, error } = await supabase.rpc('get_active_sponsored_ads');
 
       if (error) {
-        console.error('Error fetching sponsored ads:', error);
+        // Silently handle sponsored ads fetch errors
         return [];
       }
 
-      return (data || []).map((ad: any) => ({
+      const ads = (data || []).map((ad: any) => ({
         ...ad,
         isSponsored: true
       }));
+
+      return ads;
     } catch (error) {
-      console.error('Error fetching sponsored ads:', error);
+      // Silently handle sponsored ads fetch errors
       return [];
     }
   };
 
   // Smart algorithm to merge sponsored ads with regular videos
   const mergeVideosWithAds = (videos: VideoData[], ads: SponsoredAdData[]): (VideoData | SponsoredAdData)[] => {
-    if (ads.length === 0) return videos;
+
+    if (ads.length === 0) {
+      return videos;
+    }
 
     const merged: (VideoData | SponsoredAdData)[] = [];
     let adIndex = 0;
 
-    // Insert ads randomly every 8-12 videos
-    const getNextAdPosition = () => Math.floor(Math.random() * 5) + 8; // Random between 8-12
+    // Insert ads every 3-5 videos for better visibility
+    const getNextAdPosition = () => Math.floor(Math.random() * 3) + 3; // Random between 3-5
     let nextAdPosition = getNextAdPosition();
 
     videos.forEach((video, index) => {
       merged.push(video);
 
-      // Insert ad at random intervals, but only in home feed (All category)
+      // Insert ad at intervals, but only in home feed (All category)
       if (activeCategory === "All" &&
-        index === nextAdPosition &&
+        index >= nextAdPosition &&
         adIndex < ads.length) {
         merged.push(ads[adIndex]);
         adIndex++;
@@ -798,6 +750,13 @@ const Feed = () => {
       }
     });
 
+    // If we still have ads left and we're in the "All" category, add them at the end
+    if (activeCategory === "All" && adIndex < ads.length) {
+      while (adIndex < ads.length) {
+        merged.push(ads[adIndex]);
+        adIndex++;
+      }
+    }
     return merged;
   };
 
@@ -833,7 +792,6 @@ const Feed = () => {
   };
 
   const fetchVideos = async () => {
-    console.log("Feed - fetchVideos called");
     try {
       setLoading(true);
       setError(null);
@@ -848,12 +806,10 @@ const Feed = () => {
       const { data, error } = await query;
 
       if (error) {
-        console.error('Error fetching videos:', error);
+        // Handle video fetch errors
         setError('Failed to load videos. Please try again.');
         return;
       }
-
-      console.log('Videos fetched:', data);
 
       // Initialize counts from the fetched data
       const initialLikeCounts = {};
@@ -889,7 +845,7 @@ const Feed = () => {
       await checkSavedStatus(filtered as VideoData[]);
       await fetchLatestProfileData(filtered as VideoData[]); // Fetch latest profile data
     } catch (error) {
-      console.error('Error in fetchVideos:', error);
+      // Handle fetchVideos errors
       setError('Failed to load videos. Please try again.');
     } finally {
       setLoading(false);
@@ -917,7 +873,6 @@ const Feed = () => {
       // Pause the video
       video.pause();
       setIsPlaying(prev => ({ ...prev, [videoId]: false }));
-      console.log(`Manually paused video ${videoId}`);
     } else {
       // Pause ALL other videos first
       Object.keys(videoRefs.current).forEach(id => {
@@ -926,7 +881,6 @@ const Feed = () => {
           if (!otherVideo.paused) {
             otherVideo.pause();
             otherVideo.currentTime = 0;
-            console.log(`Paused video ${id} because ${videoId} was manually started`);
           }
         }
       });
@@ -945,9 +899,7 @@ const Feed = () => {
       // Play this video
       video.play().then(() => {
         setIsPlaying(prev => ({ ...prev, [videoId]: true }));
-        console.log(`Manually started video ${videoId}`);
       }).catch(e => {
-        console.log("Play error:", e);
       });
     }
   };
@@ -1014,12 +966,12 @@ const Feed = () => {
         }
         // If error is 409 or duplicate, ignore
         if (error && error.code !== '23505') {
-          console.error('Error following:', error);
+          // Handle follow errors
         }
         return false;
       }
     } catch (error) {
-      console.error('Error following/unfollowing:', error);
+      // Handle follow/unfollow errors
       return followStatus[targetUserId] || false;
     }
   };
@@ -1068,7 +1020,7 @@ const Feed = () => {
       });
       setFollowStatus(prev => ({ ...prev, ...newFollowStatus }));
     } catch (error) {
-      console.error('Error checking follow status:', error);
+      // Handle follow status check errors
     }
   };
 
@@ -1077,7 +1029,6 @@ const Feed = () => {
     if (!user) return;
 
     try {
-      console.log('Handling like for video:', videoId, 'Current status:', likeStatus[videoId]);
 
       // Optimistically update UI first for better user experience
       const currentLikeStatus = likeStatus[videoId] || false;
@@ -1101,7 +1052,7 @@ const Feed = () => {
       });
 
       if (error) {
-        console.error('Error toggling like:', error);
+        // Handle like toggle errors
         // Revert optimistic update on error
         setLikeStatus(prev => ({
           ...prev,
@@ -1114,13 +1065,11 @@ const Feed = () => {
         return;
       }
 
-      console.log('Like toggled, now liked:', data);
-
       // The realtime subscription will handle updates from other users
       // Our optimistic update already handled the UI for this user
 
     } catch (error) {
-      console.error('Error handling like:', error);
+      // Handle like errors
     }
   };
 
@@ -1130,8 +1079,6 @@ const Feed = () => {
     try {
       const videoIds = videosArr.map(video => video.id);
       if (videoIds.length === 0) return;
-
-      console.log('Checking like status for user:', user.id, 'videos:', videoIds);
 
       // Don't update like counts here - they're handled by the videos channel
       // This prevents overriding the like counts from the realtime subscription
@@ -1157,12 +1104,11 @@ const Feed = () => {
               likedVideoIds.add(videoId);
             }
           } catch (err) {
-            console.error(`Error checking like for video ${videoId}:`, err);
+            // Handle individual like check errors
           }
         }));
       }
 
-      console.log('Likes query result - liked videos:', Array.from(likedVideoIds));
 
       // Update like status
       const newLikeStatus: { [key: string]: boolean } = {};
@@ -1171,13 +1117,11 @@ const Feed = () => {
         newLikeStatus[video.id] = likedVideoIds.has(video.id);
       });
 
-      console.log('Like status check:', { newLikeStatus, likedVideoIds: Array.from(likedVideoIds) });
-
       // Update like status
       setLikeStatus(prev => ({ ...prev, ...newLikeStatus }));
 
     } catch (error) {
-      console.error('Error checking like status:', error);
+      // Handle like status check errors
     }
   };
 
@@ -1200,7 +1144,7 @@ const Feed = () => {
             newViewCounts[video.id] = video.view_count || 0;
           }
         } catch (err) {
-          console.error(`Error getting view count for video ${video.id}:`, err);
+          // Handle view count errors
           newViewCounts[video.id] = video.view_count || 0;
         }
       }
@@ -1224,7 +1168,6 @@ const Feed = () => {
           ...prev,
           [videoId]: genuineCount
         }));
-        console.log(`Updated view count for video ${videoId}: ${genuineCount}`);
       } else {
         // Fallback to incrementing the current count
         setViewCounts(prev => ({

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { getWalletStatus, unlinkWallet, getTrincreditsBalance } from "@/lib/ttpaypalApi";
+import { getWalletStatus, unlinkWallet, getTrincreditsBalance } from "@/lib/trinepayApi";
 import { supabase } from "@/integrations/supabase/client";
 import { getLinkedWallet } from '@/integrations/supabase/client';
 import { useWalletLinkStatus } from "@/hooks/useWalletLinkStatus";
@@ -29,7 +29,7 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
     setUnlinking(true);
     setError(null);
     try {
-      // Unlink from TTPayPal
+      // Unlink from TrinEPay
       await unlinkWallet();
 
       // Delete wallet link for this user
@@ -68,13 +68,13 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
 
   if (!open) return null;
 
-  // Replace WordPress with TTPayPal in error messages
-  const displayError = error?.replace(/WordPress/gi, 'TTPayPal');
+  // Replace WordPress with TrinEPay in error messages
+  const displayError = error?.replace(/WordPress/gi, 'TrinEPay');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
       <div className="bg-black rounded-lg p-6 w-full max-w-xs shadow-lg border border-white/10">
-        <h2 className="text-lg font-bold text-white mb-4 text-center">TTPayPal Wallet</h2>
+        <h2 className="text-lg font-bold text-white mb-4 text-center">TrinEPay Wallet</h2>
         {loading ? (
           <div className="text-center text-white">Loading...</div>
         ) : linked ? (
@@ -86,7 +86,7 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
             )}
             {balance !== null && (
               <div className="text-center text-green-400 font-semibold mb-4">
-                TriniCredits: TT${balance.toFixed(2)}
+                TrinECredits: TT${balance.toFixed(2)}
               </div>
             )}
             <div className="flex flex-col gap-3">
@@ -102,7 +102,7 @@ export default function WalletModal({ open, onClose, refreshKey }: { open: boole
           <>
             <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-3 mb-4">
               <p className="text-yellow-400 text-sm text-center">
-                <strong>Important:</strong> To link your Wallet, make sure you use the exact same email and password from your Limey account to create your TTPayPal Wallet account. If not go to the TTPayPal App and create a new account with your Limey email and password then come back and Link Wallet.
+                <strong>Important:</strong> To link your Wallet, make sure you use the exact same email and password from your Limey account to create your TrinEPay Wallet account. If not go to the TrinEPay App and create a new account with your Limey email and password then come back and Link Wallet.
               </p>
             </div>
             <Button onClick={() => { onClose(); navigate('/wallet/link'); }} className="w-full">

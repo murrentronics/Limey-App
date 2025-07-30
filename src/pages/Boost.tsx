@@ -5,11 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { getTrincreditsBalance, deductTrincredits } from "@/lib/ttpaypalApi";
+import { getTrincreditsBalance, deductTrincredits } from "@/lib/trinepayApi";
 import {
   BOOST_PRICING,
   BoostDuration,
@@ -22,6 +22,7 @@ const Boost = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
 
   // Form state
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -42,6 +43,7 @@ const Boost = () => {
   const [showTrimmer, setShowTrimmer] = useState(false);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(30);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -49,8 +51,14 @@ const Boost = () => {
   useEffect(() => {
     if (user) {
       loadWalletBalance();
+
+      // Check if we're editing a draft
+      const draftId = searchParams.get('draft');
+      if (draftId) {
+        loadDraft(draftId);
+      }
     }
-  }, [user]);
+  }, [user, searchParams]);
 
   const loadWalletBalance = async () => {
     try {
@@ -59,6 +67,62 @@ const Boost = () => {
     } catch (error) {
       console.error('Error loading wallet balance:', error);
       setWalletBalance(0);
+    }
+  };
+
+  const loadDraft = async (draftId: string) => {
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from('sponsored_ads')
+        .select('*')
+        .eq('id', draftId)
+        .eq('user_id', user?.id)
+        .eq('status', 'draft')
+        .single();
+
+      if (error || !data) {
+        toast({
+          title: "Draft Not Found",
+          description: "Could not load the draft. It may have been deleted.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Populate form with draft data
+      setTitle(data.title || '');
+      setDescription(data.description || '');
+      setBusinessName(data.business_name || '');
+      setContactNumber(data.contact_number || '');
+      setWebsiteUrl(data.website_url || '');
+      setSupportEmail(data.support_email || '');
+      setPriceInfo(data.price_info || '');
+      setSelectedDuration(data.boost_duration as BoostDuration);
+      setVideoDuration(data.duration || 0);
+      setEditingDraftId(draftId);
+
+      // Set video preview if available
+      if (data.video_url) {
+        setVideoPreview(data.video_url);
+        // Note: We can't recreate the File object, so user will need to re-upload if they want to change the video
+      }
+
+      toast({
+        title: "Draft Loaded",
+        description: "Continue editing your ad campaign",
+        className: "bg-blue-600 text-white border-blue-700"
+      });
+    } catch (error) {
+      console.error('Error loading draft:', error);
+      toast({
+        title: "Error Loading Draft",
+        description: "Could not load the draft. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -294,25 +358,14 @@ const Boost = () => {
     }
   };
 
-  const handleBoostSubmit = async () => {
+  const handleSaveDraft = async () => {
     if (!videoFile || !title.trim()) {
       toast({
         title: "Missing Information",
-        description: "Please add a video and title",
+        description: "Please add a video and title to save as draft",
         variant: "destructive"
       });
-      return;
-    }
-
-    const cost = BOOST_PRICING[selectedDuration];
-
-    if (walletBalance < cost) {
-      toast({
-        title: "Insufficient Balance",
-        description: `You need TT$${cost.toFixed(2)} but only have TT$${walletBalance.toFixed(2)}. Save as draft and add funds to your wallet.`,
-        variant: "destructive"
-      });
-      return;
+      return false;
     }
 
     try {
@@ -327,7 +380,7 @@ const Boost = () => {
       // Generate thumbnail
       const thumbnailUrl = await generateThumbnail(videoUrl);
 
-      // Create sponsored ad
+      // Create sponsored ad as draft
       const { success, adId, error } = await createSponsoredAd({
         title,
         description,
@@ -340,29 +393,154 @@ const Boost = () => {
         support_email: supportEmail,
         price_info: priceInfo,
         boost_duration: selectedDuration,
-        user_id: user?.id || ''
+        user_id: user?.id || '',
+        status: 'draft'
       });
 
       if (!success || !adId) {
-        throw new Error(error || 'Failed to create sponsored ad');
+        throw new Error(error || 'Failed to save draft');
       }
 
-      // Deduct from user's TriniCredits (money is held until approval)
+      toast({
+        title: "Draft Saved! 📝",
+        description: "Your ad has been saved as a draft. Add funds to your wallet to submit for approval.",
+        className: "bg-blue-600 text-white border-blue-700"
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast({
+        title: "Failed to Save Draft",
+        description: error instanceof Error ? error.message : "Could not save draft. Please try again.",
+        variant: "destructive"
+      });
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBoostSubmit = async () => {
+    if (!videoFile || !title.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please add a video and title",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const cost = BOOST_PRICING[selectedDuration];
+
+    if (walletBalance < cost) {
+      // Save as draft instead of failing
+      const draftSaved = await handleSaveDraft();
+      if (draftSaved) {
+        navigate('/profile');
+      }
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Deduct from user's TrinECredits FIRST before creating anything
       const deductResult = await deductTrincredits(user?.id || '', cost);
       if (!deductResult.success) {
-        throw new Error('Failed to deduct payment from wallet');
+        throw new Error(deductResult.error || 'Failed to deduct payment from wallet');
+      }
+
+      // Upload video
+      const videoUrl = await uploadVideoToStorage(videoFile);
+      if (!videoUrl) {
+        // Refund the user since upload failed
+        const { recordTrincreditsTransaction } = await import('@/lib/trinepayApi');
+        await recordTrincreditsTransaction({
+          userId: user?.id || '',
+          transactionType: 'refund',
+          amount: cost,
+          description: 'Refund for failed video upload',
+          referenceId: `failed_upload_${Date.now()}`
+        });
+        throw new Error('Failed to upload video');
+      }
+
+      // Generate thumbnail
+      const thumbnailUrl = await generateThumbnail(videoUrl);
+
+      // Create or update sponsored ad (payment already deducted)
+      let success, adId, error;
+
+      if (editingDraftId) {
+        // Update existing draft
+        const { error: updateError } = await supabase
+          .from('sponsored_ads')
+          .update({
+            title,
+            description,
+            video_url: videoUrl,
+            thumbnail_url: thumbnailUrl || undefined,
+            duration: videoDuration,
+            business_name: businessName,
+            contact_number: contactNumber,
+            website_url: websiteUrl,
+            support_email: supportEmail,
+            price_info: priceInfo,
+            boost_duration: selectedDuration,
+            status: 'pending', // Change from draft to pending
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingDraftId);
+
+        success = !updateError;
+        adId = editingDraftId;
+        error = updateError?.message;
+      } else {
+        // Create new sponsored ad
+        const result = await createSponsoredAd({
+          title,
+          description,
+          video_url: videoUrl,
+          thumbnail_url: thumbnailUrl || undefined,
+          duration: videoDuration,
+          business_name: businessName,
+          contact_number: contactNumber,
+          website_url: websiteUrl,
+          support_email: supportEmail,
+          price_info: priceInfo,
+          boost_duration: selectedDuration,
+          user_id: user?.id || '',
+          status: 'pending' // Payment already deducted, ready for admin approval
+        });
+
+        success = result.success;
+        adId = result.adId;
+        error = result.error;
+      }
+
+      if (!success || !adId) {
+        // Refund the user since ad creation failed
+        const { recordTrincreditsTransaction } = await import('@/lib/trinepayApi');
+        await recordTrincreditsTransaction({
+          userId: user?.id || '',
+          transactionType: 'refund',
+          amount: cost,
+          description: 'Refund for failed ad creation',
+          referenceId: `failed_ad_${Date.now()}`
+        });
+        throw new Error(error || 'Failed to create sponsored ad');
       }
 
       // Record the transaction for tracking (admin gets paid on approval)
       const transferResult = await transferBoostPaymentToAdmin(cost, user?.id || '', adId);
       if (!transferResult.success) {
         console.error('Failed to record boost transaction:', transferResult.error);
-        // Don't fail the whole process, just log the error
       }
 
       toast({
-        title: "Boost Submitted! 🚀",
-        description: "Your boost campaign has been submitted for approval",
+        title: editingDraftId ? "Draft Updated! 🚀" : "Boost Submitted! 🚀",
+        description: editingDraftId ? "Your draft has been updated and submitted for approval" : "Your boost campaign has been submitted for approval",
         className: "bg-green-600 text-white border-green-700"
       });
 
@@ -378,6 +556,7 @@ const Boost = () => {
       setLoading(false);
     }
   };
+
 
   const selectedCost = BOOST_PRICING[selectedDuration];
   const canAfford = walletBalance >= selectedCost;
@@ -405,7 +584,7 @@ const Boost = () => {
                 filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
               }}
             >
-              Boost
+              {editingDraftId ? 'Edit Draft' : 'Boost'}
             </span>
           </div>
           <Button
@@ -425,7 +604,7 @@ const Boost = () => {
           {/* Wallet Balance */}
           <Card className="p-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">TriniCredits Balance:</span>
+              <span className="text-sm text-muted-foreground">TrinECredits:</span>
               <Badge variant="secondary" className="bg-green-900 text-green-400">
                 TT${walletBalance.toFixed(2)}
               </Badge>
@@ -652,24 +831,25 @@ const Boost = () => {
           </Card>
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
+          <div className="flex gap-4">
             <Button
-              variant="outline"
-              onClick={handleSaveToDrafts}
+              onClick={handleSaveDraft}
               disabled={loading || !videoFile || !title.trim()}
+              variant="outline"
               className="flex-1"
             >
-              Save to Drafts
+              {loading ? "Saving..." : "Save Draft"}
             </Button>
+
             <Button
-              variant="neon"
               onClick={handleBoostSubmit}
-              disabled={loading || !videoFile || !title.trim() || videoDuration > 30 || !canAfford}
-              className="flex-1"
+              disabled={loading || !videoFile || !title.trim()}
+              className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
             >
-              {loading ? "Processing..." : `Boost for TT$${selectedCost}`}
+              {loading ? "Submitting..." : `Submit Boost - TT$${BOOST_PRICING[selectedDuration]}`}
             </Button>
           </div>
+
 
           {/* Tips */}
           <Card className="p-4 bg-muted/50">

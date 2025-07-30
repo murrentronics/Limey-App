@@ -9,7 +9,7 @@ import {
   getTrincreditsBalance,
   getUserLimits,
   withdrawToWallet,
-} from "@/lib/ttpaypalApi";
+} from "@/lib/trinepayApi";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase, getLinkedWallet } from "@/integrations/supabase/client";
 import { useWalletLinkStatus } from "@/hooks/useWalletLinkStatus";
@@ -20,7 +20,7 @@ export default function Wallet() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [triniCredits, setTriniCredits] = useState<number>(0);
+  const [walletBal, setWalletBal] = useState<number>(0);
   const [limits, setLimits] = useState<{
     per_transaction_limit: number;
     max_wallet_balance: number;
@@ -52,7 +52,7 @@ export default function Wallet() {
       }
 
       const balance = await getTrincreditsBalance(user.id);
-      setTriniCredits(balance);
+      setWalletBal(balance);
 
       const limitsRes = await getUserLimits();
       if (limitsRes) {
@@ -104,14 +104,14 @@ export default function Wallet() {
       return;
     }
 
-    if (triniCredits + amountValue > limits.max_wallet_balance) {
+    if (walletBal + amountValue > limits.max_wallet_balance) {
       setError(`This transaction would exceed your maximum wallet balance of TT$${limits.max_wallet_balance.toLocaleString()}`);
       setLoading(false);
       return;
     }
 
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your TTPayPal account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your TrinEPay account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -148,14 +148,14 @@ export default function Wallet() {
       return;
     }
 
-    if (amountValue > triniCredits) {
-      setError("Insufficient TriniCredits balance");
+    if (amountValue > walletBal) {
+      setError("Insufficient Wallet Bal balance");
       setLoading(false);
       return;
     }
 
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your TTPayPal account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your TrinEPay account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -186,8 +186,8 @@ export default function Wallet() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10 mt-20 text-center text-white">
-          <div className="mb-4">Your account is not linked to TTPayPal.</div>
-          <Button onClick={() => navigate("/wallet/link")}>Link TTPayPal Account</Button>
+          <div className="mb-4">Your account is not linked to TrinEPay.</div>
+          <Button onClick={() => navigate("/wallet/link")}>Link TrinEPay Account</Button>
         </div>
       </div>
     );
@@ -211,11 +211,11 @@ export default function Wallet() {
           <div className="text-center mb-4">
             <div className="text-lg">Available in Limey</div>
             <div className="text-3xl font-bold">
-              TT${triniCredits.toFixed(2)}
+              TT${walletBal.toFixed(2)}
             </div>
             {linkedWalletEmail && (
               <div className="text-sm text-gray-400 mt-1">
-                TTPayPal Email: {linkedWalletEmail}
+                TrinEPay Email: {linkedWalletEmail}
               </div>
             )}
             <div className="text-xs text-gray-400 mt-2">

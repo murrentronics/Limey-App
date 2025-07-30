@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { linkWallet as linkTTPaypalWallet } from "@/lib/ttpaypalApi";
+import { linkWallet as linkTrinEPayWallet } from "@/lib/trinepayApi";
 import { useAuth } from "@/hooks/useAuth";
 import { linkWallet as linkSupabaseWallet, getLinkedWallet } from "@/integrations/supabase/client";
 import { useWalletLinkStatus } from "@/hooks/useWalletLinkStatus";
@@ -108,26 +108,26 @@ export default function LinkAccount() {
         return;
       }
 
-      console.log('Token available - attempting TTPayPal wallet link...');
+      console.log('Token available - attempting TrinEPay wallet link...');
 
       // Now try to link the wallet
       try {
-        await linkTTPaypalWallet({ 
+        await linkTrinEPayWallet({ 
           email: user?.email || '', 
           password: '', // Empty since we're using JWT token
           passcode: "" 
         });
-        console.log('TTPayPal wallet link successful');
-      } catch (ttPaypalError: any) {
-        console.error('TTPayPal wallet link failed:', ttPaypalError);
+        console.log('TrinEPay wallet link successful');
+      } catch (trinEPayError: any) {
+        console.error('TrinEPay wallet link failed:', trinEPayError);
         
         // If linking fails due to authentication, ask user to re-login
-        if (ttPaypalError.message?.includes('authentication') || 
-            ttPaypalError.message?.includes('Not authenticated') ||
-            ttPaypalError.message?.includes('credentials')) {
+        if (trinEPayError.message?.includes('authentication') || 
+            trinEPayError.message?.includes('Not authenticated') ||
+            trinEPayError.message?.includes('credentials')) {
           setError("Authentication session expired. Please log out and log back in to refresh your authentication.");
         } else {
-          setError(`Wallet linking failed: ${ttPaypalError.message || 'Unknown error'}`);
+          setError(`Wallet linking failed: ${trinEPayError.message || 'Unknown error'}`);
         }
         linkingInProgress.current = false;
         setLoading(false);
@@ -142,9 +142,9 @@ export default function LinkAccount() {
           if (walletLinkError) {
             console.error('Supabase wallet link error:', walletLinkError);
             
-            // If it's a 406 error, continue anyway since TTPayPal linking succeeded
+            // If it's a 406 error, continue anyway since TrinEPay linking succeeded
             if (walletLinkError.status === 406 || walletLinkError.message?.includes('406')) {
-              console.log('Ignoring 406 error, TTPayPal linking was successful');
+              console.log('Ignoring 406 error, TrinEPay linking was successful');
             } else {
               setError(`Database error: ${walletLinkError.message || 'Failed to link wallet in database'}`);
               linkingInProgress.current = false;
@@ -156,9 +156,9 @@ export default function LinkAccount() {
         } catch (supabaseError: any) {
           console.error('Supabase wallet link exception:', supabaseError);
           
-          // If it's a 406 error, continue anyway since TTPayPal linking succeeded
+          // If it's a 406 error, continue anyway since TrinEPay linking succeeded
           if (supabaseError.status === 406 || supabaseError.message?.includes('406')) {
-            console.log('Ignoring 406 exception, TTPayPal linking was successful');
+            console.log('Ignoring 406 exception, TrinEPay linking was successful');
           } else {
             setError(`Database error: ${supabaseError.message || 'Failed to link wallet in database'}`);
             linkingInProgress.current = false;
@@ -203,7 +203,7 @@ export default function LinkAccount() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10 text-center text-white">
           <h2 className="text-lg font-bold mb-4">Wallet Already Linked</h2>
-          <div className="mb-4">Your account is already linked to TTPayPal with email:</div>
+          <div className="mb-4">Your account is already linked to TrinEPay with email:</div>
           <div className="mb-4 font-semibold">{linkedEmail}</div>
           <Button className="w-full" onClick={() => navigate('/profile')}>Back to Profile</Button>
         </div>
@@ -214,7 +214,7 @@ export default function LinkAccount() {
   return (
     <div className="min-h-screen bg-black flex items-center justify-center">
       <div className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10">
-        <h2 className="text-lg font-bold text-white mb-4 text-center">Link TTPayPal Account</h2>
+        <h2 className="text-lg font-bold text-white mb-4 text-center">Link TrinEPay Account</h2>
         
         {/* Quick Link Option (when JWT is validated) */}
         {jwtValidated && (
@@ -222,7 +222,7 @@ export default function LinkAccount() {
             <div className="mb-4 p-3 bg-green-900/20 border border-green-500/20 rounded-lg">
               <div className="text-green-400 text-sm mb-2">✓ Authentication Verified</div>
               <div className="text-white/70 text-xs">
-                Your TTPayPal credentials were verified during login
+                Your TrinEPay credentials were verified during login
               </div>
             </div>
             
@@ -261,12 +261,12 @@ export default function LinkAccount() {
             <div className="mb-4 p-4 bg-red-900/20 border border-red-500/20 rounded-lg">
               <div className="text-red-400 text-lg mb-3">🔒 Account Mismatch</div>
               <div className="text-white/90 text-sm mb-3 leading-relaxed">
-                Your Limey and TTPayPal account credentials don't match. To link your wallet securely, you need to:
+                Your Limey and TrinEPay account credentials don't match. To link your wallet securely, you need to:
               </div>
               <div className="text-left text-white/80 text-sm space-y-2 mb-4">
                 <div className="flex items-start gap-2">
                   <span className="text-yellow-400 font-bold">1.</span>
-                  <span>Update your Limey <strong>OR</strong> TTPayPal account so both have the same email and password</span>
+                  <span>Update your Limey <strong>OR</strong> TrinEPay account so both have the same email and password</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-yellow-400 font-bold">2.</span>
@@ -295,11 +295,11 @@ export default function LinkAccount() {
               </Button>
               
               <Button 
-                onClick={() => window.open('https://ttpaypal.com/manage-account/edit-account/', '_blank')} 
+                onClick={() => window.open('https://theronm18.sg-host.com/manage-account/edit-account/', '_blank')} 
                 variant="outline"
                 className="w-full border-white/20 text-white hover:bg-white/10"
               >
-                Update TTPayPal Account
+                Update TrinEPay Account
               </Button>
 
               <Button 

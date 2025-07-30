@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { deleteUserAccount } from "@/lib/ttpaypalApi";
+import { deleteUserAccount } from "@/lib/trinepayApi";
 import { ArrowLeft, Trash2, Edit, Eye, EyeOff } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 

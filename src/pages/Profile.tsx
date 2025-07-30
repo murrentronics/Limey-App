@@ -11,7 +11,7 @@ import { MoreVertical, Settings, Send, Wallet, Heart, Bookmark, Eye, ChevronDown
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import WalletModal from "@/components/WalletModal";
-import { getTrincreditsBalance } from "@/lib/ttpaypalApi";
+import { getTrincreditsBalance } from "@/lib/trinepayApi";
 import { Avatar } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -74,45 +74,88 @@ const Profile = () => {
     // eslint-disable-next-line
   }, [location.pathname]);
 
-  // Real-time subscription for video updates - DISABLED to prevent resource exhaustion
+  // Real-time subscription for video updates - OPTIMIZED
+  useEffect(() => {
+    if (!profile?.user_id || userVideos.length === 0) return;
+
+    // Only subscribe if we have videos to track
+    const videoIds = userVideos.map(v => v.id);
+    if (videoIds.length === 0) return;
+
+    // Create a single subscription for all user's videos
+    const videosChannel = supabase
+      .channel(`user_videos_${profile.user_id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'videos',
+        filter: `user_id=eq.${profile.user_id}`
+      }, (payload) => {
+        // Update the specific video in our state
+        setUserVideos(prev => prev.map(video =>
+          video.id === payload.new.id
+            ? { ...video, ...payload.new }
+            : video
+        ));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(videosChannel);
+    };
+  }, [profile?.user_id, userVideos.length]);
+
+  // Real-time subscription for view counts - OPTIMIZED
+  useEffect(() => {
+    if (!profile?.user_id || userVideos.length === 0) return;
+
+    // Subscribe to view changes for user's videos only
+    const viewsChannel = supabase
+      .channel(`user_views_${profile.user_id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'video_views',
+        filter: `video_id=in.(${userVideos.map(v => v.id).join(',')})`
+      }, (payload) => {
+        // Update view count for the specific video
+        if (payload.new?.video_id) {
+          setUserVideos(prev => prev.map(video =>
+            video.id === payload.new.video_id
+              ? { ...video, view_count: (video.view_count || 0) + 1 }
+              : video
+          ));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(viewsChannel);
+    };
+  }, [profile?.user_id, userVideos.length]);
+
+  // Real-time subscription for follows updates - OPTIMIZED
   useEffect(() => {
     if (!profile?.user_id) return;
 
-    console.log('Real-time video subscription DISABLED to prevent resource exhaustion');
-    
-    // TODO: Re-enable real-time subscriptions once resource issue is resolved
-    // For now, we'll rely on manual refresh or page reloads for updates
-    
+    // Only subscribe to follow changes for this specific user
+    const followsChannel = supabase
+      .channel(`user_follows_${profile.user_id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'follows',
+        filter: `following_id=eq.${profile.user_id}`
+      }, () => {
+        // Refresh follow counts when follows change
+        fetchFollowCounts();
+      })
+      .subscribe();
+
     return () => {
-      console.log('No real-time subscription to clean up');
+      supabase.removeChannel(followsChannel);
     };
   }, [profile?.user_id]);
-
-  // Real-time subscription for view counts - DISABLED to prevent resource exhaustion
-  useEffect(() => {
-    if (!profile?.user_id) return;
-
-    console.log('Real-time view count subscription DISABLED to prevent resource exhaustion');
-    
-    // TODO: Re-enable real-time subscriptions once resource issue is resolved
-    
-    return () => {
-      console.log('No real-time view count subscription to clean up');
-    };
-  }, [profile?.user_id]);
-
-  // Real-time subscription for follows updates - DISABLED to prevent resource exhaustion
-  useEffect(() => {
-    if (!profile?.user_id) return;
-
-    console.log('Real-time follows subscription DISABLED to prevent resource exhaustion');
-    
-    // TODO: Re-enable real-time subscriptions once resource issue is resolved
-    
-    return () => {
-      console.log('No real-time follows subscription to clean up');
-    };
-  }, [profile?.user_id, isOwnProfile, user]);
 
   useEffect(() => {
     fetchProfile();
@@ -129,17 +172,17 @@ const Profile = () => {
       fetchFollowCounts();
     }
   }, [profile?.user_id]);
-  
+
   // Refresh follow counts periodically to ensure consistency
   useEffect(() => {
     if (!profile?.user_id) return;
-    
+
     // Refresh counts every 30 seconds as a fallback
     const intervalId = setInterval(() => {
       console.log('Periodic refresh of follow counts');
       fetchFollowCounts();
     }, 30000);
-    
+
     return () => clearInterval(intervalId);
   }, [profile?.user_id]);
 
@@ -191,7 +234,7 @@ const Profile = () => {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      
+
       let targetUserId = user?.id;
 
       let isOwn = false;
@@ -306,16 +349,16 @@ const Profile = () => {
         .select('*')
         .eq('user_id', targetUserId)
         .order('created_at', { ascending: false });
-      
+
       if (dbError) {
         console.error('Error fetching user videos:', dbError);
         setUserVideos([]);
         return;
       }
-      
+
       console.log('User videos fetched:', dbVideos?.length || 0, 'videos');
       setUserVideos(dbVideos || []);
-      
+
       // Fetch view counts for the videos
       if (dbVideos && dbVideos.length > 0) {
         await fetchViewCounts(dbVideos);
@@ -351,7 +394,7 @@ const Profile = () => {
       }
       const videos = (data || []).map((row: any) => row.video);
       setSavedVideos(videos);
-      
+
       // Fetch view counts for saved videos
       if (videos && videos.length > 0) {
         await fetchViewCounts(videos);
@@ -430,7 +473,7 @@ const Profile = () => {
         .from('follows' as any)
         .select('follower_id')
         .eq('following_id', profile.user_id);
-      
+
       if (error || !data) {
         setFollowers([]);
         return;
@@ -443,7 +486,7 @@ const Profile = () => {
           .from('profiles' as any)
           .select('user_id, username, avatar_url, display_name')
           .in('user_id', followerIds);
-        
+
         setFollowers(profilesData || []);
       } else {
         setFollowers([]);
@@ -460,7 +503,7 @@ const Profile = () => {
         .from('follows' as any)
         .select('following_id')
         .eq('follower_id', profile.user_id);
-      
+
       if (error || !data) {
         setFollowing([]);
         return;
@@ -473,7 +516,7 @@ const Profile = () => {
           .from('profiles' as any)
           .select('user_id, username, avatar_url, display_name')
           .in('user_id', followingIds);
-        
+
         setFollowing(profilesData || []);
       } else {
         setFollowing([]);
@@ -486,7 +529,7 @@ const Profile = () => {
   const handleRemoveFollowing = async (targetUserId: string) => {
     setRemovingId(targetUserId);
     const { error } = await supabase.from('follows' as any).delete().eq('follower_id', profile.user_id).eq('following_id', targetUserId);
-    
+
     if (!error) {
       // Update UI immediately for better user experience
       setFollowing(following.filter((u) => u.user_id !== targetUserId));
@@ -496,15 +539,15 @@ const Profile = () => {
       // Fetch the latest counts to ensure accuracy
       fetchFollowCounts();
     }
-    
+
     setRemovingId(null);
   };
-  
+
   // Remove user from followers
   const handleRemoveFollower = async (targetUserId: string) => {
     setRemovingId(targetUserId);
     const { error } = await supabase.from('follows' as any).delete().eq('follower_id', targetUserId).eq('following_id', profile.user_id);
-    
+
     if (!error) {
       // Update UI immediately for better user experience
       setFollowers(followers.filter((u) => u.user_id !== targetUserId));
@@ -514,7 +557,7 @@ const Profile = () => {
       // Fetch the latest counts to ensure accuracy
       fetchFollowCounts();
     }
-    
+
     setRemovingId(null);
   };
 
@@ -527,92 +570,103 @@ const Profile = () => {
   // Fetch actual follow counts
   const fetchFollowCounts = async () => {
     if (!profile?.user_id) return;
-    
+
     console.log('Fetching follow counts for user:', profile.user_id);
-    
+
     try {
-      // Use a more efficient query with count() instead of fetching all records
-      // Get following count (users this profile is following)
-      const { data: followingData, error: followingError, count: followingCount } = await supabase
-        .from('follows' as any)
-        .select('id', { count: 'exact', head: true })
-        .eq('follower_id', profile.user_id);
-      
-      if (followingError) {
-        console.error('Error fetching following count:', followingError);
-      } else {
-        console.log('Following count:', followingCount);
-        setFollowingCount(followingCount || 0);
+      // Get following count with retry logic
+      try {
+        const { data: followingData, error: followingError, count: followingCount } = await supabase
+          .from('follows' as any)
+          .select('id', { count: 'exact', head: true })
+          .eq('follower_id', profile.user_id);
+
+        if (followingError) {
+          console.error('Error fetching following count:', followingError);
+          // Keep current count on error
+        } else {
+          console.log('Following count:', followingCount);
+          setFollowingCount(followingCount || 0);
+        }
+      } catch (followingFetchError) {
+        console.error('Network error fetching following count:', followingFetchError);
+        // Keep current following count on network error
       }
 
-      // Get followers count (users following this profile)
-      const { data: followersData, error: followersError, count: followersCount } = await supabase
-        .from('follows' as any)
-        .select('id', { count: 'exact', head: true })
-        .eq('following_id', profile.user_id);
-      
-      if (followersError) {
-        console.error('Error fetching followers count:', followersError);
-      } else {
-        console.log('Followers count:', followersCount);
-        setFollowersCount(followersCount || 0);
+      // Get followers count with retry logic
+      try {
+        const { data: followersData, error: followersError, count: followersCount } = await supabase
+          .from('follows' as any)
+          .select('id', { count: 'exact', head: true })
+          .eq('following_id', profile.user_id);
+
+        if (followersError) {
+          console.error('Error fetching followers count:', followersError);
+          // Keep current count on error
+        } else {
+          console.log('Followers count:', followersCount);
+          setFollowersCount(followersCount || 0);
+        }
+      } catch (followersFetchError) {
+        console.error('Network error fetching followers count:', followersFetchError);
+        // Keep current followers count on network error
       }
-      
-      // Log the updated counts for debugging
-      console.log('Updated follow counts - Following:', followingCount, 'Followers:', followersCount);
-      
+
     } catch (error) {
       console.error('Error fetching follow counts:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update follow counts. Please refresh the page.',
-        variant: 'destructive',
-      });
+      // Only show toast for persistent errors, not network issues
+      if (!error.message?.includes('Failed to fetch')) {
+        toast({
+          title: 'Error',
+          description: 'Failed to update follow counts. Please refresh the page.',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
-// Check if current user is following this profile
-const checkFollowStatus = async () => {
-  if (!user || !profile?.user_id) return;
-  
-  console.log('Checking follow status for current user:', user.id, 'to profile:', profile.user_id);
-  
-  try {
-    const { data, error } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('follower_id', user.id)
-      .eq('following_id', profile.user_id)
-      .single();
-    
-    const isCurrentlyFollowing = !error && data;
-    console.log('Follow status result:', isCurrentlyFollowing ? 'Following' : 'Not following');
-    
-    setIsFollowing(!!isCurrentlyFollowing);
-  } catch (err) {
-    console.error('Error checking follow status:', err);
-    setIsFollowing(false);
-  }
-};
+  // Check if current user is following this profile
+  const checkFollowStatus = async () => {
+    if (!user || !profile?.user_id) return;
+
+    console.log('Checking follow status for current user:', user.id, 'to profile:', profile.user_id);
+
+    try {
+      const { data, error } = await supabase
+        .from('follows')
+        .select('id')
+        .eq('follower_id', user.id)
+        .eq('following_id', profile.user_id)
+        .single();
+
+      const isCurrentlyFollowing = !error && data;
+      console.log('Follow status result:', isCurrentlyFollowing ? 'Following' : 'Not following');
+
+      setIsFollowing(!!isCurrentlyFollowing);
+    } catch (err) {
+      console.error('Error checking follow status:', err);
+      setIsFollowing(false);
+    }
+  };
 
 
   // Handle follow/unfollow
   const handleFollow = async () => {
     if (!user || !profile?.user_id || followLoading) return;
-    
+
     setFollowLoading(true);
-    
+
     // Store previous state for potential rollback
     const wasFollowing = isFollowing;
     const prevFollowersCount = followersCount;
     const prevFollowingCount = followingCount;
-    
+
     try {
       if (isFollowing) {
         // Optimistic UI update for unfollow
         setIsFollowing(false);
         setShowUnfollowDropdown(false);
-        
+
         // Update local counts immediately for better UX
         if (isOwnProfile) {
           setFollowingCount(prev => Math.max(0, prev - 1));
@@ -620,14 +674,14 @@ const checkFollowStatus = async () => {
           // When viewing someone else's profile and unfollowing them
           setFollowersCount(prev => Math.max(0, prev - 1));
         }
-        
+
         // Perform the actual unfollow operation
         const { error } = await supabase
           .from('follows' as any)
           .delete()
           .eq('follower_id', user.id)
           .eq('following_id', profile.user_id);
-          
+
         if (error) {
           // Revert optimistic updates on error
           setIsFollowing(wasFollowing);
@@ -636,7 +690,7 @@ const checkFollowStatus = async () => {
           } else {
             setFollowersCount(prevFollowersCount);
           }
-          
+
           toast({
             title: 'Error',
             description: 'Failed to unfollow user. Please try again.',
@@ -649,7 +703,7 @@ const checkFollowStatus = async () => {
       } else {
         // Optimistic UI update for follow
         setIsFollowing(true);
-        
+
         // Update local counts immediately for better UX
         if (isOwnProfile) {
           setFollowingCount(prev => prev + 1);
@@ -657,7 +711,7 @@ const checkFollowStatus = async () => {
           // When viewing someone else's profile and following them
           setFollowersCount(prev => prev + 1);
         }
-        
+
         // Perform the actual follow operation
         const { error } = await supabase
           .from('follows' as any)
@@ -665,7 +719,7 @@ const checkFollowStatus = async () => {
             follower_id: user.id,
             following_id: profile.user_id
           });
-          
+
         if (error) {
           // Revert optimistic updates on error
           setIsFollowing(wasFollowing);
@@ -674,7 +728,7 @@ const checkFollowStatus = async () => {
           } else {
             setFollowersCount(prevFollowersCount);
           }
-          
+
           toast({
             title: 'Error',
             description: 'Failed to follow user. Please try again.',
@@ -687,7 +741,7 @@ const checkFollowStatus = async () => {
       }
     } catch (error) {
       console.error('Error following/unfollowing:', error);
-      
+
       // Revert optimistic updates on error
       setIsFollowing(wasFollowing);
       if (isOwnProfile) {
@@ -695,7 +749,7 @@ const checkFollowStatus = async () => {
       } else {
         setFollowersCount(prevFollowersCount);
       }
-      
+
       toast({
         title: 'Error',
         description: 'An unexpected error occurred. Please try again.',
@@ -707,114 +761,114 @@ const checkFollowStatus = async () => {
   };
 
   // Handle sending message
-const handleSendMessage = async () => {
-  if (!messageText.trim() || !user || !profile?.user_id || sendingMessage) return;
-  
-  setSendingMessage(true);
-  try {
-    console.log('Sending message to user:', profile.username);
-    
-    // Check if chat already exists between user and profile.user_id
-    const { data: existingChats, error } = await supabase
-      .from('chats')
-      .select('*')
-      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${profile.user_id}),and(sender_id.eq.${profile.user_id},receiver_id.eq.${user.id})`);
-    
-    if (error) {
-      console.error('Error checking for existing chat:', error);
-      toast({ title: 'Failed to send message', description: error.message, variant: 'destructive' });
-      return;
-    }
-    
-    console.log('Found existing chats:', existingChats);
-    
-    // Filter out deleted chats when looking for existing chats
-    const nonDeletedChats = (existingChats || []).filter((chat: any) => {
-      if (chat.sender_id === user.id) {
-        return !chat.deleted_for_sender;
-      } else {
-        return !chat.deleted_for_receiver;
-      }
-    });
-    
-    const filteredExistingChat = nonDeletedChats.length > 0 ? nonDeletedChats[0] : null;
-    console.log('Using existing chat:', filteredExistingChat);
-    
-    let chatId;
-    
-    if (filteredExistingChat) {
-      console.log('Found existing non-deleted chat:', filteredExistingChat.id);
-      chatId = filteredExistingChat.id;
-      
-      // Update chat's last message and timestamp
-      const { error: updateError } = await supabase
-        .from('chats')
-        .update({
-          last_message: messageText.trim(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', chatId);
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !user || !profile?.user_id || sendingMessage) return;
 
-      if (updateError) {
-        console.error('Error updating existing chat:', updateError);
-        throw updateError;
-      }
-    } else {
-      // No non-deleted chat exists, create a completely new chat
-      console.log('Creating new chat between', user.id, 'and', profile.user_id);
-      
-      const { data: newChat, error: createError } = await supabase
+    setSendingMessage(true);
+    try {
+      console.log('Sending message to user:', profile.username);
+
+      // Check if chat already exists between user and profile.user_id
+      const { data: existingChats, error } = await supabase
         .from('chats')
-        .insert({
-          sender_id: user.id,
-          receiver_id: profile.user_id,
-          last_message: messageText.trim(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-        
-      if (createError) {
-        console.error('Error creating chat:', createError);
-        toast({ title: 'Failed to create chat', description: createError.message, variant: 'destructive' });
+        .select('*')
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${profile.user_id}),and(sender_id.eq.${profile.user_id},receiver_id.eq.${user.id})`);
+
+      if (error) {
+        console.error('Error checking for existing chat:', error);
+        toast({ title: 'Failed to send message', description: error.message, variant: 'destructive' });
         return;
       }
-      console.log('Created new chat:', newChat);
-      chatId = newChat.id;
-    }
-    
-    // Send the message
-    const { error: messageError } = await supabase
-      .from('messages')
-      .insert({
-        chat_id: chatId,
-        sender_id: user.id,
-        receiver_id: profile.user_id,
-        content: messageText.trim(),
-        created_at: new Date().toISOString()
+
+      console.log('Found existing chats:', existingChats);
+
+      // Filter out deleted chats when looking for existing chats
+      const nonDeletedChats = (existingChats || []).filter((chat: any) => {
+        if (chat.sender_id === user.id) {
+          return !chat.deleted_for_sender;
+        } else {
+          return !chat.deleted_for_receiver;
+        }
       });
-    
-    if (messageError) {
-      console.error('Error sending message:', messageError);
-      toast({ title: 'Failed to send message', description: messageError.message, variant: 'destructive' });
-      return;
+
+      const filteredExistingChat = nonDeletedChats.length > 0 ? nonDeletedChats[0] : null;
+      console.log('Using existing chat:', filteredExistingChat);
+
+      let chatId;
+
+      if (filteredExistingChat) {
+        console.log('Found existing non-deleted chat:', filteredExistingChat.id);
+        chatId = filteredExistingChat.id;
+
+        // Update chat's last message and timestamp
+        const { error: updateError } = await supabase
+          .from('chats')
+          .update({
+            last_message: messageText.trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', chatId);
+
+        if (updateError) {
+          console.error('Error updating existing chat:', updateError);
+          throw updateError;
+        }
+      } else {
+        // No non-deleted chat exists, create a completely new chat
+        console.log('Creating new chat between', user.id, 'and', profile.user_id);
+
+        const { data: newChat, error: createError } = await supabase
+          .from('chats')
+          .insert({
+            sender_id: user.id,
+            receiver_id: profile.user_id,
+            last_message: messageText.trim(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating chat:', createError);
+          toast({ title: 'Failed to create chat', description: createError.message, variant: 'destructive' });
+          return;
+        }
+        console.log('Created new chat:', newChat);
+        chatId = newChat.id;
+      }
+
+      // Send the message
+      const { error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          chat_id: chatId,
+          sender_id: user.id,
+          receiver_id: profile.user_id,
+          content: messageText.trim(),
+          created_at: new Date().toISOString()
+        });
+
+      if (messageError) {
+        console.error('Error sending message:', messageError);
+        toast({ title: 'Failed to send message', description: messageError.message, variant: 'destructive' });
+        return;
+      }
+
+      console.log('Message sent successfully, navigating to chat:', chatId);
+
+      // Close sheet and navigate to chat
+      setShowMessageModal(false);
+      setMessageText("");
+      navigate(`/chat/${chatId}`);
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({ title: 'Failed to send message', description: 'An unexpected error occurred', variant: 'destructive' });
+    } finally {
+      setSendingMessage(false);
     }
-    
-    console.log('Message sent successfully, navigating to chat:', chatId);
-    
-    // Close sheet and navigate to chat
-    setShowMessageModal(false);
-    setMessageText("");
-    navigate(`/chat/${chatId}`);
-    
-  } catch (error) {
-    console.error('Error sending message:', error);
-    toast({ title: 'Failed to send message', description: 'An unexpected error occurred', variant: 'destructive' });
-  } finally {
-    setSendingMessage(false);
-  }
-};
+  };
 
 
   if (loading) {
@@ -902,10 +956,10 @@ const handleSendMessage = async () => {
           {/* Avatar */}
           <div className="relative mb-4">
             {profile?.avatar_url ? (
-              <img 
-                src={profile.avatar_url} 
-                alt="Profile" 
-                className="w-24 h-24 rounded-full object-cover border-2 border-primary cursor-pointer hover:opacity-90 transition-opacity" 
+              <img
+                src={profile.avatar_url}
+                alt="Profile"
+                className="w-24 h-24 rounded-full object-cover border-2 border-primary cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => {
                   console.log('Profile image clicked');
                   setShowProfileImageModal(true);
@@ -925,23 +979,23 @@ const handleSendMessage = async () => {
           {isOwnProfile && (
             <>
               <div className="flex items-center space-x-2 mb-3">
-                <span className="text-sm text-muted-foreground">TriniCredits:</span>
+                <span className="text-sm text-muted-foreground">TrinECredits:</span>
                 <Badge variant="secondary" className="bg-green-900 text-green-400">
                   TT${walletBalance !== null ? walletBalance.toFixed(2) : '0.00'}
                 </Badge>
               </div>
               <div className="flex gap-2 mb-4">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => navigate('/edit-profile')} 
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/edit-profile')}
                   className="flex-1"
                 >
                   Edit Profile
                 </Button>
-                <Button 
-                  variant="neon" 
-                  size="sm" 
+                <Button
+                  variant="neon"
+                  size="sm"
                   onClick={() => navigate('/boost')}
                   className="flex-1"
                 >
@@ -973,7 +1027,7 @@ const handleSendMessage = async () => {
             </div>
           )}
           {/* Stats, Bio, Badges, etc. can go here */}
-          
+
           {/* Display follower/following/likes counts for other users (non-clickable) */}
           {!isOwnProfile && (
             <div className="flex items-center justify-center gap-8 mb-4 mt-2">
@@ -1017,7 +1071,7 @@ const handleSendMessage = async () => {
                   </span>
                 ) : "Follow"}
               </Button>
-              
+
               {/* Unfollow dropdown */}
               {showUnfollowDropdown && (
                 <div className="absolute top-full left-0 mt-1 bg-red-600 rounded-md shadow-lg z-10">
@@ -1030,7 +1084,7 @@ const handleSendMessage = async () => {
                 </div>
               )}
             </div>
-            
+
             {/* Message button - only show if following */}
             {isFollowing && (
               <Button
@@ -1054,8 +1108,8 @@ const handleSendMessage = async () => {
             <TabsTrigger value="videos" className={!isOwnProfile ? 'justify-center' : ''}>Videos</TabsTrigger>
             {isOwnProfile && (
               <>
-                <TabsTrigger value="saved"><Bookmark className="inline mr-1" size={16}/>Saved</TabsTrigger>
-                <TabsTrigger value="ads"><TrendingUp className="inline mr-1" size={16}/>My Ads</TabsTrigger>
+                <TabsTrigger value="saved"><Bookmark className="inline mr-1" size={16} />Saved</TabsTrigger>
+                <TabsTrigger value="ads"><TrendingUp className="inline mr-1" size={16} />My Ads</TabsTrigger>
               </>
             )}
           </TabsList>
@@ -1088,14 +1142,14 @@ const handleSendMessage = async () => {
                       </div>
                     )}
                     {video.thumbnail_url ? (
-                      <img 
+                      <img
                         src={
                           video.thumbnail_url.startsWith('http')
                             ? video.thumbnail_url
                             : supabase.storage.from('limeytt-uploads').getPublicUrl(video.thumbnail_url).data.publicUrl
-                        } 
-                        alt={video.title} 
-                        className="w-full h-full object-cover rounded" 
+                        }
+                        alt={video.title}
+                        className="w-full h-full object-cover rounded"
                         onError={(e) => {
                           console.error('Error loading thumbnail:', e);
                           (e.target as HTMLImageElement).src = '/placeholder-thumbnail.png';
@@ -1120,8 +1174,8 @@ const handleSendMessage = async () => {
                 </div>
                 <h3 className="text-lg font-semibold mb-2 text-foreground">No videos yet</h3>
                 <p className="text-muted-foreground mb-4">
-                  {isOwnProfile 
-                    ? "You haven't uploaded any videos yet." 
+                  {isOwnProfile
+                    ? "You haven't uploaded any videos yet."
                     : `${profile?.username || 'This user'} hasn't uploaded any videos yet.`}
                 </p>
                 {isOwnProfile && (
@@ -1138,32 +1192,31 @@ const handleSendMessage = async () => {
               {sponsoredAds.length > 0 ? (
                 <div className="grid grid-cols-3 gap-2">
                   {sponsoredAds.map((ad) => (
-                    <Card 
-                      key={ad.id} 
+                    <Card
+                      key={ad.id}
                       className="relative aspect-[9/16] cursor-pointer group bg-black/10 overflow-hidden hover:bg-black/20 transition-colors"
                       onClick={() => navigate(`/campaign/${ad.id}`)}
                     >
                       {/* Status badge top left */}
                       <div className="absolute top-2 left-2 z-10">
-                        <Badge 
-                          variant="secondary" 
-                          className={`text-xs ${
-                            ad.status === 'active' ? 'bg-green-900 text-green-400' :
-                            ad.status === 'pending' ? 'bg-yellow-900 text-yellow-400' :
-                            ad.status === 'approved' ? 'bg-blue-900 text-blue-400' :
-                            ad.status === 'rejected' ? 'bg-red-900 text-red-400' :
-                            ad.status === 'expired' ? 'bg-gray-900 text-gray-400' :
-                            'bg-purple-900 text-purple-400'
-                          }`}
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs ${ad.status === 'active' ? 'bg-green-900 text-green-400' :
+                              ad.status === 'pending' ? 'bg-yellow-900 text-yellow-400' :
+                                ad.status === 'approved' ? 'bg-blue-900 text-blue-400' :
+                                  ad.status === 'rejected' ? 'bg-red-900 text-red-400' :
+                                    ad.status === 'expired' ? 'bg-gray-900 text-gray-400' :
+                                      'bg-purple-900 text-purple-400'
+                            }`}
                         >
                           {ad.status === 'active' ? '🟢' :
-                           ad.status === 'pending' ? '⏳' :
-                           ad.status === 'approved' ? '✅' :
-                           ad.status === 'rejected' ? '❌' :
-                           ad.status === 'expired' ? '⏰' : '📝'}
+                            ad.status === 'pending' ? '⏳' :
+                              ad.status === 'approved' ? '✅' :
+                                ad.status === 'rejected' ? '❌' :
+                                  ad.status === 'expired' ? '⏰' : '📝'}
                         </Badge>
                       </div>
-                      
+
                       {/* 3-dots menu top right */}
                       <div className="absolute top-2 right-2 z-10">
                         <div className="relative">
@@ -1178,7 +1231,7 @@ const handleSendMessage = async () => {
                           >
                             <MoreVertical size={16} className="text-white" />
                           </Button>
-                          
+
                           {/* Dropdown Menu */}
                           {showAdMenu === ad.id && (
                             <div className="absolute right-0 top-8 bg-black/90 backdrop-blur-md border border-white/10 rounded-lg py-2 min-w-[120px] z-20">
@@ -1220,10 +1273,10 @@ const handleSendMessage = async () => {
 
                       {/* Ad thumbnail */}
                       {ad.thumbnail_url ? (
-                        <img 
-                          src={ad.thumbnail_url} 
-                          alt={ad.title} 
-                          className="w-full h-full object-cover rounded" 
+                        <img
+                          src={ad.thumbnail_url}
+                          alt={ad.title}
+                          className="w-full h-full object-cover rounded"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = '/placeholder-thumbnail.png';
                           }}
@@ -1282,14 +1335,14 @@ const handleSendMessage = async () => {
                       <span className="text-xs text-white font-semibold">{formatViews(viewCounts[video.id] || 0)}</span>
                     </div>
                     {video.thumbnail_url ? (
-                      <img 
+                      <img
                         src={
                           video.thumbnail_url.startsWith('http')
                             ? video.thumbnail_url
                             : supabase.storage.from('limeytt-uploads').getPublicUrl(video.thumbnail_url).data.publicUrl
-                        } 
-                        alt={video.title} 
-                        className="w-full h-full object-cover rounded" 
+                        }
+                        alt={video.title}
+                        className="w-full h-full object-cover rounded"
                         onError={(e) => {
                           console.error('Error loading thumbnail:', e);
                           (e.target as HTMLImageElement).src = '/placeholder-thumbnail.png';
@@ -1328,8 +1381,8 @@ const handleSendMessage = async () => {
       {showConfirmDialog && confirmAction && confirmAction.type === 'deleteVideo' && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black">
           <div className="flex justify-end p-4">
-            <button 
-              className="text-white text-lg font-bold" 
+            <button
+              className="text-white text-lg font-bold"
               onClick={() => {
                 setShowConfirmDialog(false);
                 setConfirmAction(null);
@@ -1381,8 +1434,8 @@ const handleSendMessage = async () => {
                 <div className="text-white text-center">No followers yet</div>
               ) : followers.map((f) => (
                 <div key={f.user_id} className="flex items-center justify-between bg-black/80 rounded-lg p-3">
-                  <div 
-                    className="flex items-center gap-3 cursor-pointer" 
+                  <div
+                    className="flex items-center gap-3 cursor-pointer"
                     onClick={() => {
                       setShowFollowersModal(false);
                       navigate(`/profile/${f.username}`);
@@ -1425,8 +1478,8 @@ const handleSendMessage = async () => {
                 <div className="text-white text-center">Not following anyone yet</div>
               ) : following.map((f) => (
                 <div key={f.user_id} className="flex items-center justify-between bg-black/80 rounded-lg p-3">
-                  <div 
-                    className="flex items-center gap-3 cursor-pointer" 
+                  <div
+                    className="flex items-center gap-3 cursor-pointer"
                     onClick={() => {
                       setShowFollowingModal(false);
                       navigate(`/profile/${f.username}`);
@@ -1455,7 +1508,7 @@ const handleSendMessage = async () => {
           </div>
         </div>
       )}
-      
+
       {/* Message Sheet - Slides up from bottom */}
       <Sheet open={showMessageModal} onOpenChange={setShowMessageModal}>
         <SheetContent side="bottom" className="rounded-t-xl max-h-[80vh] overflow-y-auto" aria-describedby="message-sheet-description">
@@ -1467,7 +1520,7 @@ const handleSendMessage = async () => {
               Send a direct message to this user.
             </p>
           </SheetHeader>
-          
+
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="w-10 h-10">
               <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.username} />
@@ -1478,7 +1531,7 @@ const handleSendMessage = async () => {
               <p className="text-sm text-muted-foreground">Send a message</p>
             </div>
           </div>
-          
+
           <div className="space-y-4">
             <textarea
               value={messageText}
@@ -1488,7 +1541,7 @@ const handleSendMessage = async () => {
               maxLength={500}
               autoFocus
             />
-            
+
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
@@ -1512,10 +1565,10 @@ const handleSendMessage = async () => {
           </div>
         </SheetContent>
       </Sheet>
-      
+
       {/* Profile Image Modal - Fullscreen */}
       {showProfileImageModal && profile?.avatar_url && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black flex flex-col"
           onClick={() => setShowProfileImageModal(false)}
         >
@@ -1530,12 +1583,12 @@ const handleSendMessage = async () => {
               <X size={24} />
             </Button>
           </div>
-          
+
           {/* Image container - takes full available height with bottom spacing */}
           <div className="flex-1 flex items-center justify-center p-4 pb-24">
-            <img 
-              src={profile.avatar_url} 
-              alt="Profile" 
+            <img
+              src={profile.avatar_url}
+              alt="Profile"
               className="max-w-full max-h-full object-contain"
               onClick={(e) => e.stopPropagation()}
             />

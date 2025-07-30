@@ -20,11 +20,10 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     }
 
     if (!loading && user) {
-      // Set a timeout to prevent infinite loading (5 seconds)
+      // Set a shorter timeout to prevent infinite loading (2 seconds)
       const timeout = setTimeout(() => {
-        console.warn('Profile check timeout - allowing access');
         setCheckingProfile(false);
-      }, 5000);
+      }, 2000);
       profileCheckTimeoutRef.current = timeout;
 
       // Fetch profile to check deactivated status with proper error handling
@@ -41,8 +40,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
           }
 
           if (error) {
-            console.error('Error checking profile status:', error);
-            // If we can't check the profile, allow access but log the error
+            // If we can't check the profile, allow access
             setCheckingProfile(false);
           } else if (data?.deactivated) {
             navigate('/deactivated', { replace: true });
@@ -50,15 +48,14 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
             setCheckingProfile(false);
           }
         })
-        .catch((error) => {
+        .catch(() => {
           // Clear the timeout since we got an error
           if (profileCheckTimeoutRef.current) {
             clearTimeout(profileCheckTimeoutRef.current);
             profileCheckTimeoutRef.current = null;
           }
 
-          console.error('Error checking profile status:', error);
-          // If there's an error, allow access but log the error
+          // If there's an error, allow access
           setCheckingProfile(false);
         });
     } else if (!loading && !user) {

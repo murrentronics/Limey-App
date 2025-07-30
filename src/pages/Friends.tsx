@@ -21,7 +21,6 @@ const AutoPlayVideo = ({ src, className, globalMuted, ...props }: { src: string;
     try {
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        console.log('Wake lock activated');
       }
     } catch (err) {
       console.error('Failed to request wake lock:', err);
@@ -33,7 +32,6 @@ const AutoPlayVideo = ({ src, className, globalMuted, ...props }: { src: string;
       try {
         await wakeLockRef.current.release();
         wakeLockRef.current = null;
-        console.log('Wake lock released');
       } catch (err) {
         console.error('Failed to release wake lock:', err);
       }
@@ -157,7 +155,6 @@ const Friends = () => {
 
 
   useEffect(() => {
-    console.log("Friends - fetching videos from followed users");
     fetchFriendsVideos();
   }, [user]);
 
@@ -165,8 +162,6 @@ const Friends = () => {
 
   const fetchFriendsVideos = async () => {
     if (!user) return;
-
-    console.log("Friends - fetchFriendsVideos called");
     try {
       setLoading(true);
       setError(null);
@@ -184,13 +179,11 @@ const Friends = () => {
       }
 
       if (!follows || follows.length === 0) {
-        console.log('User is not following anyone');
         setVideos([]);
         return;
       }
 
       const followingUserIds = follows.map(f => f.following_id);
-      console.log('Following user IDs:', followingUserIds);
 
       // Fetch videos only from users that the current user is following
       const { data: videos, error: videosError } = await supabase
@@ -220,7 +213,6 @@ const Friends = () => {
       }
 
       if (!videos || videos.length === 0) {
-        console.log('No videos found from followed users');
         setVideos([]);
         return;
       }
@@ -259,7 +251,6 @@ const Friends = () => {
 
       // Filter out videos from deactivated profiles
       const filteredVideos = videosWithProfiles.filter(v => v.profiles && !v.profiles.deactivated);
-      console.log('Filtered videos from followed users (non-deactivated):', filteredVideos.length);
 
       // Initialize counts from the fetched data
       const initialLikeCounts = {};
