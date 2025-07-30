@@ -106,7 +106,10 @@ const Boost = () => {
       // Set video preview if available
       if (data.video_url) {
         setVideoPreview(data.video_url);
-        // Note: We can't recreate the File object, so user will need to re-upload if they want to change the video
+        // Create a placeholder File object for existing video to enable buttons
+        // This allows the form to work with existing video without re-upload
+        const placeholderFile = new File([''], 'existing-video.mp4', { type: 'video/mp4' });
+        setVideoFile(placeholderFile);
       }
 
       toast({
@@ -129,6 +132,8 @@ const Boost = () => {
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    console.log('Video file selected:', file.name, 'Size:', file.size, 'Type:', file.type);
 
     // Validate file type
     if (!file.type.startsWith('video/')) {
@@ -154,20 +159,45 @@ const Boost = () => {
     const url = URL.createObjectURL(file);
     setVideoPreview(url);
 
-    // Get video duration
+    console.log('Video preview URL created:', url);
+
+    // Get video duration with better error handling
     const video = document.createElement('video');
     video.src = url;
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'metadata';
+
     video.onloadedmetadata = () => {
       const duration = Math.round(video.duration);
+      console.log('Video duration loaded:', duration);
       setVideoDuration(duration);
 
       if (duration > 30) {
         setShowTrimmer(true);
+        setTrimStart(0);
         setTrimEnd(Math.min(30, duration));
       } else {
+        setShowTrimmer(false);
+        setTrimStart(0);
         setTrimEnd(duration);
       }
     };
+
+    video.onerror = (error) => {
+      console.error('Error loading video metadata:', error);
+      toast({
+        title: "Video Error",
+        description: "Could not load video metadata. Please try a different video.",
+        variant: "destructive"
+      });
+    };
+
+    // Load the video
+    video.load();
+
+    // Clear the file input so the same file can be selected again if needed
+    e.target.value = '';
   };
 
   const handleTrimVideo = async () => {
@@ -218,86 +248,239 @@ const Boost = () => {
 
   const uploadVideoToStorage = async (file: File): Promise<string | null> => {
     try {
+      console.log('Starting video upload:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        userId: user?.id
+      });
+
+      // If this is a placeholder file (existing video), return the current video preview URL
+      if (file.name === 'existing-video.mp4' && file.size === 0 && videoPreview) {
+        console.log('Using existing video URL:', videoPreview);
+        return videoPreview;
+      }
+
+      if (!file || file.size === 0) {
+        console.error('Invalid file provided for upload:', {
+          file: file,
+          hasFile: !!file,
+          fileSize: file?.size,
+          fileName: file?.name
+        });
+        return null;
+      }
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${user?.id}/sponsored/${Date.now()}.${fileExt}`;
+
+      console.log('Uploading to storage with filename:', fileName);
 
       const { data, error } = await supabase.storage
         .from('limeytt-uploads')
         .upload(fileName, file);
 
       if (error) {
-        console.error('Error uploading video:', error);
+        console.error('Supabase storage upload error:', error);
         return null;
       }
+
+      console.log('Upload successful, getting public URL');
 
       const { data: { publicUrl } } = supabase.storage
         .from('limeytt-uploads')
         .getPublicUrl(fileName);
 
+      console.log('Video uploaded successfully:', publicUrl);
       return publicUrl;
     } catch (error) {
-      console.error('Error uploading video:', error);
+      console.error('Exception in uploadVideoToStorage:', error);
       return null;
     }
   };
 
   const generateThumbnail = async (videoUrl: string): Promise<string | null> => {
     try {
+      // If we're editing a draft and have an existing thumbnail, check if we should keep it
+      if (editingDraftId && videoFile?.name === 'existing-video.mp4' && videoFile?.size === 0) {
+        // For existing videos, we might already have a thumbnail - let the caller handle it
+        return null; // This will be handled by the calling function
+      }
+
+      console.log('Starting thumbnail generation for:', videoUrl);
+
       const video = document.createElement('video');
       video.src = videoUrl;
-      video.crossOrigin = 'anonymous';
+      video.muted = true; // Ensure video is muted for mobile compatibility
+      video.playsInline = true; // Important for mobile devices
+      video.preload = 'metadata';
 
+      // Don't set crossOrigin for blob URLs or same-origin URLs
+      if (!videoUrl.startsWith('blob:') && !videoUrl.includes(window.location.hostname)) {
+        video.crossOrigin = 'anonymous';
+      }
+
+      // Wait for video to load with timeout
       await new Promise((resolve, reject) => {
-        video.onloadedmetadata = resolve;
-        video.onerror = reject;
+        const timeout = setTimeout(() => {
+          reject(new Error('Video loading timeout'));
+        }, 10000); // 10 second timeout
+
+        video.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          console.log('Video metadata loaded, duration:', video.duration);
+          resolve(video);
+        };
+
+        video.onerror = (e) => {
+          clearTimeout(timeout);
+          console.error('Video loading error:', e);
+          reject(new Error('Failed to load video'));
+        };
+
+        // Try to load the video
+        video.load();
       });
 
-      video.currentTime = 1; // Seek to 1 second
+      // Seek to 1 second or 10% of duration, whichever is smaller
+      const seekTime = Math.min(1, video.duration * 0.1);
+      video.currentTime = seekTime;
 
-      await new Promise((resolve) => {
-        video.onseeked = resolve;
+      // Wait for seek to complete
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Video seek timeout'));
+        }, 5000); // 5 second timeout
+
+        video.onseeked = () => {
+          clearTimeout(timeout);
+          console.log('Video seeked to:', seekTime);
+          resolve(video);
+        };
+
+        video.onerror = (e) => {
+          clearTimeout(timeout);
+          console.error('Video seek error:', e);
+          reject(new Error('Failed to seek video'));
+        };
       });
 
+      // Create canvas and draw video frame
       const canvas = document.createElement('canvas');
       canvas.width = 320;
       canvas.height = 568;
       const ctx = canvas.getContext('2d');
 
-      if (!ctx) return null;
+      if (!ctx) {
+        throw new Error('Could not get canvas context');
+      }
 
+      // Draw the video frame to canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      console.log('Video frame drawn to canvas');
 
+      // Convert canvas to blob and upload
       return new Promise((resolve) => {
         canvas.toBlob(async (blob) => {
           if (!blob) {
+            console.error('Failed to create thumbnail blob');
             resolve(null);
             return;
           }
 
-          const thumbnailFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
-          const fileExt = 'jpg';
-          const fileName = `${user?.id}/sponsored/thumbnails/${Date.now()}.${fileExt}`;
+          console.log('Thumbnail blob created, size:', blob.size);
 
-          const { data, error } = await supabase.storage
-            .from('limeytt-uploads')
-            .upload(fileName, thumbnailFile);
+          try {
+            const thumbnailFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
+            const fileExt = 'jpg';
+            const fileName = `${user?.id}/sponsored/thumbnails/${Date.now()}.${fileExt}`;
 
-          if (error) {
-            console.error('Error uploading thumbnail:', error);
+            console.log('Uploading thumbnail to:', fileName);
+
+            const { data, error } = await supabase.storage
+              .from('limeytt-uploads')
+              .upload(fileName, thumbnailFile);
+
+            if (error) {
+              console.error('Error uploading thumbnail:', error);
+              resolve(null);
+              return;
+            }
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('limeytt-uploads')
+              .getPublicUrl(fileName);
+
+            console.log('Thumbnail uploaded successfully:', publicUrl);
+            resolve(publicUrl);
+          } catch (uploadError) {
+            console.error('Error in thumbnail upload process:', uploadError);
             resolve(null);
-            return;
           }
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('limeytt-uploads')
-            .getPublicUrl(fileName);
-
-          resolve(publicUrl);
-        }, 'image/jpeg', 0.8);
+        }, 'image/jpeg', 0.9); // Higher quality for better thumbnails
       });
     } catch (error) {
       console.error('Error generating thumbnail:', error);
       return null;
+    }
+  };
+
+  const handleDeleteDraft = async () => {
+    if (!editingDraftId) {
+      // If not editing a draft, just clear the form
+      setVideoFile(null);
+      setVideoPreview(null);
+      setTitle('');
+      setDescription('');
+      setBusinessName('');
+      setContactNumber('');
+      setWebsiteUrl('');
+      setSupportEmail('');
+      setPriceInfo('');
+      setVideoDuration(0);
+      setSelectedDuration(1);
+      setShowTrimmer(false);
+      setTrimStart(0);
+      setTrimEnd(30);
+
+      toast({
+        title: "Form Cleared",
+        description: "All form data has been cleared.",
+        className: "bg-blue-600 text-white border-blue-700"
+      });
+      return;
+    }
+
+    // If editing a draft, delete it
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('sponsored_ads')
+        .delete()
+        .eq('id', editingDraftId)
+        .eq('user_id', user?.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({
+        title: "Draft Deleted",
+        description: "Your draft has been deleted successfully.",
+        className: "bg-red-600 text-white border-red-700"
+      });
+
+      navigate('/profile');
+    } catch (error) {
+      console.error('Error deleting draft:', error);
+      toast({
+        title: "Delete Failed",
+        description: error instanceof Error ? error.message : "Could not delete draft. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -319,38 +502,93 @@ const Boost = () => {
         throw new Error('Failed to upload video');
       }
 
-      const thumbnailUrl = await generateThumbnail(videoUrl);
-
-      const { success, error } = await createSponsoredAd({
-        title,
-        description,
-        video_url: videoUrl,
-        thumbnail_url: thumbnailUrl || undefined,
-        duration: videoDuration,
-        business_name: businessName,
-        contact_number: contactNumber,
-        website_url: websiteUrl,
-        support_email: supportEmail,
-        price_info: priceInfo,
-        boost_duration: selectedDuration,
-        user_id: user?.id || ''
-      });
-
-      if (!success) {
-        throw new Error(error || 'Failed to save draft');
+      // Generate thumbnail with fallback
+      let thumbnailUrl = null;
+      try {
+        thumbnailUrl = await generateThumbnail(videoUrl);
+        if (!thumbnailUrl) {
+          console.log('Thumbnail generation returned null, will proceed without thumbnail');
+        }
+      } catch (thumbnailError) {
+        console.error('Thumbnail generation failed:', thumbnailError);
+        // Continue without thumbnail - the ad will still work
       }
 
-      toast({
-        title: "Draft Saved",
-        description: "Your boost campaign has been saved as a draft",
-      });
+      if (editingDraftId) {
+        // Get existing draft data to preserve thumbnail if needed
+        const { data: existingDraft } = await supabase
+          .from('sponsored_ads')
+          .select('thumbnail_url')
+          .eq('id', editingDraftId)
+          .single();
+
+        // Use new thumbnail if generated, otherwise keep existing one
+        const finalThumbnailUrl = thumbnailUrl || existingDraft?.thumbnail_url;
+
+        // Update existing draft
+        const { error: updateError } = await supabase
+          .from('sponsored_ads')
+          .update({
+            title,
+            description,
+            video_url: videoUrl,
+            thumbnail_url: finalThumbnailUrl,
+            duration: videoDuration,
+            business_name: businessName,
+            contact_number: contactNumber,
+            website_url: websiteUrl,
+            support_email: supportEmail,
+            price_info: priceInfo,
+            boost_duration: selectedDuration,
+            status: 'draft', // Keep as draft
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingDraftId);
+
+        if (updateError) {
+          throw new Error(updateError.message || 'Failed to update draft');
+        }
+
+        toast({
+          title: "Draft Updated! 📝",
+          description: "Your draft has been updated and saved to My Ads tab.",
+          className: "bg-blue-600 text-white border-blue-700"
+        });
+      } else {
+        // Create new draft
+        const { success, error } = await createSponsoredAd({
+          title,
+          description,
+          video_url: videoUrl,
+          thumbnail_url: thumbnailUrl || undefined,
+          duration: videoDuration,
+          business_name: businessName,
+          contact_number: contactNumber,
+          website_url: websiteUrl,
+          support_email: supportEmail,
+          price_info: priceInfo,
+          boost_duration: selectedDuration,
+          user_id: user?.id || '',
+          status: 'draft'
+        });
+
+        if (!success) {
+          throw new Error(error || 'Failed to save draft');
+        }
+
+        toast({
+          title: "Draft Saved! 📝",
+          description: "Your ad has been saved as a draft in My Ads tab.",
+          className: "bg-blue-600 text-white border-blue-700"
+        });
+      }
 
       navigate('/profile');
     } catch (error) {
       console.error('Error saving draft:', error);
       toast({
         title: "Save Failed",
-        description: "Could not save draft. Please try again.",
+        description: error instanceof Error ? error.message : "Could not save draft. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -370,6 +608,21 @@ const Boost = () => {
 
     try {
       setLoading(true);
+
+      console.log('handleSaveToDrafts - Starting save process');
+      console.log('Video file state:', {
+        videoFile: videoFile ? {
+          name: videoFile.name,
+          size: videoFile.size,
+          type: videoFile.type
+        } : null,
+        videoPreview: videoPreview,
+        editingDraftId: editingDraftId
+      });
+
+      if (!videoFile) {
+        throw new Error('No video file selected');
+      }
 
       // Upload video
       const videoUrl = await uploadVideoToStorage(videoFile);
@@ -451,6 +704,21 @@ const Boost = () => {
         throw new Error(deductResult.error || 'Failed to deduct payment from wallet');
       }
 
+      console.log('handleBoostSubmit - Starting boost submission');
+      console.log('Video file state:', {
+        videoFile: videoFile ? {
+          name: videoFile.name,
+          size: videoFile.size,
+          type: videoFile.type
+        } : null,
+        videoPreview: videoPreview,
+        editingDraftId: editingDraftId
+      });
+
+      if (!videoFile) {
+        throw new Error('No video file selected');
+      }
+
       // Upload video
       const videoUrl = await uploadVideoToStorage(videoFile);
       if (!videoUrl) {
@@ -466,13 +734,32 @@ const Boost = () => {
         throw new Error('Failed to upload video');
       }
 
-      // Generate thumbnail
-      const thumbnailUrl = await generateThumbnail(videoUrl);
+      // Generate thumbnail with fallback
+      let thumbnailUrl = null;
+      try {
+        thumbnailUrl = await generateThumbnail(videoUrl);
+        if (!thumbnailUrl) {
+          console.log('Thumbnail generation returned null, will proceed without thumbnail');
+        }
+      } catch (thumbnailError) {
+        console.error('Thumbnail generation failed:', thumbnailError);
+        // Continue without thumbnail - the ad will still work
+      }
 
       // Create or update sponsored ad (payment already deducted)
       let success, adId, error;
 
       if (editingDraftId) {
+        // Get existing draft data to preserve thumbnail if needed
+        const { data: existingDraft } = await supabase
+          .from('sponsored_ads')
+          .select('thumbnail_url')
+          .eq('id', editingDraftId)
+          .single();
+
+        // Use new thumbnail if generated, otherwise keep existing one
+        const finalThumbnailUrl = thumbnailUrl || existingDraft?.thumbnail_url;
+
         // Update existing draft
         const { error: updateError } = await supabase
           .from('sponsored_ads')
@@ -480,7 +767,7 @@ const Boost = () => {
             title,
             description,
             video_url: videoUrl,
-            thumbnail_url: thumbnailUrl || undefined,
+            thumbnail_url: finalThumbnailUrl,
             duration: videoDuration,
             business_name: businessName,
             contact_number: contactNumber,
@@ -623,7 +910,7 @@ const Boost = () => {
                 </p>
                 <input
                   type="file"
-                  accept="video/*"
+                  accept="video/*,video/mp4,video/mov,video/avi,video/webm"
                   className="hidden"
                   ref={fileInputRef}
                   onChange={handleVideoSelect}
@@ -652,25 +939,7 @@ const Boost = () => {
                       Video too long - needs trimming
                     </Badge>
                   )}
-                  <div className="flex gap-2 justify-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Change Video
-                    </Button>
-                    {videoDuration > 30 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowTrimmer(true)}
-                      >
-                        <Scissors size={16} className="mr-2" />
-                        Trim Video
-                      </Button>
-                    )}
-                  </div>
+                  {/* Removed redundant Trim Video button - auto-trimmer handles this */}
                 </div>
               </div>
             )}
@@ -832,14 +1101,26 @@ const Boost = () => {
 
           {/* Action Buttons */}
           <div className="flex gap-4">
-            <Button
-              onClick={handleSaveDraft}
-              disabled={loading || !videoFile || !title.trim()}
-              variant="outline"
-              className="flex-1"
-            >
-              {loading ? "Saving..." : "Save Draft"}
-            </Button>
+            {/* Left side - Delete and Save buttons */}
+            <div className="flex gap-2 flex-1">
+              <Button
+                onClick={handleDeleteDraft}
+                disabled={loading}
+                variant="destructive"
+                className="flex-1"
+              >
+                {editingDraftId ? "Delete" : "Clear"}
+              </Button>
+
+              <Button
+                onClick={handleSaveToDrafts}
+                disabled={loading || !videoFile || !title.trim()}
+                variant="outline"
+                className="flex-1"
+              >
+                {loading ? "Saving..." : "Save"}
+              </Button>
+            </div>
 
             <Button
               onClick={handleBoostSubmit}

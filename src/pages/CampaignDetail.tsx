@@ -145,26 +145,40 @@ const CampaignDetail = () => {
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-md border-b border-white/10 p-4">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/ad-stats')}
-            className="p-2"
-          >
-            <ArrowLeft size={20} className="text-white" />
-          </Button>
-          <span
-            className="text-2xl font-black text-white tracking-wider logo-text-glow"
-            style={{
-              fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-              fontWeight: '900',
-              letterSpacing: '0.15em',
-              filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
-            }}
-          >
-            Campaign Details
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/ad-stats')}
+              className="p-2"
+            >
+              <ArrowLeft size={20} className="text-white" />
+            </Button>
+            <span
+              className="text-2xl font-black text-white tracking-wider logo-text-glow"
+              style={{
+                fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                fontWeight: '900',
+                letterSpacing: '0.15em',
+                filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
+              }}
+            >
+              Campaign Details
+            </span>
+          </div>
+          
+          {/* Edit Button - Only show for drafts */}
+          {campaign?.status === 'draft' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/boost?draft=${campaign.id}`)}
+              className="text-white border-white/50 hover:bg-white/10"
+            >
+              Edit
+            </Button>
+          )}
         </div>
       </div>
 

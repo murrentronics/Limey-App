@@ -152,6 +152,42 @@ const Friends = () => {
   const { user } = useAuth();
   const { toast } = useToast();
 
+  // Add fire animation CSS
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fire-glow {
+        0%, 100% { 
+          filter: drop-shadow(0 0 5px #ff6b35) drop-shadow(0 0 10px #ff8c42) drop-shadow(0 0 15px #ffa726);
+          transform: rotate(-1deg) scale(1);
+        }
+        25% { 
+          filter: drop-shadow(0 0 8px #ff5722) drop-shadow(0 0 15px #ff7043) drop-shadow(0 0 20px #ffab40);
+          transform: rotate(1deg) scale(1.05);
+        }
+        50% { 
+          filter: drop-shadow(0 0 6px #ff6b35) drop-shadow(0 0 12px #ff8c42) drop-shadow(0 0 18px #ffa726);
+          transform: rotate(-0.5deg) scale(1.02);
+        }
+        75% { 
+          filter: drop-shadow(0 0 9px #ff5722) drop-shadow(0 0 16px #ff7043) drop-shadow(0 0 22px #ffab40);
+          transform: rotate(0.5deg) scale(1.03);
+        }
+      }
+      
+      .animate-fire {
+        animation: fire-glow 2s ease-in-out infinite;
+        display: inline-block;
+        transform-origin: center bottom;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
 
 
   useEffect(() => {
@@ -607,7 +643,7 @@ const Friends = () => {
               className="text-white hover:bg-white/10"
               aria-label="Trending"
             >
-              <TrendingUp size={20} />
+              <span className="animate-fire text-xl">🔥</span>
             </Button>
             {/* Live Button */}
             <Button

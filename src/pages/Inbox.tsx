@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, MoreVertical, Trash2, MessageSquare } from "lucide-react";
+import { ArrowLeft, MoreVertical, Trash2, MessageSquare, Bell, Heart, Shield, UserPlus } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useToast } from "@/hooks/use-toast";
@@ -12,10 +13,13 @@ const Inbox = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [chats, setChats] = useState<any[]>([]);
+  const [systemNotifications, setSystemNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [systemLoading, setSystemLoading] = useState(false);
   const [showMenu, setShowMenu] = useState<string | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<{ [chatId: string]: number }>({});
-  const [lastChecked, setLastChecked] = useState<{ [chatId: string]: string }>({});
+  const [totalInboxUnread, setTotalInboxUnread] = useState(0);
+  const [totalSystemUnread, setTotalSystemUnread] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: 'deleteChat';
@@ -26,25 +30,86 @@ const Inbox = () => {
   useEffect(() => {
     if (user) {
       fetchChats();
+      fetchUnreadCounts();
       const cleanup = subscribeToChats();
-
-      // Start periodic checking for new messages
-      const interval = setInterval(() => {
-        checkForNewMessages();
-      }, 10000); // Check every 10 seconds
-
-      // Initial check for unread messages after a short delay
-      const initialCheck = setTimeout(() => {
-        checkForNewMessages();
-      }, 2000);
 
       return () => {
         cleanup();
-        clearInterval(interval);
-        clearTimeout(initialCheck);
       };
     }
   }, [user]);
+
+  // Fetch unread counts for all chats
+  const fetchUnreadCounts = async () => {
+    if (!user) return;
+    
+    try {
+      // Get unread counts for each chat
+      const chatIds = chats.map(chat => chat.id);
+      if (chatIds.length === 0) return;
+
+      const { data: unreadData, error } = await supabase
+        .from('messages')
+        .select('chat_id')
+        .in('chat_id', chatIds)
+        .eq('receiver_id', user.id)
+        .eq('read_by_receiver', false)
+        .eq('deleted_for_receiver', false)
+        .eq('deleted_for_everyone', false);
+
+      if (error) {
+        console.error('Error fetching unread counts:', error);
+        return;
+      }
+
+      // Count unread messages per chat
+      const counts: { [chatId: string]: number } = {};
+      let totalUnread = 0;
+      
+      unreadData?.forEach(msg => {
+        counts[msg.chat_id] = (counts[msg.chat_id] || 0) + 1;
+        totalUnread++;
+      });
+
+      setUnreadCounts(counts);
+      setTotalInboxUnread(totalUnread);
+    } catch (error) {
+      console.error('Error fetching unread counts:', error);
+    }
+  };
+
+  // Fetch system notifications
+  const fetchSystemNotifications = async () => {
+    if (!user) return;
+    
+    try {
+      setSystemLoading(true);
+      const { data, error } = await supabase
+        .from('system_notifications')
+        .select(`
+          *,
+          from_user:profiles!system_notifications_from_user_id_fkey(username, avatar_url)
+        `)
+        .eq('to_user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error('Error fetching system notifications:', error);
+      } else {
+        setSystemNotifications(data || []);
+        // Count unread system notifications
+        const unreadSystemCount = (data || []).filter(notif => !notif.read).length;
+        setTotalSystemUnread(unreadSystemCount);
+      }
+    } catch (error) {
+      console.error('Error fetching system notifications:', error);
+    } finally {
+      setSystemLoading(false);
+    }
+  };
+
+
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -138,6 +203,9 @@ const Inbox = () => {
           return { ...chat, last_visible_message: lastVisible };
         });
         setChats(chatsWithLastVisible);
+        
+        // Fetch unread counts after chats are loaded
+        setTimeout(() => fetchUnreadCounts(), 100);
       }
     } catch (error) {
       console.error('Error fetching chats:', error);
@@ -248,9 +316,30 @@ const Inbox = () => {
           ...prev,
           [payload.new.chat_id]: (prev[payload.new.chat_id] || 0) + 1
         }));
+        
+        // Increment total inbox unread count
+        setTotalInboxUnread(prev => prev + 1);
 
         // Update the last message for this chat
         await updateLastMessageForChat(payload.new.chat_id);
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: `receiver_id=eq.${user?.id}`
+      }, async (payload) => {
+        // Handle message read status updates
+        if (payload.new.read_by_receiver && !payload.old.read_by_receiver) {
+          // Message was marked as read
+          setUnreadCounts(prev => ({
+            ...prev,
+            [payload.new.chat_id]: Math.max(0, (prev[payload.new.chat_id] || 0) - 1)
+          }));
+          
+          // Decrement total inbox unread count
+          setTotalInboxUnread(prev => Math.max(0, prev - 1));
+        }
       })
       .subscribe((status) => {
         console.log('Chats subscription status:', status);
@@ -367,10 +456,24 @@ const Inbox = () => {
     setShowMenu(null);
   };
 
-  const handleOpenChat = (chatId: string) => {
-    // Clear unread count when opening chat
-    setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
-    setLastChecked(prev => ({ ...prev, [chatId]: new Date().toISOString() }));
+  const handleOpenChat = async (chatId: string) => {
+    // Mark messages as read when opening chat
+    try {
+      const { error } = await supabase.rpc('mark_messages_as_read', {
+        chat_id_param: chatId,
+        user_id_param: user?.id
+      });
+
+      if (!error) {
+        // Clear unread count locally
+        const currentUnread = unreadCounts[chatId] || 0;
+        setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
+        setTotalInboxUnread(prev => Math.max(0, prev - currentUnread));
+      }
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+    
     navigate(`/chat/${chatId}`);
     setShowMenu(null);
   };
@@ -438,47 +541,46 @@ const Inbox = () => {
     }
   };
 
-  const checkForNewMessages = async () => {
-    if (!user || chats.length === 0) return;
 
+
+
+
+  // Mark system notification as read
+  const markNotificationAsRead = async (notificationId: string) => {
     try {
-      const chatIds = chats.map(chat => chat.id);
+      const { error } = await supabase
+        .from('system_notifications')
+        .update({ read: true })
+        .eq('id', notificationId);
 
-      // Get the last message timestamp for each chat
-      const { data: lastMessages, error } = await supabase
-        .from('messages')
-        .select('chat_id, created_at')
-        .in('chat_id', chatIds)
-        .order('created_at', { ascending: false })
-        .limit(chatIds.length * 10); // Get recent messages for all chats
-
-      if (error) {
-        console.error('Error checking for new messages:', error);
-        return;
+      if (!error) {
+        setSystemNotifications(prev => 
+          prev.map(notif => 
+            notif.id === notificationId 
+              ? { ...notif, read: true }
+              : notif
+          )
+        );
+        
+        // Decrement system unread count
+        setTotalSystemUnread(prev => Math.max(0, prev - 1));
       }
-
-      // Group messages by chat and find the latest message for each
-      const latestMessages = new Map();
-      lastMessages?.forEach(message => {
-        if (!latestMessages.has(message.chat_id)) {
-          latestMessages.set(message.chat_id, message.created_at);
-        }
-      });
-
-      // Update unread counts based on last checked times
-      const newUnreadCounts: { [chatId: string]: number } = {};
-      chats.forEach(chat => {
-        const lastMessageTime = latestMessages.get(chat.id);
-        const lastCheckedTime = lastChecked[chat.id];
-
-        if (lastMessageTime && (!lastCheckedTime || new Date(lastMessageTime) > new Date(lastCheckedTime))) {
-          newUnreadCounts[chat.id] = (unreadCounts[chat.id] || 0) + 1;
-        }
-      });
-
-      setUnreadCounts(prev => ({ ...prev, ...newUnreadCounts }));
     } catch (error) {
-      console.error('Error checking for new messages:', error);
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Get notification icon based on type
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'like':
+        return <Heart size={16} className="text-red-400" />;
+      case 'follow':
+        return <UserPlus size={16} className="text-blue-400" />;
+      case 'admin':
+        return <Shield size={16} className="text-yellow-400" />;
+      default:
+        return <Bell size={16} className="text-gray-400" />;
     }
   };
 
@@ -502,140 +604,227 @@ const Inbox = () => {
         </div>
       </div>
 
-      {/* Chat List */}
+      {/* Tabs Content */}
       <div className="pt-20 pb-24">
-        {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-          </div>
-        ) : chats.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MessageSquare size={24} />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
-            <p className="text-white/70 mb-4">
-              Start a conversation with someone!
-            </p>
-            <Button
-              variant="outline"
-              onClick={fetchChats}
-              className="border-white/20 text-white hover:bg-white/10"
-            >
-              Refresh
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-0">
-            {chats.map((chat) => {
-              const partner = getChatPartner(chat);
-              if (!partner) return null;
+        <Tabs defaultValue="inbox" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mx-4 mb-4">
+            <TabsTrigger value="inbox" className="flex items-center gap-2">
+              <MessageSquare size={16} />
+              Inbox
+              {totalInboxUnread > 0 && (
+                <span className="bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold ml-1">
+                  {totalInboxUnread > 99 ? '99+' : totalInboxUnread}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="system" className="flex items-center gap-2" onClick={fetchSystemNotifications}>
+              <Bell size={16} />
+              System
+              {totalSystemUnread > 0 && (
+                <span className="bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold ml-1">
+                  {totalSystemUnread > 99 ? '99+' : totalSystemUnread}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-              // In the chat list rendering, use:
-              <p className="text-sm text-white/70 truncate">
-                {getLastMessage(chat)}
-              </p>
-
-              return (
-                <div
-                  key={chat.id}
-                  className="flex items-center p-4 border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/chat/${chat.id}`)}
+          {/* Inbox Tab */}
+          <TabsContent value="inbox">
+            {loading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              </div>
+            ) : chats.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <MessageSquare size={24} />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">No messages yet</h3>
+                <p className="text-white/70 mb-4">
+                  Start a conversation with someone!
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={fetchChats}
+                  className="border-white/20 text-white hover:bg-white/10"
                 >
-                  {/* Avatar */}
-                  <div className="relative mr-3">
-                    <Avatar className="w-12 h-12">
-                      <AvatarImage src={partner.avatar_url} alt={partner.username} />
-                      <AvatarFallback className="bg-white/10 text-white">
-                        {partner.username?.charAt(0).toUpperCase() || 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    {/* Unread message count badge */}
-                    {unreadCounts[chat.id] > 0 && (
-                      <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold">
-                        {unreadCounts[chat.id] > 99 ? '99+' : unreadCounts[chat.id]}
-                      </div>
-                    )}
-                  </div>
+                  Refresh
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-0">
+                {chats.map((chat) => {
+                  const partner = getChatPartner(chat);
+                  if (!partner) return null;
 
-                  {/* Chat Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="font-semibold text-white truncate">
-                        @{partner.username || 'unknown'}
-                      </h3>
-                      <span className="text-xs text-white/60 flex-shrink-0 ml-2">
-                        {formatTime(chat.updated_at)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-white/70 truncate">
-                      {getLastMessage(chat)}
-                    </p>
-                  </div>
-
-                  {/* Three Dots Menu */}
-                  <div className="relative ml-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowMenu(showMenu === chat.id ? null : chat.id);
-                      }}
-                      className="text-white/60 hover:text-white p-2"
+                  return (
+                    <div
+                      key={chat.id}
+                      className="flex items-center p-4 border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors"
+                      onClick={() => handleOpenChat(chat.id)}
                     >
-                      <MoreVertical size={16} />
-                    </Button>
-
-                    {/* Dropdown Menu */}
-                    {showMenu === chat.id && (
-                      <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] border border-white/10" data-dropdown>
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 text-white"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenChat(chat.id);
-                          }}
-                        >
-                          <MessageSquare size={14} />
-                          Open Chat
-                        </button>
-                        {chat.sender_id === user?.id ? (
-                          <button
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteChat(chat.id);
-                            }}
-                          >
-                            <Trash2 size={14} />
-                            Delete Chat
-                          </button>
-                        ) : (
-                          <button
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toast({
-                                title: 'Not allowed',
-                                description: 'Only the creator of the chat can delete.',
-                                variant: 'destructive'
-                              });
-                              setShowMenu(null);
-                            }}
-                          >
-                            <Trash2 size={14} />
-                            Delete Chat
-                          </button>
+                      {/* Avatar */}
+                      <div className="relative mr-3">
+                        <Avatar className="w-12 h-12">
+                          <AvatarImage src={partner.avatar_url} alt={partner.username} />
+                          <AvatarFallback className="bg-white/10 text-white">
+                            {partner.username?.charAt(0).toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        {/* Unread message count badge */}
+                        {unreadCounts[chat.id] > 0 && (
+                          <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold">
+                            {unreadCounts[chat.id] > 99 ? '99+' : unreadCounts[chat.id]}
+                          </div>
                         )}
                       </div>
+
+                      {/* Chat Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="font-semibold text-white truncate">
+                            @{partner.username || 'unknown'}
+                          </h3>
+                          <span className="text-xs text-white/60 flex-shrink-0 ml-2">
+                            {formatTime(chat.updated_at)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-white/70 truncate">
+                          {getLastMessage(chat)}
+                        </p>
+                      </div>
+
+                      {/* Three Dots Menu */}
+                      <div className="relative ml-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowMenu(showMenu === chat.id ? null : chat.id);
+                          }}
+                          className="text-white/60 hover:text-white p-2"
+                        >
+                          <MoreVertical size={16} />
+                        </Button>
+
+                        {/* Dropdown Menu */}
+                        {showMenu === chat.id && (
+                          <div className="absolute top-full right-0 mt-2 bg-black/90 rounded-lg shadow-lg z-10 min-w-[140px] border border-white/10" data-dropdown>
+                            <button
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 text-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenChat(chat.id);
+                              }}
+                            >
+                              <MessageSquare size={14} />
+                              Open Chat
+                            </button>
+                            {chat.sender_id === user?.id ? (
+                              <button
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteChat(chat.id);
+                                }}
+                              >
+                                <Trash2 size={14} />
+                                Delete Chat
+                              </button>
+                            ) : (
+                              <button
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-white/10 text-red-400 flex items-center gap-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toast({
+                                    title: 'Not allowed',
+                                    description: 'Only the creator of the chat can delete.',
+                                    variant: 'destructive'
+                                  });
+                                  setShowMenu(null);
+                                }}
+                              >
+                                <Trash2 size={14} />
+                                Delete Chat
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* System Notifications Tab */}
+          <TabsContent value="system">
+            {systemLoading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              </div>
+            ) : systemNotifications.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Bell size={24} />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">No notifications</h3>
+                <p className="text-white/70">
+                  System notifications will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-0">
+                {systemNotifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`flex items-center p-4 border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${
+                      !notification.read ? 'bg-blue-900/20' : ''
+                    }`}
+                    onClick={() => markNotificationAsRead(notification.id)}
+                  >
+                    <div className="mr-3">
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                    
+                    {notification.from_user && (
+                      <div className="relative mr-3">
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={notification.from_user.avatar_url} alt={notification.from_user.username} />
+                          <AvatarFallback className="bg-white/10 text-white">
+                            {notification.from_user.username?.charAt(0).toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-semibold text-white truncate">
+                          {notification.title}
+                        </h3>
+                        <span className="text-xs text-white/60 flex-shrink-0 ml-2">
+                          {formatTime(notification.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-white/70">
+                        {notification.message}
+                      </p>
+                    </div>
+
+                    {!notification.read && (
+                      <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+
+        </Tabs>
       </div>
 
       {/* Confirmation Dialog */}

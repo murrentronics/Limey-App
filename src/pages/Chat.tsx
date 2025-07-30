@@ -200,6 +200,16 @@ const Chat = () => {
 
       console.log('Chat data:', data);
       setChat(data);
+      
+      // Mark messages as read when opening chat
+      try {
+        await supabase.rpc('mark_messages_as_read', {
+          chat_id_param: chatId,
+          user_id_param: user?.id
+        });
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+      }
     } catch (error) {
       console.error('Error fetching chat:', error);
       navigate('/inbox');

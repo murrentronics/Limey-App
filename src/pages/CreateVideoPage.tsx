@@ -84,7 +84,7 @@ const CreateVideoPage: React.FC = () => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [category, setCategory] = useState('Anime');
+  const [category, setCategory] = useState('All');
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -240,7 +240,7 @@ const CreateVideoPage: React.FC = () => {
       setVideoUrl(null);
       setTitle("");
       setDescription("");
-      setCategory('Anime');
+      setCategory('All');
       setCoverImageFile(null);
       setCoverImagePreview(null);
       navigate("/upload");
@@ -368,10 +368,11 @@ const CreateVideoPage: React.FC = () => {
               </label>
               <select
                 className="w-full border rounded px-3 py-2 bg-background text-foreground"
-                value={category || 'Anime'}
+                value={category || 'All'}
                 onChange={e => setCategory(e.target.value)}
                 required
               >
+                <option value="All">All</option>
                 <option value="Anime">Anime</option>
                 <option value="Bar Limes">Bar Limes</option>
                 <option value="Cartoon">Cartoon</option>

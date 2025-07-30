@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import BottomNavigation from "@/components/BottomNavigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Settings, TrendingUp, Eye, Trophy, Medal, Award } from "lucide-react";
+import { Settings, TrendingUp, Eye, Trophy, Medal, Award, Play } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
@@ -326,7 +326,7 @@ const Trending = () => {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border p-4">
+      <div className="sticky top-0 z-50 bg-background border-b border-border p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-primary flex items-center gap-2">
             <span className="animate-fire">🔥</span>
@@ -381,7 +381,7 @@ const Trending = () => {
             >
               {/* Top trending badge for top 3 */}
               {index < 3 && (
-                <div className="absolute top-2 right-2 z-20">
+                <div className="absolute top-2 right-2 z-10">
                   {index === 0 && (
                     <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-full px-2 py-1 shadow-lg">
                       <Trophy size={12} className="text-white" />
@@ -403,21 +403,21 @@ const Trending = () => {
                 </div>
               )}
 
-              {/* Top left: Creator avatar */}
-              <div className="absolute top-2 left-2 z-10">
-                <Avatar className="w-8 h-8 border-2 border-white shadow">
-                  <AvatarImage src={video.profiles?.avatar_url || undefined} alt={video.profiles?.username || video.user_id} />
-                  <AvatarFallback>{(video.profiles?.username || video.user_id)?.charAt(0).toUpperCase()}</AvatarFallback>
-                </Avatar>
-              </div>
-
-              {/* Video thumbnail or video preview */}
+              {/* Video with auto-play */}
               <div className="w-full h-full">
                 <AutoPlayVideo
                   src={video.video_url}
                   className="w-full h-full object-cover"
                   globalMuted={true}
                 />
+              </div>
+
+              {/* Top left: Creator avatar */}
+              <div className="absolute top-2 left-2 z-10">
+                <Avatar className="w-8 h-8 border-2 border-white shadow">
+                  <AvatarImage src={video.profiles?.avatar_url || undefined} alt={video.profiles?.username || video.user_id} />
+                  <AvatarFallback>{(video.profiles?.username || video.user_id)?.charAt(0).toUpperCase()}</AvatarFallback>
+                </Avatar>
               </div>
 
               {/* Bottom stats overlay */}

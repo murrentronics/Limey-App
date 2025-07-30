@@ -383,22 +383,9 @@ const Settings = () => {
             <CardTitle>Privacy</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="private">Private Account</Label>
-              <Switch
-                id="private"
-                checked={settings?.privacy_settings?.private_account || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    privacy_settings: {
-                      ...settings.privacy_settings,
-                      private_account: checked
-                    }
-                  })
-                }
-              />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Privacy settings will be available here in future updates.
+            </p>
           </CardContent>
         </Card>
 
