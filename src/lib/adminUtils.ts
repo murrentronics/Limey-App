@@ -270,7 +270,7 @@ export const approveSponsoredAd = async (adId: string): Promise<{ success: boole
         userId: adminId,
         transactionType: 'deposit',
         amount: adData.boost_cost,
-        description: `Ad Payment from ${username}`,
+        description: `Boost Credit from ${username}`,
         referenceId: `boost_revenue_${adId}`
       });
     } catch (paymentError) {
@@ -320,7 +320,7 @@ export const rejectSponsoredAd = async (adId: string): Promise<{ success: boolea
         userId: adData.user_id,
         transactionType: 'refund',
         amount: adData.boost_cost,
-        description: `Boost refund for "${adData.title}" - TT$${adData.boost_cost.toFixed(2)}`,
+        description: `Boost Refund - Ad Rejected: "${adData.title}"`,
         referenceId: `boost_refund_${adId}`
       });
     } catch (refundError) {

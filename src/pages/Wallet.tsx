@@ -122,7 +122,7 @@ export default function Wallet() {
         userId: user!.id,
         transactionType: "deposit",
         amount: amountValue,
-        description: `Deposit to Limey App`,
+        description: `Deposit from TrinEPay`,
         referenceId: depositResult.transaction_id || depositResult.id,
       });
       setSuccess("Deposit successful!");
@@ -166,7 +166,7 @@ export default function Wallet() {
         userId: user!.id,
         transactionType: "withdrawal",
         amount: amountValue,
-        description: `Withdrawal from Limey App`,
+        description: `Withdrawal to TrinEPay`,
         referenceId: withdrawResult.transaction_id || withdrawResult.id,
       });
       setSuccess("Withdrawal successful!");
@@ -290,8 +290,8 @@ export default function Wallet() {
                 className="bg-black/90 p-4 rounded-lg border border-white/10 flex justify-between items-center"
               >
                 <div>
-                  <div className="font-semibold capitalize">
-                    {tx.transaction_type}
+                  <div className="font-semibold">
+                    {tx.description || tx.transaction_type}
                   </div>
                   <div className="text-sm text-gray-400">
                     {new Date(tx.created_at).toLocaleString()}

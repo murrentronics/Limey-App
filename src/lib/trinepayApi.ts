@@ -233,7 +233,7 @@ export async function deductTrincredits(userId: string, amount: number): Promise
       userId,
       transactionType: 'withdrawal',
       amount,
-      description: `Ad Payment to Limey`,
+      description: `Debit for Boost`,
       referenceId: `boost_${Date.now()}`
     });
 

@@ -1040,6 +1040,12 @@ const Chat = () => {
                           >
                             Delete for everyone
                           </button>
+                          <button
+                            className="w-full px-3 py-2 text-sm hover:bg-white/10 text-white/70 rounded text-center border-t border-white/10 mt-2 pt-3"
+                            onClick={() => setShowMessageMenu(null)}
+                          >
+                            Cancel
+                          </button>
                         </div>
                       </div>
                     )}

@@ -460,7 +460,7 @@ const Boost = () => {
           userId: user?.id || '',
           transactionType: 'refund',
           amount: cost,
-          description: 'Refund for failed video upload',
+          description: 'Boost Refund - Video Upload Failed',
           referenceId: `failed_upload_${Date.now()}`
         });
         throw new Error('Failed to upload video');
@@ -526,7 +526,7 @@ const Boost = () => {
           userId: user?.id || '',
           transactionType: 'refund',
           amount: cost,
-          description: 'Refund for failed ad creation',
+          description: 'Boost Refund - Ad Creation Failed',
           referenceId: `failed_ad_${Date.now()}`
         });
         throw new Error(error || 'Failed to create sponsored ad');
