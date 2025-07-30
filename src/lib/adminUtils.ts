@@ -371,3 +371,79 @@ export const trackAdClick = async (adId: string, viewerId?: string) => {
     console.error('Error tracking ad click:', error);
   }
 };
+
+// Delete sponsored ad (user can only delete their own ads)
+export const deleteSponsoredAd = async (adId: string, userId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // First, get the ad details to verify ownership and get file URLs
+    const { data: adData, error: adError } = await (supabase as any)
+      .from('sponsored_ads')
+      .select('user_id, video_url, thumbnail_url, status, boost_cost, title')
+      .eq('id', adId)
+      .single();
+
+    if (adError || !adData) {
+      console.error('Error fetching ad details:', adError);
+      return { success: false, error: 'Ad not found' };
+    }
+
+    // Verify ownership
+    if (adData.user_id !== userId) {
+      return { success: false, error: 'You can only delete your own ads' };
+    }
+
+    // If ad is active or approved, refund the user
+    if (adData.status === 'active' || adData.status === 'approved') {
+      try {
+        await recordTrincreditsTransaction({
+          userId: userId,
+          transactionType: 'refund',
+          amount: adData.boost_cost,
+          description: `Boost Refund - Ad Deleted: "${adData.title}"`,
+          referenceId: `ad_delete_${adId}`
+        });
+      } catch (refundError) {
+        console.error('Error refunding user:', refundError);
+        return { success: false, error: 'Failed to process refund. Please contact support.' };
+      }
+    }
+
+    // Delete the ad from database
+    const { error: deleteError } = await (supabase as any)
+      .from('sponsored_ads')
+      .delete()
+      .eq('id', adId);
+
+    if (deleteError) {
+      console.error('Error deleting sponsored ad:', deleteError);
+      return { success: false, error: 'Failed to delete ad' };
+    }
+
+    // Delete video and thumbnail from storage
+    try {
+      if (adData.video_url) {
+        // Extract file path from URL
+        const videoPath = adData.video_url.split('/').pop();
+        if (videoPath) {
+          await supabase.storage.from('limeytt-uploads').remove([videoPath]);
+        }
+      }
+
+      if (adData.thumbnail_url) {
+        // Extract file path from URL
+        const thumbnailPath = adData.thumbnail_url.split('/').pop();
+        if (thumbnailPath) {
+          await supabase.storage.from('limeytt-uploads').remove([thumbnailPath]);
+        }
+      }
+    } catch (storageError) {
+      console.error('Error deleting files from storage:', storageError);
+      // Don't fail the operation if storage deletion fails
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting sponsored ad:', error);
+    return { success: false, error: 'Failed to delete ad' };
+  }
+};

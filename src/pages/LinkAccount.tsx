@@ -47,10 +47,14 @@ export default function LinkAccount() {
       setJwtValidated(validated);
       
       // Debug info
+      console.log('=== JWT Validation Debug ===');
       console.log('JWT Validation Info:', getJwtValidationInfo());
       console.log('JWT Validated:', validated);
       console.log('Stored Token Present:', !!storedToken);
       console.log('Token Length:', storedToken?.length || 0);
+      console.log('Raw validation value:', localStorage.getItem('wp_jwt_validated'));
+      console.log('Validation time:', localStorage.getItem('wp_jwt_validation_time'));
+      console.log('=== End Debug ===');
     };
     
     checkWalletLink();
@@ -216,6 +220,14 @@ export default function LinkAccount() {
       <div className="bg-black/90 p-6 rounded-lg w-full max-w-xs border border-white/10">
         <h2 className="text-lg font-bold text-white mb-4 text-center">Link TrinEPay Account</h2>
         
+        {/* Debug Info */}
+        <div className="mb-4 p-2 bg-gray-800 rounded text-xs text-gray-300">
+          <div>JWT Validated: {jwtValidated ? '✅ Yes' : '❌ No'}</div>
+          <div>User Email: {user?.email || 'None'}</div>
+          <div>Already Linked: {alreadyLinked ? 'Yes' : 'No'}</div>
+          <div>Status Loading: {statusLoading ? 'Yes' : 'No'}</div>
+        </div>
+        
         {/* Quick Link Option (when JWT is validated) */}
         {jwtValidated && (
           <div className="text-center">
@@ -259,9 +271,9 @@ export default function LinkAccount() {
         {!jwtValidated && (
           <div className="text-center">
             <div className="mb-4 p-4 bg-red-900/20 border border-red-500/20 rounded-lg">
-              <div className="text-red-400 text-lg mb-3">🔒 Account Mismatch</div>
+              <div className="text-red-400 text-lg mb-3">🔒 Authentication Required</div>
               <div className="text-white/90 text-sm mb-3 leading-relaxed">
-                Your Limey and TrinEPay account credentials don't match. To link your wallet securely, you need to:
+                To link your wallet securely, your Limey and TrinEPay accounts must have matching credentials. If they don't match yet, or if you haven't logged in recently:
               </div>
               <div className="text-left text-white/80 text-sm space-y-2 mb-4">
                 <div className="flex items-start gap-2">

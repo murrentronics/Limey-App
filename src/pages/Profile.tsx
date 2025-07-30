@@ -16,7 +16,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import clsx from "clsx";
-import { getUserSponsoredAds } from "@/lib/adminUtils";
+import { getUserSponsoredAds, deleteSponsoredAd } from "@/lib/adminUtils";
 
 const Profile = () => {
   const { user, signOut, isAdmin } = useAuth();
@@ -63,6 +63,7 @@ const Profile = () => {
   const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
   const [sponsoredAds, setSponsoredAds] = useState<any[]>([]);
   const [showAdMenu, setShowAdMenu] = useState<string | null>(null);
+  const [deletingAdId, setDeletingAdId] = useState<string | null>(null);
 
   const location = useLocation();
 
@@ -231,6 +232,8 @@ const Profile = () => {
     };
   }, [showUnfollowDropdown]);
 
+
+
   const fetchProfile = async () => {
     try {
       setLoading(true);
@@ -377,6 +380,43 @@ const Profile = () => {
     } catch (error) {
       console.error('Error fetching sponsored ads:', error);
       setSponsoredAds([]);
+    }
+  };
+
+  const handleDeleteAd = async (adId: string) => {
+    if (!user || deletingAdId) return;
+    
+    setDeletingAdId(adId);
+    setShowAdMenu(null);
+    
+    try {
+      const result = await deleteSponsoredAd(adId, user.id);
+      
+      if (result.success) {
+        // Remove the ad from the local state
+        setSponsoredAds(prev => prev.filter(ad => ad.id !== adId));
+        
+        toast({
+          title: "Ad Deleted",
+          description: "Your sponsored ad has been deleted successfully.",
+          className: "bg-green-600 text-white border-green-700"
+        });
+      } else {
+        toast({
+          title: "Delete Failed",
+          description: result.error || "Failed to delete ad. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting ad:', error);
+      toast({
+        title: "Delete Failed",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setDeletingAdId(null);
     }
   };
 
@@ -1232,40 +1272,43 @@ const Profile = () => {
                             <MoreVertical size={16} className="text-white" />
                           </Button>
 
-                          {/* Dropdown Menu */}
+                          {/* Dropdown Menu - Centered in card */}
                           {showAdMenu === ad.id && (
-                            <div className="absolute right-0 top-8 bg-black/90 backdrop-blur-md border border-white/10 rounded-lg py-2 min-w-[120px] z-20">
-                              <button
-                                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 flex items-center gap-2"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/campaign/${ad.id}`);
-                                  setShowAdMenu(null);
-                                }}
-                              >
-                                <TrendingUp size={14} />
-                                Statistics
-                              </button>
-                              <button
-                                className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-white/10 flex items-center gap-2"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // TODO: Add delete ad functionality
-                                  setShowAdMenu(null);
-                                }}
-                              >
-                                <Trash2 size={14} />
-                                Delete Ad
-                              </button>
-                              <button
-                                className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setShowAdMenu(null);
-                                }}
-                              >
-                                Cancel
-                              </button>
+                            <div className="fixed inset-0 z-30 flex items-center justify-center" onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAdMenu(null);
+                            }}>
+                              <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-lg py-2 min-w-[100px]" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  className="w-full px-3 py-2 text-center text-sm text-white hover:bg-white/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/campaign/${ad.id}`);
+                                    setShowAdMenu(null);
+                                  }}
+                                >
+                                  Statistics
+                                </button>
+                                <button
+                                  className="w-full px-3 py-2 text-center text-sm text-red-400 hover:bg-white/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteAd(ad.id);
+                                  }}
+                                  disabled={deletingAdId === ad.id}
+                                >
+                                  {deletingAdId === ad.id ? 'Deleting...' : 'Delete Ad'}
+                                </button>
+                                <button
+                                  className="w-full px-3 py-2 text-center text-sm text-white hover:bg-white/10"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowAdMenu(null);
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
