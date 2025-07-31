@@ -4,10 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
-import { MoreVertical, Settings, Send, Wallet, Heart, Bookmark, Eye, ChevronDown, X, TrendingUp, Trash2 } from "lucide-react";
+import { MoreVertical, Settings, Send, Wallet, Heart, Bookmark, Eye, ChevronDown, X, TrendingUp, Trash2, Plus, Check, UserMinus, Bell, Shield } from "lucide-react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import WalletModal from "@/components/WalletModal";
@@ -60,6 +63,19 @@ const Profile = () => {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [followingCount, setFollowingCount] = useState(0);
   const [followersCount, setFollowersCount] = useState(0);
+  const [followerFollowStatus, setFollowerFollowStatus] = useState<{ [userId: string]: boolean }>({});
+  const [pushNotification, setPushNotification] = useState({
+    type: 'all', // 'all' or 'individual'
+    targetUsername: '',
+    title: '',
+    message: ''
+  });
+  const [sendingPush, setSendingPush] = useState(false);
+  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [sentNotifications, setSentNotifications] = useState<any[]>([]);
+  const [loadingSentNotifications, setLoadingSentNotifications] = useState(false);
   const [viewCounts, setViewCounts] = useState<{ [key: string]: number }>({});
   const [sponsoredAds, setSponsoredAds] = useState<any[]>([]);
   const [showAdMenu, setShowAdMenu] = useState<string | null>(null);
@@ -169,7 +185,6 @@ const Profile = () => {
   // Fetch follow counts when profile loads
   useEffect(() => {
     if (profile?.user_id) {
-      console.log('Profile loaded, fetching initial follow counts');
       fetchFollowCounts();
     }
   }, [profile?.user_id]);
@@ -180,7 +195,6 @@ const Profile = () => {
 
     // Refresh counts every 30 seconds as a fallback
     const intervalId = setInterval(() => {
-      console.log('Periodic refresh of follow counts');
       fetchFollowCounts();
     }, 30000);
 
@@ -359,7 +373,7 @@ const Profile = () => {
         return;
       }
 
-      console.log('User videos fetched:', dbVideos?.length || 0, 'videos');
+
       setUserVideos(dbVideos || []);
 
       // Fetch view counts for the videos
@@ -385,17 +399,17 @@ const Profile = () => {
 
   const handleDeleteAd = async (adId: string) => {
     if (!user || deletingAdId) return;
-    
+
     setDeletingAdId(adId);
     setShowAdMenu(null);
-    
+
     try {
       const result = await deleteSponsoredAd(adId, user.id);
-      
+
       if (result.success) {
         // Remove the ad from the local state
         setSponsoredAds(prev => prev.filter(ad => ad.id !== adId));
-        
+
         toast({
           title: "Ad Deleted",
           description: "Your sponsored ad has been deleted successfully.",
@@ -527,7 +541,13 @@ const Profile = () => {
           .select('user_id, username, avatar_url, display_name')
           .in('user_id', followerIds);
 
-        setFollowers(profilesData || []);
+        const followersList = profilesData || [];
+        setFollowers(followersList);
+
+        // Check follow status for each follower
+        if (user && followersList.length > 0) {
+          checkFollowerFollowStatus(followersList);
+        }
       } else {
         setFollowers([]);
       }
@@ -585,21 +605,379 @@ const Profile = () => {
 
   // Remove user from followers
   const handleRemoveFollower = async (targetUserId: string) => {
+    if (!profile?.user_id) return;
+
     setRemovingId(targetUserId);
-    const { error } = await supabase.from('follows' as any).delete().eq('follower_id', targetUserId).eq('following_id', profile.user_id);
+
+    const { error } = await supabase
+      .from('follows')
+      .delete()
+      .eq('follower_id', targetUserId)
+      .eq('following_id', profile.user_id);
 
     if (!error) {
       // Update UI immediately for better user experience
-      setFollowers(followers.filter((u) => u.user_id !== targetUserId));
-      // The real-time subscription will handle updating the counts for all users
-      // But we also update locally for immediate feedback
+      setFollowers(prev => prev.filter((u) => u.user_id !== targetUserId));
       setFollowersCount(prev => Math.max(0, prev - 1));
+
       // Fetch the latest counts to ensure accuracy
       fetchFollowCounts();
+
+      toast({
+        title: 'Success',
+        description: 'Follower removed successfully'
+      });
+    } else {
+      console.error('Error removing follower:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove follower',
+        variant: 'destructive'
+      });
     }
 
     setRemovingId(null);
   };
+
+  // Check follow status for followers in the modal
+  const checkFollowerFollowStatus = async (followersList: any[]) => {
+    if (!user || followersList.length === 0) return;
+
+    try {
+      const followerIds = followersList.map(f => f.user_id);
+      const { data: followData, error } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+        .in('following_id', followerIds);
+
+      if (!error && followData) {
+        const followingSet = new Set(followData.map(f => f.following_id));
+        const statusMap: { [userId: string]: boolean } = {};
+
+        followersList.forEach(follower => {
+          statusMap[follower.user_id] = followingSet.has(follower.user_id);
+        });
+
+        setFollowerFollowStatus(statusMap);
+      }
+    } catch (error) {
+      console.error('Error checking follower follow status:', error);
+    }
+  };
+
+  // Handle follow/unfollow for followers in modal
+  const handleFollowerToggle = async (targetUserId: string) => {
+    if (!user || followLoading) return;
+
+    setFollowLoading(true);
+    const wasFollowing = followerFollowStatus[targetUserId];
+
+    try {
+      if (wasFollowing) {
+        // Unfollow
+        const { error } = await supabase
+          .from('follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', targetUserId);
+
+        if (!error) {
+          setFollowerFollowStatus(prev => ({ ...prev, [targetUserId]: false }));
+        }
+      } else {
+        // Follow
+        const { error } = await supabase
+          .from('follows')
+          .insert({
+            follower_id: user.id,
+            following_id: targetUserId
+          });
+
+        if (!error) {
+          setFollowerFollowStatus(prev => ({ ...prev, [targetUserId]: true }));
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling follow status:', error);
+    }
+
+    setFollowLoading(false);
+  };
+
+  // Search users function
+  const searchUsers = async (query: string) => {
+    if (query.length < 1) {
+      setUserSearchResults([]);
+      setShowUserDropdown(false);
+      return;
+    }
+
+    setSearchingUsers(true);
+    try {
+      const { data: users, error } = await supabase
+        .from('profiles')
+        .select('user_id, username, display_name, avatar_url')
+        .ilike('username', `%${query}%`)
+        .neq('user_id', user?.id) // Exclude current admin user
+        .limit(10);
+
+      if (!error && users) {
+        setUserSearchResults(users);
+        setShowUserDropdown(true);
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+    }
+    setSearchingUsers(false);
+  };
+
+  // Handle username input change
+  const handleUsernameChange = (value: string) => {
+    setPushNotification(prev => ({ ...prev, targetUsername: value }));
+    searchUsers(value);
+  };
+
+  // Select user from dropdown
+  const selectUser = (username: string) => {
+    setPushNotification(prev => ({ ...prev, targetUsername: username }));
+    setShowUserDropdown(false);
+    setUserSearchResults([]);
+  };
+
+  // Send push notification function
+  const sendPushNotification = async () => {
+    if (!pushNotification.title.trim() || !pushNotification.message.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please fill in both title and message',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (pushNotification.type === 'individual' && !pushNotification.targetUsername.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a username for individual notification',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSendingPush(true);
+
+    try {
+      if (pushNotification.type === 'all') {
+        // Send to all users including admin (admin won't see it in inbox but will see it in sent tab)
+        const { data: allUsers, error: usersError } = await supabase
+          .from('profiles')
+          .select('user_id');
+
+        if (usersError) {
+          throw usersError;
+        }
+
+        if (allUsers.length === 0) {
+          toast({
+            title: 'Info',
+            description: 'No users to send notification to',
+            variant: 'default'
+          });
+          return;
+        }
+
+        // Insert notifications for all users (including admin)
+        const notifications = allUsers.map(userProfile => ({
+          to_user_id: userProfile.user_id,
+          from_user_id: user?.id,
+          type: 'admin',
+          title: pushNotification.title,
+          message: pushNotification.message
+        }));
+
+        const { error: insertError } = await supabase
+          .from('system_notifications' as any)
+          .insert(notifications);
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        toast({
+          title: 'Success',
+          description: `Push notification sent to all users (${allUsers.length} users)`,
+        });
+      } else {
+        // Send to individual user
+        const { data: targetUser, error: userError } = await supabase
+          .from('profiles')
+          .select('user_id, username')
+          .eq('username', pushNotification.targetUsername.trim())
+          .single();
+
+        if (userError || !targetUser) {
+          toast({
+            title: 'Error',
+            description: 'User not found or invalid selection',
+            variant: 'destructive'
+          });
+          setSendingPush(false);
+          return;
+        }
+
+        // Send to both the target user and admin (for sent tab tracking)
+        const notifications = [
+          {
+            to_user_id: targetUser.user_id,
+            from_user_id: user?.id,
+            type: 'admin',
+            title: pushNotification.title,
+            message: pushNotification.message
+          }
+        ];
+
+        // Also send to admin if they're not the target user (for sent tab tracking)
+        if (targetUser.user_id !== user?.id) {
+          notifications.push({
+            to_user_id: user?.id,
+            from_user_id: user?.id,
+            type: 'admin',
+            title: pushNotification.title,
+            message: pushNotification.message
+          });
+        }
+
+        const { error: insertError } = await supabase
+          .from('system_notifications' as any)
+          .insert(notifications);
+
+        if (insertError) {
+          throw insertError;
+        }
+
+        toast({
+          title: 'Success',
+          description: `Push notification sent to @${targetUser.username}`,
+        });
+      }
+
+      // Reset form
+      setPushNotification({
+        type: 'all',
+        targetUsername: '',
+        title: '',
+        message: ''
+      });
+
+    } catch (error) {
+      console.error('Error sending push notification:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send push notification',
+        variant: 'destructive'
+      });
+    }
+
+    setSendingPush(false);
+  };
+
+  // Fetch sent notifications
+  const fetchSentNotifications = async () => {
+    if (!user || !isAdmin) {
+      return;
+    }
+
+    setLoadingSentNotifications(true);
+    try {
+      // Fetch notifications without the relationship
+      const { data: notifications, error } = await supabase
+        .from('system_notifications' as any)
+        .select('*')
+        .eq('from_user_id', user.id)
+        .eq('type', 'admin')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+
+
+      if (error) {
+        console.error('Error fetching sent notifications:', error);
+        setSentNotifications([]);
+      } else if (notifications && Array.isArray(notifications) && notifications.length > 0) {
+        console.log('Found notifications:', notifications.length);
+
+        // Type guard to ensure we have valid notification objects
+        const validNotifications = notifications.filter((n: any) =>
+          n && typeof n === 'object' && 'id' in n && 'from_user_id' in n
+        );
+
+        if (validNotifications.length === 0) {
+          setSentNotifications([]);
+          setLoadingSentNotifications(false);
+          return;
+        }
+
+        // Get unique user IDs from notifications
+        const userIds = [...new Set(validNotifications.map((n: any) => n.to_user_id).filter(Boolean))];
+
+        // Fetch user profiles separately
+        let userProfiles: any = {};
+        if (userIds.length > 0) {
+          const { data: profiles, error: profilesError } = await supabase
+            .from('profiles')
+            .select('user_id, username, display_name, avatar_url')
+            .in('user_id', userIds);
+
+          if (!profilesError && profiles) {
+            // Create a map of user_id to profile
+            userProfiles = profiles.reduce((acc: any, profile: any) => {
+              acc[profile.user_id] = profile;
+              return acc;
+            }, {});
+          }
+        }
+
+        // Group notifications by title and message to identify "All Users" notifications
+        const notificationGroups = validNotifications.reduce((groups: any, notification: any) => {
+          const key = `${notification.title}-${notification.message}`;
+          if (!groups[key]) {
+            groups[key] = [];
+          }
+          groups[key].push(notification);
+          return groups;
+        }, {});
+
+        // Create display notifications - one per group
+        const notificationsWithUsers = Object.values(notificationGroups).map((group: any) => {
+          const firstNotification = group[0];
+          const isAllUsers = group.length > 1; // If multiple recipients, it was sent to all users
+
+          return {
+            ...firstNotification,
+            to_user: isAllUsers ? null : userProfiles[firstNotification.to_user_id],
+            recipient_count: group.length,
+            is_all_users: isAllUsers
+          };
+        });
+
+        setSentNotifications(notificationsWithUsers);
+      } else {
+        setSentNotifications([]);
+      }
+    } catch (error) {
+      console.error('Error fetching sent notifications:', error);
+      setSentNotifications([]);
+    }
+    setLoadingSentNotifications(false);
+  };
+
+  // Auto-fetch sent notifications when admin profile loads
+  useEffect(() => {
+    if (isAdmin && isOwnProfile && user?.id) {
+      fetchSentNotifications();
+    }
+  }, [isAdmin, isOwnProfile, user?.id]);
 
   // Helper to get total likes received (only sum from userVideos)
   const getTotalLikes = () => {
@@ -607,11 +985,33 @@ const Profile = () => {
     return userVideos.reduce((sum, v) => sum + (v.like_count || 0), 0);
   };
 
+  // Helper to format time for display
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (diffInSeconds < 60) {
+      return 'Just now';
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `${minutes}m ago`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `${hours}h ago`;
+    } else if (diffInSeconds < 604800) {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `${days}d ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
   // Fetch actual follow counts
   const fetchFollowCounts = async () => {
     if (!profile?.user_id) return;
 
-    console.log('Fetching follow counts for user:', profile.user_id);
+
 
     try {
       // Get following count with retry logic
@@ -625,7 +1025,6 @@ const Profile = () => {
           console.error('Error fetching following count:', followingError);
           // Keep current count on error
         } else {
-          console.log('Following count:', followingCount);
           setFollowingCount(followingCount || 0);
         }
       } catch (followingFetchError) {
@@ -644,7 +1043,6 @@ const Profile = () => {
           console.error('Error fetching followers count:', followersError);
           // Keep current count on error
         } else {
-          console.log('Followers count:', followersCount);
           setFollowersCount(followersCount || 0);
         }
       } catch (followersFetchError) {
@@ -1143,13 +1541,32 @@ const Profile = () => {
 
       {/* Tabs and Videos */}
       <div className="px-4">
-        <Tabs defaultValue="videos" className="w-full">
-          <TabsList className={`grid w-full ${isOwnProfile ? 'grid-cols-3' : 'grid-cols-1'}`}>
-            <TabsTrigger value="videos" className={!isOwnProfile ? 'justify-center' : ''}>Videos</TabsTrigger>
-            {isOwnProfile && (
+        <Tabs defaultValue={isAdmin ? "push" : "videos"} className="w-full">
+          <TabsList className={`grid w-full ${isAdmin && isOwnProfile ? 'grid-cols-2' : isOwnProfile ? 'grid-cols-3' : 'grid-cols-1'}`}>
+            {isAdmin ? (
               <>
-                <TabsTrigger value="saved"><Bookmark className="inline mr-1" size={16} />Saved</TabsTrigger>
-                <TabsTrigger value="ads"><TrendingUp className="inline mr-1" size={16} />My Ads</TabsTrigger>
+                <TabsTrigger value="push" className={!isOwnProfile ? 'justify-center' : ''}>
+                  <Bell className="inline mr-1" size={16} />Push
+                </TabsTrigger>
+                {isOwnProfile && (
+                  <TabsTrigger value="sent">
+                    <Send className="inline mr-1" size={16} />Sent
+                  </TabsTrigger>
+                )}
+              </>
+            ) : (
+              <TabsTrigger value="videos" className={!isOwnProfile ? 'justify-center' : ''}>
+                Videos
+              </TabsTrigger>
+            )}
+            {isOwnProfile && !isAdmin && (
+              <>
+                <TabsTrigger value="saved">
+                  <Bookmark className="inline mr-1" size={16} />Saved
+                </TabsTrigger>
+                <TabsTrigger value="ads">
+                  <TrendingUp className="inline mr-1" size={16} />My Ads
+                </TabsTrigger>
               </>
             )}
           </TabsList>
@@ -1229,6 +1646,17 @@ const Profile = () => {
           {/* My Ads tab for own profile only */}
           {isOwnProfile && (
             <TabsContent value="ads" className="mt-4">
+              {/* Ad Stats Button */}
+              <div className="flex justify-center mb-6">
+                <Button
+                  onClick={() => navigate('/ad-stats')}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold flex items-center gap-2"
+                >
+                  <TrendingUp size={16} />
+                  Ad Stats
+                </Button>
+              </div>
+
               {sponsoredAds.length > 0 ? (
                 <div className="grid grid-cols-3 gap-2">
                   {sponsoredAds.map((ad) => (
@@ -1242,11 +1670,11 @@ const Profile = () => {
                         <Badge
                           variant="secondary"
                           className={`text-xs ${ad.status === 'active' ? 'bg-green-900 text-green-400' :
-                              ad.status === 'pending' ? 'bg-yellow-900 text-yellow-400' :
-                                ad.status === 'approved' ? 'bg-blue-900 text-blue-400' :
-                                  ad.status === 'rejected' ? 'bg-red-900 text-red-400' :
-                                    ad.status === 'expired' ? 'bg-gray-900 text-gray-400' :
-                                      'bg-purple-900 text-purple-400'
+                            ad.status === 'pending' ? 'bg-yellow-900 text-yellow-400' :
+                              ad.status === 'approved' ? 'bg-blue-900 text-blue-400' :
+                                ad.status === 'rejected' ? 'bg-red-900 text-red-400' :
+                                  ad.status === 'expired' ? 'bg-gray-900 text-gray-400' :
+                                    'bg-purple-900 text-purple-400'
                             }`}
                         >
                           {ad.status === 'active' ? '🟢' :
@@ -1410,6 +1838,244 @@ const Profile = () => {
               </div>
             </TabsContent>
           )}
+
+          {/* Push Notifications tab for admin only */}
+          {isAdmin && (
+            <TabsContent value="push" className="mt-4">
+              <div className="max-w-2xl mx-auto space-y-6">
+                <div className="text-center mb-6">
+                  <h2 className="text-2xl font-bold text-white mb-2">Admin Message Center</h2>
+                  <p className="text-white/70">Send push notifications to users</p>
+                </div>
+
+                <Card className="p-6 bg-black/20 border-white/10">
+                  <div className="space-y-4">
+                    {/* Notification Type */}
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">
+                        Send To
+                      </label>
+                      <Select
+                        value={pushNotification.type}
+                        onValueChange={(value) => setPushNotification(prev => ({ ...prev, type: value }))}
+                      >
+                        <SelectTrigger className="bg-black/30 border-white/20 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Users</SelectItem>
+                          <SelectItem value="individual">Individual User</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Target Username (only for individual) */}
+                    {pushNotification.type === 'individual' && (
+                      <div className="relative">
+                        <label className="block text-sm font-medium text-white mb-2">
+                          Username
+                        </label>
+                        <div className="relative">
+                          <Input
+                            placeholder="Start typing username..."
+                            value={pushNotification.targetUsername}
+                            onChange={(e) => handleUsernameChange(e.target.value)}
+                            onFocus={() => {
+                              if (pushNotification.targetUsername.length >= 1) {
+                                setShowUserDropdown(true);
+                              }
+                            }}
+                            className="bg-black/30 border-white/20 text-white placeholder-white/50"
+                          />
+                          {searchingUsers && (
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* User Search Dropdown */}
+                        {showUserDropdown && userSearchResults.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-black/90 border border-white/20 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {userSearchResults.map((user) => (
+                              <div
+                                key={user.user_id}
+                                className="flex items-center gap-3 p-3 hover:bg-white/10 cursor-pointer transition-colors"
+                                onClick={() => selectUser(user.username)}
+                              >
+                                <Avatar className="w-8 h-8">
+                                  <AvatarImage src={user.avatar_url} alt={user.username} />
+                                  <AvatarFallback className="bg-white/10 text-white text-xs">
+                                    {user.username?.charAt(0).toUpperCase() || 'U'}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-white font-medium truncate">
+                                    {user.display_name || user.username}
+                                  </div>
+                                  <div className="text-white/60 text-sm truncate">
+                                    @{user.username}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* No results message */}
+                        {showUserDropdown && userSearchResults.length === 0 && pushNotification.targetUsername.length >= 1 && !searchingUsers && (
+                          <div className="absolute z-10 w-full mt-1 bg-black/90 border border-white/20 rounded-lg shadow-lg p-3">
+                            <div className="text-white/60 text-sm text-center">
+                              No users found matching "{pushNotification.targetUsername}"
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Title */}
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">
+                        Title
+                      </label>
+                      <Input
+                        placeholder="Notification title"
+                        value={pushNotification.title}
+                        onChange={(e) => setPushNotification(prev => ({ ...prev, title: e.target.value }))}
+                        className="bg-black/30 border-white/20 text-white placeholder-white/50"
+                        maxLength={100}
+                      />
+                    </div>
+
+                    {/* Message */}
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-2">
+                        Message
+                      </label>
+                      <Textarea
+                        placeholder="Notification message"
+                        value={pushNotification.message}
+                        onChange={(e) => setPushNotification(prev => ({ ...prev, message: e.target.value }))}
+                        className="bg-black/30 border-white/20 text-white placeholder-white/50 min-h-[100px]"
+                        maxLength={500}
+                      />
+                      <div className="text-xs text-white/50 mt-1">
+                        {pushNotification.message.length}/500 characters
+                      </div>
+                    </div>
+
+                    {/* Send Button */}
+                    <Button
+                      onClick={sendPushNotification}
+                      disabled={sendingPush || !pushNotification.title.trim() || !pushNotification.message.trim()}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3"
+                    >
+                      {sendingPush ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Sending...
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Send size={16} />
+                          Send Push Notification
+                        </div>
+                      )}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            </TabsContent>
+          )}
+
+          {/* Sent Notifications tab for admin only */}
+          {isAdmin && isOwnProfile && (
+            <TabsContent value="sent" className="mt-4">
+              <div className="max-w-4xl mx-auto">
+                <div className="text-center mb-6">
+                  <h2 className="text-2xl font-bold text-white mb-2">Sent Notifications</h2>
+                  <p className="text-white/70">View your sent push notifications</p>
+                </div>
+
+                {loadingSentNotifications ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+                    <p className="text-white/70">Loading sent notifications...</p>
+                  </div>
+                ) : sentNotifications.length > 0 ? (
+                  <div className="space-y-4">
+                    {sentNotifications.map((notification) => (
+                      <Card key={notification.id} className="p-4 bg-black/20 border-white/10">
+                        <div className="flex items-start gap-4">
+                          {/* Notification Icon */}
+                          <div className="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Shield size={20} className="text-white" />
+                          </div>
+
+                          {/* Notification Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-white font-semibold truncate">
+                                {notification.title}
+                              </h3>
+                              <div className="flex items-center gap-2 text-xs text-white/60 flex-shrink-0">
+                                <span>{formatTime(notification.created_at)}</span>
+                                <Badge
+                                  variant="secondary"
+                                  className={`${notification.read ? 'bg-green-900 text-green-400' : 'bg-blue-900 text-blue-400'}`}
+                                >
+                                  {notification.read ? 'Read' : 'Unread'}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <p className="text-white/80 mb-3 leading-relaxed">
+                              {notification.message}
+                            </p>
+
+                            {/* Recipient Info */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-white/50">Sent to:</span>
+                              {notification.is_all_users ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-white/70">All Users</span>
+                                  <span className="text-xs text-white/50">({notification.recipient_count} recipients)</span>
+                                </div>
+                              ) : notification.to_user ? (
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="w-5 h-5">
+                                    <AvatarImage src={notification.to_user.avatar_url} alt={notification.to_user.username} />
+                                    <AvatarFallback className="bg-white/10 text-white text-xs">
+                                      {notification.to_user.username?.charAt(0).toUpperCase() || 'U'}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-xs text-white/70">
+                                    @{notification.to_user.username}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-white/70">Unknown Recipient</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Send size={32} className="text-white/70" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2 text-white">No notifications sent yet</h3>
+                    <p className="text-white/70">
+                      Your sent push notifications will appear here
+                    </p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
       {showVideoModal && currentVideoIndex !== null && (
@@ -1466,7 +2132,7 @@ const Profile = () => {
       {showFollowersModal && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black">
           <div className="flex items-center justify-between p-4">
-            <h3 className="text-2xl font-bold text-primary logo-text-glow">Followers</h3>
+            <h3 className="text-2xl font-bold text-primary logo-text-glow">Followers ({followersCount})</h3>
             <button className="text-white text-lg font-bold" onClick={() => setShowFollowersModal(false)}>Close</button>
           </div>
           <div className="flex-1 px-4 pt-4 pb-8 overflow-y-auto">
@@ -1493,14 +2159,50 @@ const Profile = () => {
                       <span className="text-gray-400 text-sm">@{f.username}</span>
                     </div>
                   </div>
-                  <button
-                    className={clsx("text-red-500 font-bold ml-4", removingId === f.user_id && "opacity-50 pointer-events-none")}
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent navigation when clicking the remove button
-                      handleRemoveFollower(f.user_id);
-                    }}
-                    disabled={removingId === f.user_id}
-                  >Remove</button>
+                  <div className="flex items-center gap-2">
+                    {/* Follow/Unfollow button - show if user is logged in and not the follower themselves */}
+                    {user && f.user_id !== user.id && (
+                      <button
+                        className={clsx(
+                          "p-2 rounded-full transition-colors",
+                          followerFollowStatus[f.user_id]
+                            ? "bg-green-600 hover:bg-green-700 text-white"
+                            : "bg-blue-600 hover:bg-blue-700 text-white",
+                          followLoading && "opacity-50 pointer-events-none"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFollowerToggle(f.user_id);
+                        }}
+                        disabled={followLoading}
+                        title={followerFollowStatus[f.user_id] ? "Unfollow" : "Follow"}
+                      >
+                        {followerFollowStatus[f.user_id] ? (
+                          <Check size={16} />
+                        ) : (
+                          <Plus size={16} />
+                        )}
+                      </button>
+                    )}
+
+                    {/* Remove button - only show if viewing own profile */}
+                    {isOwnProfile && (
+                      <button
+                        className={clsx(
+                          "p-2 rounded-full bg-red-600 hover:bg-red-700 text-white transition-colors",
+                          removingId === f.user_id && "opacity-50 pointer-events-none"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveFollower(f.user_id);
+                        }}
+                        disabled={removingId === f.user_id}
+                        title="Remove follower"
+                      >
+                        <UserMinus size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1510,7 +2212,7 @@ const Profile = () => {
       {showFollowingModal && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black">
           <div className="flex items-center justify-between p-4">
-            <h3 className="text-2xl font-bold text-primary logo-text-glow">Following</h3>
+            <h3 className="text-2xl font-bold text-primary logo-text-glow">Following ({followingCount})</h3>
             <button className="text-white text-lg font-bold" onClick={() => setShowFollowingModal(false)}>Close</button>
           </div>
           <div className="flex-1 px-4 pt-4 pb-8 overflow-y-auto">
@@ -1538,13 +2240,18 @@ const Profile = () => {
                     </div>
                   </div>
                   <button
-                    className={clsx("text-red-500 font-bold ml-4", removingId === f.user_id && "opacity-50 pointer-events-none")}
+                    className={clsx(
+                      "p-2 rounded-full bg-red-600 hover:bg-red-700 text-white transition-colors",
+                      removingId === f.user_id && "opacity-50 pointer-events-none"
+                    )}
                     onClick={(e) => {
-                      e.stopPropagation(); // Prevent navigation when clicking the remove button
+                      e.stopPropagation();
                       handleRemoveFollowing(f.user_id);
                     }}
                     disabled={removingId === f.user_id}
-                  >Remove</button>
+                  >
+                    <UserMinus size={16} />
+                  </button>
                 </div>
               ))}
             </div>

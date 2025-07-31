@@ -4,14 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, MoreVertical, Trash2, MessageSquare, Bell, Heart, Shield, UserPlus } from "lucide-react";
+import { ArrowLeft, MoreVertical, Trash2, MessageSquare, Bell, Heart, Shield, UserPlus, X } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useToast } from "@/hooks/use-toast";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 
 const Inbox = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [chats, setChats] = useState<any[]>([]);
   const [systemNotifications, setSystemNotifications] = useState<any[]>([]);
@@ -25,21 +25,30 @@ const Inbox = () => {
     type: 'deleteChat';
     chatId: string;
   } | null>(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [selectedAdminNotification, setSelectedAdminNotification] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (user) {
       fetchChats();
-      fetchSystemNotifications(); // Fetch system notifications on load
+      fetchSystemNotifications(); // Fetch system notifications on load (will be empty for admins)
       const cleanup = subscribeToChats();
-      const systemCleanup = subscribeToSystemNotifications();
+      
+      // Only subscribe to system notifications if not admin
+      let systemCleanup: (() => void) | null = null;
+      if (!isAdmin) {
+        systemCleanup = subscribeToSystemNotifications();
+      }
 
       return () => {
         cleanup();
-        systemCleanup();
+        if (systemCleanup) {
+          systemCleanup();
+        }
       };
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   // Fetch unread counts for individual chats
   const fetchChatUnreadCounts = async () => {
@@ -72,7 +81,6 @@ const Inbox = () => {
         counts[msg.chat_id] = (counts[msg.chat_id] || 0) + 1;
       });
 
-      console.log('Chat unread counts:', counts);
       setUnreadCounts(counts);
     } catch (error) {
       console.error('Error fetching chat unread counts:', error);
@@ -82,6 +90,13 @@ const Inbox = () => {
   // Fetch system notifications
   const fetchSystemNotifications = async () => {
     if (!user) return;
+    
+    // If user is admin, don't fetch system notifications - they should see them in Profile > Sent tab
+    if (isAdmin) {
+      setSystemNotifications([]);
+      setSystemLoading(false);
+      return;
+    }
     
     try {
       setSystemLoading(true);
@@ -132,7 +147,6 @@ const Inbox = () => {
       if (error) {
         console.error('Error fetching system notifications:', error);
       } else {
-        console.log('Fetched system notifications:', data);
         setSystemNotifications(data || []);
         // Refresh counts after loading notifications
         refreshCounts();
@@ -356,7 +370,7 @@ const Inbox = () => {
           [payload.new.chat_id]: (prev[payload.new.chat_id] || 0) + 1
         }));
         
-        console.log('New message received, updated unread counts');
+
 
         // Update the last message for this chat
         await updateLastMessageForChat(payload.new.chat_id);
@@ -377,7 +391,7 @@ const Inbox = () => {
           
           // Also refresh counts to ensure accuracy
           setTimeout(() => refreshCounts(), 100);
-          console.log('Message marked as read, updated counts');
+
         }
       })
       .subscribe((status) => {
@@ -672,7 +686,11 @@ const Inbox = () => {
     await markNotificationAsRead(notification.id);
     
     // Handle different notification types
-    if (notification.type === 'follow' && notification.from_user?.username) {
+    if (notification.type === 'admin') {
+      // Show admin notification modal
+      setSelectedAdminNotification(notification);
+      setShowAdminModal(true);
+    } else if (notification.type === 'follow' && notification.from_user?.username) {
       // Navigate to the follower's profile
       navigate(`/profile/${notification.from_user.username}`);
     } else if (notification.type === 'like' && notification.from_user?.username) {
@@ -744,7 +762,7 @@ const Inbox = () => {
       {/* Tabs Content */}
       <div className="pt-20 pb-24">
         <Tabs defaultValue="inbox" className="w-full">
-          <TabsList className="grid grid-cols-2 mx-4 mb-4 max-w-md">
+          <TabsList className={`mx-4 mb-4 max-w-md ${isAdmin ? 'grid grid-cols-1' : 'grid grid-cols-2'}`}>
             <TabsTrigger value="inbox" className="flex items-center gap-2">
               <MessageSquare size={16} />
               Inbox
@@ -754,15 +772,17 @@ const Inbox = () => {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="system" className="flex items-center gap-2" onClick={fetchSystemNotifications}>
-              <Bell size={16} />
-              System
-              {systemUnreadCount > 0 && (
-                <span className="bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold ml-1">
-                  {systemUnreadCount > 99 ? '99+' : systemUnreadCount}
-                </span>
-              )}
-            </TabsTrigger>
+            {!isAdmin && (
+              <TabsTrigger value="system" className="flex items-center gap-2" onClick={fetchSystemNotifications}>
+                <Bell size={16} />
+                System
+                {systemUnreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold ml-1">
+                    {systemUnreadCount > 99 ? '99+' : systemUnreadCount}
+                  </span>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Inbox Tab */}
@@ -902,8 +922,9 @@ const Inbox = () => {
             )}
           </TabsContent>
 
-          {/* System Notifications Tab */}
-          <TabsContent value="system">
+          {/* System Notifications Tab - Only show for non-admins */}
+          {!isAdmin && (
+            <TabsContent value="system">
             {systemLoading ? (
               <div className="flex justify-center items-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
@@ -965,7 +986,7 @@ const Inbox = () => {
               </div>
             )}
           </TabsContent>
-
+          )}
 
         </Tabs>
       </div>
@@ -994,6 +1015,61 @@ const Inbox = () => {
                 className="flex-1"
               >
                 OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Notification Modal */}
+      {showAdminModal && selectedAdminNotification && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-black/90 rounded-lg max-w-md w-full mx-4 border border-white/20">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center">
+                  <Shield size={16} className="text-white" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">Admin Message</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowAdminModal(false);
+                  setSelectedAdminNotification(null);
+                }}
+                className="text-white/60 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              <div>
+                <h4 className="text-white font-semibold mb-2">
+                  {selectedAdminNotification.title}
+                </h4>
+                <p className="text-white/80 leading-relaxed">
+                  {selectedAdminNotification.message}
+                </p>
+              </div>
+
+              <div className="text-xs text-white/50">
+                {formatTime(selectedAdminNotification.created_at)}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10">
+              <Button
+                onClick={() => {
+                  setShowAdminModal(false);
+                  setSelectedAdminNotification(null);
+                }}
+                className="w-full bg-green-600 hover:bg-green-700 text-white"
+              >
+                Got it
               </Button>
             </div>
           </div>

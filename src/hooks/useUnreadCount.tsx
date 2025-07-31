@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
 export const useUnreadCount = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [systemUnreadCount, setSystemUnreadCount] = useState(0);
@@ -21,19 +21,25 @@ export const useUnreadCount = () => {
         .eq('deleted_for_receiver', false)
         .eq('deleted_for_everyone', false);
 
-      // Get unread system notifications count
-      const { data: unreadNotifications, error: notificationsError } = await supabase
-        .from('system_notifications')
-        .select('id')
-        .eq('to_user_id', user.id)
-        .eq('read', false);
+      // Get unread system notifications count (skip for admins)
+      let notificationsCount = 0;
+      let notificationsError = null;
+      
+      if (!isAdmin) {
+        const { data: unreadNotifications, error } = await supabase
+          .from('system_notifications')
+          .select('id')
+          .eq('to_user_id', user.id)
+          .eq('read', false);
+        
+        notificationsError = error;
+        notificationsCount = unreadNotifications?.length || 0;
+      }
 
       if (!messagesError && !notificationsError) {
         const messagesCount = unreadMessages?.length || 0;
-        const notificationsCount = unreadNotifications?.length || 0;
         const total = messagesCount + notificationsCount;
 
-        console.log('Unread counts:', { messagesCount, notificationsCount, total });
         setInboxUnreadCount(messagesCount);
         setSystemUnreadCount(notificationsCount);
         setTotalUnreadCount(total);
@@ -86,39 +92,45 @@ export const useUnreadCount = () => {
         })
         .subscribe();
 
-      const notificationsSubscription = supabase
-        .channel(`unread_notifications_${user.id}`)
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'system_notifications',
-          filter: `to_user_id=eq.${user.id}`
-        }, () => {
-          setSystemUnreadCount(prev => prev + 1);
-          setTotalUnreadCount(prev => prev + 1);
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'system_notifications',
-          filter: `to_user_id=eq.${user.id}`
-        }, (payload) => {
-          // Handle notification read status updates
-          if (payload.new.read && !payload.old.read) {
-            // Refresh counts to ensure accuracy
-            setTimeout(() => fetchUnreadCounts(), 100);
-          }
-        })
-        .subscribe();
+      // Only subscribe to system notifications if not admin
+      let notificationsSubscription: any = null;
+      if (!isAdmin) {
+        notificationsSubscription = supabase
+          .channel(`unread_notifications_${user.id}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'system_notifications',
+            filter: `to_user_id=eq.${user.id}`
+          }, () => {
+            setSystemUnreadCount(prev => prev + 1);
+            setTotalUnreadCount(prev => prev + 1);
+          })
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'system_notifications',
+            filter: `to_user_id=eq.${user.id}`
+          }, (payload) => {
+            // Handle notification read status updates
+            if (payload.new.read && !payload.old.read) {
+              // Refresh counts to ensure accuracy
+              setTimeout(() => fetchUnreadCounts(), 100);
+            }
+          })
+          .subscribe();
+      }
 
       return () => {
         clearInterval(refreshInterval);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         messagesSubscription.unsubscribe();
-        notificationsSubscription.unsubscribe();
+        if (notificationsSubscription) {
+          notificationsSubscription.unsubscribe();
+        }
       };
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
   return {
     totalUnreadCount,
