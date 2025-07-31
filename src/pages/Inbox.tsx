@@ -8,6 +8,7 @@ import { ArrowLeft, MoreVertical, Trash2, MessageSquare, Bell, Heart, Shield, Us
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useToast } from "@/hooks/use-toast";
+import { useUnreadCount } from "@/hooks/useUnreadCount";
 
 const Inbox = () => {
   const { user } = useAuth();
@@ -18,8 +19,7 @@ const Inbox = () => {
   const [systemLoading, setSystemLoading] = useState(false);
   const [showMenu, setShowMenu] = useState<string | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<{ [chatId: string]: number }>({});
-  const [totalInboxUnread, setTotalInboxUnread] = useState(0);
-  const [totalSystemUnread, setTotalSystemUnread] = useState(0);
+  const { inboxUnreadCount, systemUnreadCount, refreshCounts } = useUnreadCount();
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     type: 'deleteChat';
@@ -30,24 +30,28 @@ const Inbox = () => {
   useEffect(() => {
     if (user) {
       fetchChats();
-      fetchUnreadCounts();
+      fetchSystemNotifications(); // Fetch system notifications on load
       const cleanup = subscribeToChats();
+      const systemCleanup = subscribeToSystemNotifications();
 
       return () => {
         cleanup();
+        systemCleanup();
       };
     }
   }, [user]);
 
-  // Fetch unread counts for all chats
-  const fetchUnreadCounts = async () => {
-    if (!user) return;
+  // Fetch unread counts for individual chats
+  const fetchChatUnreadCounts = async () => {
+    if (!user || chats.length === 0) return;
+    await fetchChatUnreadCountsForChats(chats);
+  };
+
+  const fetchChatUnreadCountsForChats = async (chatList: any[]) => {
+    if (!user || chatList.length === 0) return;
     
     try {
-      // Get unread counts for each chat
-      const chatIds = chats.map(chat => chat.id);
-      if (chatIds.length === 0) return;
-
+      const chatIds = chatList.map(chat => chat.id);
       const { data: unreadData, error } = await supabase
         .from('messages')
         .select('chat_id')
@@ -58,23 +62,20 @@ const Inbox = () => {
         .eq('deleted_for_everyone', false);
 
       if (error) {
-        console.error('Error fetching unread counts:', error);
+        console.error('Error fetching chat unread counts:', error);
         return;
       }
 
       // Count unread messages per chat
       const counts: { [chatId: string]: number } = {};
-      let totalUnread = 0;
-      
       unreadData?.forEach(msg => {
         counts[msg.chat_id] = (counts[msg.chat_id] || 0) + 1;
-        totalUnread++;
       });
 
+      console.log('Chat unread counts:', counts);
       setUnreadCounts(counts);
-      setTotalInboxUnread(totalUnread);
     } catch (error) {
-      console.error('Error fetching unread counts:', error);
+      console.error('Error fetching chat unread counts:', error);
     }
   };
 
@@ -84,23 +85,57 @@ const Inbox = () => {
     
     try {
       setSystemLoading(true);
-      const { data, error } = await supabase
+      // First try with join
+      let { data, error } = await supabase
         .from('system_notifications')
         .select(`
           *,
-          from_user:profiles!system_notifications_from_user_id_fkey(username, avatar_url)
+          from_user:profiles!inner(username, avatar_url)
         `)
         .eq('to_user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50);
 
+      // If join fails, try without join and fetch profiles separately
+      if (error) {
+        console.log('Join failed, trying without join:', error);
+        const { data: notificationsData, error: notificationsError } = await supabase
+          .from('system_notifications')
+          .select('*')
+          .eq('to_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (!notificationsError && notificationsData) {
+          // Fetch profiles separately
+          const userIds = notificationsData.map(n => n.from_user_id).filter(Boolean);
+          if (userIds.length > 0) {
+            const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('user_id, username, avatar_url')
+              .in('user_id', userIds);
+
+            // Combine the data
+            data = notificationsData.map(notification => ({
+              ...notification,
+              from_user: profilesData?.find(p => p.user_id === notification.from_user_id) || null
+            }));
+          } else {
+            data = notificationsData;
+          }
+          error = null;
+        } else {
+          error = notificationsError;
+        }
+      }
+
       if (error) {
         console.error('Error fetching system notifications:', error);
       } else {
+        console.log('Fetched system notifications:', data);
         setSystemNotifications(data || []);
-        // Count unread system notifications
-        const unreadSystemCount = (data || []).filter(notif => !notif.read).length;
-        setTotalSystemUnread(unreadSystemCount);
+        // Refresh counts after loading notifications
+        refreshCounts();
       }
     } catch (error) {
       console.error('Error fetching system notifications:', error);
@@ -204,8 +239,12 @@ const Inbox = () => {
         });
         setChats(chatsWithLastVisible);
         
-        // Fetch unread counts after chats are loaded
-        setTimeout(() => fetchUnreadCounts(), 100);
+        // Fetch chat-specific unread counts after chats are loaded
+        if (chatsWithLastVisible.length > 0) {
+          setTimeout(() => {
+            fetchChatUnreadCountsForChats(chatsWithLastVisible);
+          }, 100);
+        }
       }
     } catch (error) {
       console.error('Error fetching chats:', error);
@@ -317,8 +356,7 @@ const Inbox = () => {
           [payload.new.chat_id]: (prev[payload.new.chat_id] || 0) + 1
         }));
         
-        // Increment total inbox unread count
-        setTotalInboxUnread(prev => prev + 1);
+        console.log('New message received, updated unread counts');
 
         // Update the last message for this chat
         await updateLastMessageForChat(payload.new.chat_id);
@@ -337,8 +375,9 @@ const Inbox = () => {
             [payload.new.chat_id]: Math.max(0, (prev[payload.new.chat_id] || 0) - 1)
           }));
           
-          // Decrement total inbox unread count
-          setTotalInboxUnread(prev => Math.max(0, prev - 1));
+          // Also refresh counts to ensure accuracy
+          setTimeout(() => refreshCounts(), 100);
+          console.log('Message marked as read, updated counts');
         }
       })
       .subscribe((status) => {
@@ -350,6 +389,84 @@ const Inbox = () => {
 
     return () => {
       console.log('Cleaning up chats subscription');
+      subscription.unsubscribe();
+    };
+  };
+
+  const subscribeToSystemNotifications = () => {
+    console.log('Setting up real-time subscription for system notifications');
+
+    const subscription = supabase
+      .channel(`system_notifications_${user?.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'system_notifications',
+        filter: `to_user_id=eq.${user?.id}`
+      }, async (payload) => {
+        console.log('New system notification received:', payload.new);
+        
+        // Fetch the complete notification with user data
+        const { data: fullNotification, error } = await supabase
+          .from('system_notifications')
+          .select(`
+            *,
+            from_user:profiles(username, avatar_url)
+          `)
+          .eq('id', payload.new.id)
+          .single();
+
+        if (fullNotification && !error) {
+          // Add to the beginning of the notifications list
+          setSystemNotifications(prev => [fullNotification, ...prev]);
+          
+          // Show toast notification for follow notifications
+          if (fullNotification.type === 'follow') {
+            toast({
+              title: "New Follower!",
+              description: `${fullNotification.from_user?.username || 'Someone'} started following you`,
+              className: 'bg-blue-600 text-white border-blue-700'
+            });
+          } else if (fullNotification.type === 'like') {
+            toast({
+              title: "Video Liked!",
+              description: fullNotification.message,
+              className: 'bg-red-600 text-white border-red-700'
+            });
+          }
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'system_notifications',
+        filter: `to_user_id=eq.${user?.id}`
+      }, (payload) => {
+        console.log('System notification updated:', payload.new);
+        
+        // Update the notification in the list
+        setSystemNotifications(prev => 
+          prev.map(notif => 
+            notif.id === payload.new.id 
+              ? { ...notif, ...payload.new }
+              : notif
+          )
+        );
+        
+        // Refresh counts if read status changed
+        if (payload.new.read !== payload.old.read) {
+          refreshCounts();
+        }
+      })
+      .subscribe((status) => {
+        console.log('System notifications subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to real-time system notifications');
+        }
+      });
+
+    return () => {
+      console.log('Cleaning up system notifications subscription');
       subscription.unsubscribe();
     };
   };
@@ -457,7 +574,14 @@ const Inbox = () => {
   };
 
   const handleOpenChat = async (chatId: string) => {
-    // Mark messages as read when opening chat
+    // Clear unread count immediately for better UX
+    setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
+    
+    // Navigate immediately for better UX
+    navigate(`/chat/${chatId}`);
+    setShowMenu(null);
+    
+    // Mark messages as read in the background
     try {
       const { error } = await supabase.rpc('mark_messages_as_read', {
         chat_id_param: chatId,
@@ -465,17 +589,14 @@ const Inbox = () => {
       });
 
       if (!error) {
-        // Clear unread count locally
-        const currentUnread = unreadCounts[chatId] || 0;
-        setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
-        setTotalInboxUnread(prev => Math.max(0, prev - currentUnread));
+        // Refresh counts after marking messages as read
+        setTimeout(() => refreshCounts(), 200);
+      } else {
+        console.error('Error marking messages as read:', error);
       }
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }
-    
-    navigate(`/chat/${chatId}`);
-    setShowMenu(null);
   };
 
   const confirmDeleteChat = async () => {
@@ -545,6 +666,22 @@ const Inbox = () => {
 
 
 
+  // Handle notification click
+  const handleNotificationClick = async (notification: any) => {
+    // Mark as read first
+    await markNotificationAsRead(notification.id);
+    
+    // Handle different notification types
+    if (notification.type === 'follow' && notification.from_user?.username) {
+      // Navigate to the follower's profile
+      navigate(`/profile/${notification.from_user.username}`);
+    } else if (notification.type === 'like' && notification.from_user?.username) {
+      // Navigate to the liker's profile
+      navigate(`/profile/${notification.from_user.username}`);
+    }
+    // Add more notification type handlers as needed
+  };
+
   // Mark system notification as read
   const markNotificationAsRead = async (notificationId: string) => {
     try {
@@ -562,8 +699,8 @@ const Inbox = () => {
           )
         );
         
-        // Decrement system unread count
-        setTotalSystemUnread(prev => Math.max(0, prev - 1));
+        // Refresh counts after marking as read
+        refreshCounts();
       }
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -607,22 +744,22 @@ const Inbox = () => {
       {/* Tabs Content */}
       <div className="pt-20 pb-24">
         <Tabs defaultValue="inbox" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mx-4 mb-4">
+          <TabsList className="grid grid-cols-2 mx-4 mb-4 max-w-md">
             <TabsTrigger value="inbox" className="flex items-center gap-2">
               <MessageSquare size={16} />
               Inbox
-              {totalInboxUnread > 0 && (
+              {inboxUnreadCount > 0 && (
                 <span className="bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold ml-1">
-                  {totalInboxUnread > 99 ? '99+' : totalInboxUnread}
+                  {inboxUnreadCount > 99 ? '99+' : inboxUnreadCount}
                 </span>
               )}
             </TabsTrigger>
             <TabsTrigger value="system" className="flex items-center gap-2" onClick={fetchSystemNotifications}>
               <Bell size={16} />
               System
-              {totalSystemUnread > 0 && (
+              {systemUnreadCount > 0 && (
                 <span className="bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold ml-1">
-                  {totalSystemUnread > 99 ? '99+' : totalSystemUnread}
+                  {systemUnreadCount > 99 ? '99+' : systemUnreadCount}
                 </span>
               )}
             </TabsTrigger>
@@ -685,9 +822,15 @@ const Inbox = () => {
                           <h3 className="font-semibold text-white truncate">
                             @{partner.username || 'unknown'}
                           </h3>
-                          <span className="text-xs text-white/60 flex-shrink-0 ml-2">
-                            {formatTime(chat.updated_at)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/60 flex-shrink-0">
+                              {formatTime(chat.updated_at)}
+                            </span>
+                            {/* Blue dot for unread messages */}
+                            {unreadCounts[chat.id] > 0 && (
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            )}
+                          </div>
                         </div>
                         <p className="text-sm text-white/70 truncate">
                           {getLastMessage(chat)}
@@ -783,7 +926,7 @@ const Inbox = () => {
                     className={`flex items-center p-4 border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${
                       !notification.read ? 'bg-blue-900/20' : ''
                     }`}
-                    onClick={() => markNotificationAsRead(notification.id)}
+                    onClick={() => handleNotificationClick(notification)}
                   >
                     <div className="mr-3">
                       {getNotificationIcon(notification.type)}

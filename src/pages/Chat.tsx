@@ -8,11 +8,13 @@ import { ArrowLeft, Send, MoreVertical, Trash2, User, Copy, MessageSquare } from
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useToast } from "@/hooks/use-toast";
+import { useUnreadCount } from "@/hooks/useUnreadCount";
 
 const Chat = () => {
   const { chatId, userId: paramUserId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { refreshCounts } = useUnreadCount();
   const [messages, setMessages] = useState<any[]>([]);
 
   // Utility function to deduplicate messages
@@ -207,6 +209,8 @@ const Chat = () => {
           chat_id_param: chatId,
           user_id_param: user?.id
         });
+        // Refresh unread counts after marking messages as read
+        refreshCounts();
       } catch (error) {
         console.error('Error marking messages as read:', error);
       }

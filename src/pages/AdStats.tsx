@@ -141,7 +141,7 @@ const AdStats = () => {
                             filter: 'drop-shadow(0 0 8px hsl(120, 100%, 50%))'
                         }}
                     >
-                        Ad Statistics
+                        Ad Stats
                     </span>
                     <Button
                         variant="ghost"
