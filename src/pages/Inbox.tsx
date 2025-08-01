@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 
 const Inbox = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [chats, setChats] = useState<any[]>([]);
   const [systemNotifications, setSystemNotifications] = useState<any[]>([]);
@@ -32,10 +32,9 @@ const Inbox = () => {
   useEffect(() => {
     if (user) {
       fetchChats();
-      fetchSystemNotifications(); // Fetch system notifications on load (will be empty for admins)
+      fetchSystemNotifications();
       const cleanup = subscribeToChats();
       
-      // Only subscribe to system notifications if not admin
       let systemCleanup: (() => void) | null = null;
       if (!isAdmin) {
         systemCleanup = subscribeToSystemNotifications();
@@ -91,7 +90,6 @@ const Inbox = () => {
   const fetchSystemNotifications = async () => {
     if (!user) return;
     
-    // If user is admin, don't fetch system notifications - they should see them in Profile > Sent tab
     if (isAdmin) {
       setSystemNotifications([]);
       setSystemLoading(false);
@@ -973,8 +971,8 @@ const Inbox = () => {
                           {formatTime(notification.created_at)}
                         </span>
                       </div>
-                      <p className="text-sm text-white/70">
-                        {notification.message}
+                      <p className="text-sm text-white/60">
+                        Click to view full message
                       </p>
                     </div>
 
@@ -1050,8 +1048,10 @@ const Inbox = () => {
                 <h4 className="text-white font-semibold mb-2">
                   {selectedAdminNotification.title}
                 </h4>
-                <p className="text-white/80 leading-relaxed">
-                  {selectedAdminNotification.message}
+                <p className="text-white/80 leading-relaxed whitespace-pre-wrap">
+                  {selectedAdminNotification.message
+                    ?.replace(/^\[ALL_USERS\]\s*/, '')
+                    ?.replace(/^\[TO:[^\]]+\]\s*/, '') || selectedAdminNotification.message}
                 </p>
               </div>
 

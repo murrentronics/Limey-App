@@ -22,7 +22,7 @@ import clsx from "clsx";
 import { getUserSponsoredAds, deleteSponsoredAd } from "@/lib/adminUtils";
 
 const Profile = () => {
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, signOut, isAdmin, loading: authLoading } = useAuth();
   const { username } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -80,8 +80,13 @@ const Profile = () => {
   const [sponsoredAds, setSponsoredAds] = useState<any[]>([]);
   const [showAdMenu, setShowAdMenu] = useState<string | null>(null);
   const [deletingAdId, setDeletingAdId] = useState<string | null>(null);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<any>(null);
+  const [manualAdminCheck, setManualAdminCheck] = useState<boolean | null>(null);
 
   const location = useLocation();
+
+
 
   useEffect(() => {
     if (location.pathname === "/profile" && showWalletModal) {
@@ -788,13 +793,20 @@ const Profile = () => {
         }
 
         // Insert notifications for all users (including admin)
+        // Add a special marker for "All Users" notifications
         const notifications = allUsers.map(userProfile => ({
           to_user_id: userProfile.user_id,
           from_user_id: user?.id,
           type: 'admin',
           title: pushNotification.title,
-          message: pushNotification.message
+          message: `[ALL_USERS] ${pushNotification.message}`
         }));
+
+        console.log('About to save All Users notifications:', {
+          count: notifications.length,
+          sampleMessage: notifications[0]?.message,
+          sampleNotification: notifications[0]
+        });
 
         const { error: insertError } = await supabase
           .from('system_notifications' as any)
@@ -807,7 +819,11 @@ const Profile = () => {
         toast({
           title: 'Success',
           description: `Push notification sent to all users (${allUsers.length} users)`,
+          className: "bg-green-600 text-white border-green-700"
         });
+
+        // Refresh sent notifications instead of page reload
+        fetchSentNotifications();
       } else {
         // Send to individual user
         const { data: targetUser, error: userError } = await supabase
@@ -826,14 +842,26 @@ const Profile = () => {
           return;
         }
 
+        // For individual notifications, we'll add a special prefix to help identify the recipient
+        const targetUsername = targetUser.username;
+        const notificationTitle = pushNotification.title;
+        const notificationMessage = `[TO:${targetUsername}] ${pushNotification.message}`;
+
+        console.log('About to save individual notification:', {
+          targetUsername,
+          message: notificationMessage,
+          originalMessage: pushNotification.message
+        });
+
         // Send to both the target user and admin (for sent tab tracking)
         const notifications = [
           {
             to_user_id: targetUser.user_id,
             from_user_id: user?.id,
             type: 'admin',
-            title: pushNotification.title,
-            message: pushNotification.message
+            title: notificationTitle,
+            message: notificationMessage,
+            sent_to_username: targetUsername
           }
         ];
 
@@ -842,11 +870,14 @@ const Profile = () => {
           notifications.push({
             to_user_id: user?.id,
             from_user_id: user?.id,
-            type: 'admin',
-            title: pushNotification.title,
-            message: pushNotification.message
+            type: 'admin_tracking',
+            title: notificationTitle,
+            message: notificationMessage,
+            sent_to_username: targetUsername
           });
         }
+
+        console.log('Individual notifications to insert:', notifications);
 
         const { error: insertError } = await supabase
           .from('system_notifications' as any)
@@ -859,7 +890,11 @@ const Profile = () => {
         toast({
           title: 'Success',
           description: `Push notification sent to @${targetUser.username}`,
+          className: "bg-green-600 text-white border-green-700"
         });
+
+        // Refresh sent notifications instead of page reload
+        fetchSentNotifications();
       }
 
       // Reset form
@@ -888,18 +923,39 @@ const Profile = () => {
       return;
     }
 
+    // Debug JWT and user context
+    const session = await supabase.auth.getSession();
+    console.log('JWT/User Debug Info:', {
+      userId: user?.id,
+      userEmail: user?.email,
+      isAdmin,
+      sessionUserId: session.data.session?.user?.id,
+      sessionUserEmail: session.data.session?.user?.email,
+      jwtPayload: session.data.session?.access_token ?
+        JSON.parse(atob(session.data.session.access_token.split('.')[1])) : null,
+      timestamp: new Date().toISOString()
+    });
+
     setLoadingSentNotifications(true);
     try {
-      // Fetch notifications without the relationship
+      // Fetch notifications without the relationship - include both 'admin' and 'admin_tracking' types
       const { data: notifications, error } = await supabase
         .from('system_notifications' as any)
         .select('*')
         .eq('from_user_id', user.id)
-        .eq('type', 'admin')
+        .in('type', ['admin', 'admin_tracking'])
         .order('created_at', { ascending: false })
         .limit(50);
 
 
+
+
+
+      console.log('Raw notifications query result:', {
+        notifications: notifications?.slice(0, 3), // Show first 3 for debugging
+        error,
+        totalCount: notifications?.length
+      });
 
       if (error) {
         console.error('Error fetching sent notifications:', error);
@@ -938,7 +994,7 @@ const Profile = () => {
           }
         }
 
-        // Group notifications by title and message to identify "All Users" notifications
+        // Group notifications by title and message to identify related notifications
         const notificationGroups = validNotifications.reduce((groups: any, notification: any) => {
           const key = `${notification.title}-${notification.message}`;
           if (!groups[key]) {
@@ -948,18 +1004,141 @@ const Profile = () => {
           return groups;
         }, {});
 
-        // Create display notifications - one per group
-        const notificationsWithUsers = Object.values(notificationGroups).map((group: any) => {
-          const firstNotification = group[0];
-          const isAllUsers = group.length > 1; // If multiple recipients, it was sent to all users
+        // For individual notifications, we need to ensure admin_tracking notifications are properly handled
+        // Remove admin_tracking notifications that are duplicates of regular admin notifications
+        Object.keys(notificationGroups).forEach(key => {
+          const group = notificationGroups[key];
+          if (group.length > 1) {
+            // Check if this is an individual notification (has [TO:username] marker)
+            const messageText = group[0].message || '';
+            const individualMatch = messageText.match(/^\[TO:([^\]]+)\]/);
 
-          return {
-            ...firstNotification,
-            to_user: isAllUsers ? null : userProfiles[firstNotification.to_user_id],
-            recipient_count: group.length,
-            is_all_users: isAllUsers
-          };
+            if (individualMatch) {
+              // For individual notifications, prioritize the admin notification over admin_tracking
+              const adminNotifications = group.filter((n: any) => n.type === 'admin');
+              const trackingNotifications = group.filter((n: any) => n.type === 'admin_tracking');
+
+              if (adminNotifications.length > 0 && trackingNotifications.length > 0) {
+                // Keep only the admin notification (the one sent to the actual recipient)
+                notificationGroups[key] = adminNotifications;
+              }
+            }
+          }
         });
+
+        // Further filter groups to only include notifications sent within 2 minutes of each other
+        Object.keys(notificationGroups).forEach(key => {
+          const group = notificationGroups[key];
+          if (group.length > 1) {
+            // Sort by creation time
+            group.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+            // Only keep notifications that are within 2 minutes of the first one
+            const firstTime = new Date(group[0].created_at).getTime();
+            notificationGroups[key] = group.filter((n: any) => {
+              const notificationTime = new Date(n.created_at).getTime();
+              return (notificationTime - firstTime) <= 120000; // 2 minutes
+            });
+          }
+        });
+
+        // Create display notifications - one per group, sorted by creation time
+        const notificationsWithUsers = Object.values(notificationGroups)
+          .map((group: any) => {
+            const firstNotification = group[0];
+            let isAllUsers = false;
+            let targetUser = null;
+
+            // Check if this is an individual notification using the sent_to_username column
+            const messageText = firstNotification.message || '';
+            const sentToUsername = firstNotification.sent_to_username;
+
+
+
+            const allUsersMatch = messageText.match(/^\[ALL_USERS\]/);
+
+            if (allUsersMatch) {
+              isAllUsers = true;
+              targetUser = null;
+            } else if (sentToUsername) {
+              // This is an individual notification - use the sent_to_username column
+              isAllUsers = false;
+              targetUser = Object.values(userProfiles).find((profile: any) =>
+                profile.username === sentToUsername
+              );
+
+            } else {
+              // Fallback: check message for markers (for old notifications)
+              const individualMatch = messageText.match(/^\[TO:([^\]]+)\]/);
+              if (individualMatch) {
+                isAllUsers = false;
+                const targetUsername = individualMatch[1];
+                targetUser = Object.values(userProfiles).find((profile: any) =>
+                  profile.username === targetUsername
+                );
+              } else {
+                // For notifications without markers, check if it's sent to multiple users
+                const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
+                console.log('Unique recipients count:', uniqueRecipients.size);
+
+                // If there are many unique recipients, it's "All Users"
+                if (uniqueRecipients.size > 5) {
+                  isAllUsers = true;
+                  targetUser = null;
+                } else {
+                  // For small groups, it's likely individual notifications
+                  isAllUsers = false;
+                  targetUser = userProfiles[firstNotification.to_user_id];
+                }
+              }
+            }
+
+            // Clean up the message by removing the markers for display
+            let cleanMessage = messageText;
+            if (sentToUsername || messageText.match(/^\[TO:[^\]]+\]/)) {
+              cleanMessage = messageText.replace(/^\[TO:[^\]]+\]\s*/, '');
+            } else if (allUsersMatch) {
+              cleanMessage = messageText.replace(/^\[ALL_USERS\]\s*/, '');
+            }
+
+            console.log('Message cleaning:', {
+              original: messageText,
+              cleaned: cleanMessage
+            });
+
+            // Calculate proper recipient count
+            let recipientCount;
+
+            if (allUsersMatch) {
+              // For all users notifications, count unique recipients
+              const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
+              recipientCount = uniqueRecipients.size;
+            } else if (sentToUsername) {
+              // For individual notifications (identified by sent_to_username), always show 1
+              recipientCount = 1;
+            } else {
+              // For other notifications, count unique recipients
+              const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
+              recipientCount = uniqueRecipients.size;
+            }
+
+            console.log('Final notification data:', {
+              isAllUsers,
+              recipientCount,
+              targetUser: targetUser?.username,
+              cleanMessage: cleanMessage.substring(0, 50) + '...'
+            });
+
+            return {
+              ...firstNotification,
+              message: cleanMessage, // Use cleaned message for display
+              to_user: targetUser,
+              recipient_count: recipientCount,
+              is_all_users: isAllUsers
+            };
+          })
+          .filter((notification: any) => notification !== null) // Remove null entries
+          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         setSentNotifications(notificationsWithUsers);
       } else {
@@ -1309,7 +1488,7 @@ const Profile = () => {
   };
 
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -1993,7 +2172,21 @@ const Profile = () => {
             <TabsContent value="sent" className="mt-4">
               <div className="max-w-4xl mx-auto">
                 <div className="text-center mb-6">
-                  <h2 className="text-2xl font-bold text-white mb-2">Sent Notifications</h2>
+                  <div className="flex items-center justify-center gap-4 mb-4">
+                    <h2 className="text-2xl font-bold text-white">Sent Notifications</h2>
+                    <Button
+                      onClick={fetchSentNotifications}
+                      disabled={loadingSentNotifications}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
+                      size="sm"
+                    >
+                      {loadingSentNotifications ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        "Reload"
+                      )}
+                    </Button>
+                  </div>
                   <p className="text-white/70">View your sent push notifications</p>
                 </div>
 
@@ -2005,7 +2198,14 @@ const Profile = () => {
                 ) : sentNotifications.length > 0 ? (
                   <div className="space-y-4">
                     {sentNotifications.map((notification) => (
-                      <Card key={notification.id} className="p-4 bg-black/20 border-white/10">
+                      <Card
+                        key={notification.id}
+                        className="p-4 bg-black/20 border-white/10 cursor-pointer hover:bg-black/30 transition-colors"
+                        onClick={() => {
+                          setSelectedNotification(notification);
+                          setShowNotificationModal(true);
+                        }}
+                      >
                         <div className="flex items-start gap-4">
                           {/* Notification Icon */}
                           <div className="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -2020,22 +2220,16 @@ const Profile = () => {
                               </h3>
                               <div className="flex items-center gap-2 text-xs text-white/60 flex-shrink-0">
                                 <span>{formatTime(notification.created_at)}</span>
-                                <Badge
-                                  variant="secondary"
-                                  className={`${notification.read ? 'bg-green-900 text-green-400' : 'bg-blue-900 text-blue-400'}`}
-                                >
-                                  {notification.read ? 'Read' : 'Unread'}
-                                </Badge>
                               </div>
                             </div>
 
-                            <p className="text-white/80 mb-3 leading-relaxed">
-                              {notification.message}
+                            {/* Show only title initially, full message on click */}
+                            <p className="text-white/60 text-sm mb-3">
+                              Click to view full message
                             </p>
 
-                            {/* Recipient Info */}
+                            {/* Recipient Info - without "Sent to:" text */}
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-white/50">Sent to:</span>
                               {notification.is_all_users ? (
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-white/70">All Users</span>
@@ -2342,6 +2536,103 @@ const Profile = () => {
               className="max-w-full max-h-full object-contain"
               onClick={(e) => e.stopPropagation()}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Notification Detail Modal */}
+      {showNotificationModal && selectedNotification && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setShowNotificationModal(false)}
+        >
+          <div
+            className="bg-black/90 border border-white/20 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center">
+                  <Shield size={20} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Push Notification</h2>
+                  <p className="text-sm text-white/60">{formatTime(selectedNotification.created_at)}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowNotificationModal(false)}
+                className="text-white hover:bg-white/10"
+              >
+                <X size={20} />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              {/* Title */}
+              <div>
+                <label className="text-sm font-medium text-white/70 block mb-2">Title</label>
+                <p className="text-white font-semibold text-lg">{selectedNotification.title}</p>
+              </div>
+
+              {/* Message */}
+              <div>
+                <label className="text-sm font-medium text-white/70 block mb-2">Message</label>
+                <div className="bg-black/40 border border-white/10 rounded-lg p-4">
+                  <p className="text-white/90 leading-relaxed whitespace-pre-wrap">
+                    {selectedNotification.message}
+                  </p>
+                </div>
+              </div>
+
+              {/* Recipient Info */}
+              <div>
+                <label className="text-sm font-medium text-white/70 block mb-2">Sent to</label>
+                <div className="bg-black/40 border border-white/10 rounded-lg p-4">
+                  {selectedNotification.is_all_users ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                        <Bell size={16} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="text-white font-medium">All Users</p>
+                        <p className="text-white/60 text-sm">{selectedNotification.recipient_count} recipients</p>
+                      </div>
+                    </div>
+                  ) : selectedNotification.to_user ? (
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={selectedNotification.to_user.avatar_url} alt={selectedNotification.to_user.username} />
+                        <AvatarFallback className="bg-white/10 text-white text-sm">
+                          {selectedNotification.to_user.username?.charAt(0).toUpperCase() || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-white font-medium">{selectedNotification.to_user.display_name || selectedNotification.to_user.username}</p>
+                        <p className="text-white/60 text-sm">@{selectedNotification.to_user.username}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-white/70">Unknown Recipient</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-white/10">
+              <Button
+                onClick={() => setShowNotificationModal(false)}
+                className="w-full bg-white/10 hover:bg-white/20 text-white border-white/20"
+                variant="outline"
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -1,115 +1,263 @@
 function getWpToken() {
-  return localStorage.getItem('wp_jwt_token');
+  const token = localStorage.getItem('wp_jwt_token');
+  const validated = localStorage.getItem('wp_jwt_validated');
+  const validationTime = localStorage.getItem('wp_jwt_validation_time');
+  
+  // Check if token is still valid (24 hours)
+  if (token && validated === 'true' && validationTime) {
+    const tokenAge = Date.now() - parseInt(validationTime);
+    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    
+    if (tokenAge > maxAge) {
+      localStorage.removeItem('wp_jwt_token');
+      localStorage.removeItem('wp_jwt_validated');
+      localStorage.removeItem('wp_jwt_validation_time');
+      return null;
+    }
+    
+    return token;
+  }
+  
+  return null;
 }
 
 export async function getWalletStatus() {
   const token = getWpToken();
-  if (!token) throw new Error('Not authenticated with TrinEPay');
-  const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/status", {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch wallet status");
-  return await res.json();
+  if (!token) {
+    throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
+  }
+  
+  try {
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/status", {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+    });
+    
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+        throw new Error('Authentication expired. Please sign in again.');
+      }
+      throw new Error("Failed to fetch wallet status");
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('Wallet status error:', error);
+    throw error;
+  }
 }
 
 export async function getUserLimits() {
   const token = getWpToken();
-  if (!token) throw new Error('Not authenticated with TrinEPay');
-  const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/user-limits", {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Failed to fetch user limits");
-  return await res.json();
+  if (!token) {
+    throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
+  }
+  
+  try {
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/user-limits", {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+    });
+    
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+        throw new Error('Authentication expired. Please sign in again.');
+      }
+      throw new Error("Failed to fetch user limits");
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('User limits error:', error);
+    throw error;
+  }
 }
 
 export async function linkWallet({ email, password, passcode }: { email: string; password: string; passcode: string }) {
   const token = getWpToken();
-  if (!token) throw new Error('Not authenticated with TrinEPay');
-  const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/link", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json'
-    },
-    mode: 'cors',
-    credentials: 'omit',
-    body: JSON.stringify({ email, password, passcode }),
-  });
-  if (!res.ok) {
-    let msg = "Failed to link wallet";
-    try { const data = await res.json(); msg = data.message || msg; } catch {}
-    throw new Error(msg);
+  if (!token) {
+    throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
-  return await res.json();
+  
+  try {
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/link", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      mode: 'cors',
+      credentials: 'omit',
+      body: JSON.stringify({ email, password, passcode }),
+    });
+    
+    if (!res.ok) {
+      let msg = "Failed to link wallet";
+      try { 
+        const data = await res.json(); 
+        msg = data.message || data.error || msg; 
+      } catch {}
+      
+      // If unauthorized, clear the token
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+        msg = 'Authentication expired. Please sign in again.';
+      }
+      
+      throw new Error(msg);
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('Wallet link error:', error);
+    throw error;
+  }
 }
 
 export async function depositToApp({ amount }: { amount: number }) {
   const token = getWpToken();
-  if (!token) throw new Error('Not authenticated with TrinEPay');
-  const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/deposit", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      'Authorization': `Bearer ${token}`,
-      'Accept': 'application/json'
-    },
-    mode: 'cors',
-    credentials: 'omit',
-    body: JSON.stringify({ amount }),
-  });
-  if (!res.ok) {
-    let msg = "Failed to deposit";
-    try { const data = await res.json(); msg = data.message || msg; } catch {}
-    throw new Error(msg);
+  if (!token) {
+    throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
-  return await res.json();
+  
+  try {
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/deposit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      mode: 'cors',
+      credentials: 'omit',
+      body: JSON.stringify({ amount }),
+    });
+    
+    if (!res.ok) {
+      let msg = "Failed to deposit";
+      try { 
+        const data = await res.json(); 
+        msg = data.message || data.error || msg; 
+      } catch {}
+      
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+        msg = 'Authentication expired. Please sign in again.';
+      }
+      
+      throw new Error(msg);
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('Deposit error:', error);
+    throw error;
+  }
 }
 
 export async function withdrawToWallet({ amount }: { amount: number }) {
   const token = getWpToken();
-  if (!token) throw new Error('Not authenticated with TrinEPay');
-  const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/withdraw", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({ amount }),
-  });
-  if (!res.ok) {
-    let msg = "Failed to withdraw";
-    try { const data = await res.json(); msg = data.message || msg; } catch {}
-    throw new Error(msg);
+  if (!token) {
+    throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
-  return await res.json();
+  
+  try {
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/withdraw", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ amount }),
+    });
+    
+    if (!res.ok) {
+      let msg = "Failed to withdraw";
+      try { 
+        const data = await res.json(); 
+        msg = data.message || data.error || msg; 
+      } catch {}
+      
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+        msg = 'Authentication expired. Please sign in again.';
+      }
+      
+      throw new Error(msg);
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('Withdraw error:', error);
+    throw error;
+  }
 }
 
 export async function unlinkWallet() {
   const token = getWpToken();
-  if (!token) throw new Error('Not authenticated with TrinEPay');
+  if (!token) {
+    throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
+  }
   
   try {
     const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/unlink", {
       method: "POST",
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
     });
     
     if (res.ok) {
       localStorage.removeItem('wp_jwt_token');
+      localStorage.removeItem('wp_jwt_validated');
+      localStorage.removeItem('wp_jwt_validation_time');
       return await res.json();
     } else if (res.status === 404) {
       console.log('TrinEPay unlink endpoint not found, handling locally');
       localStorage.removeItem('wp_jwt_token');
+      localStorage.removeItem('wp_jwt_validated');
+      localStorage.removeItem('wp_jwt_validation_time');
       return { success: true, message: 'Wallet unlinked locally' };
     } else {
       let msg = "Failed to unlink wallet";
-      try { const data = await res.json(); msg = data.message || msg; } catch {}
+      try { 
+        const data = await res.json(); 
+        msg = data.message || data.error || msg; 
+      } catch {}
+      
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+        msg = 'Authentication expired. Please sign in again.';
+      }
+      
       throw new Error(msg);
     }
   } catch (error) {
     console.log('Error calling TrinEPay unlink endpoint, handling locally:', error);
     localStorage.removeItem('wp_jwt_token');
+    localStorage.removeItem('wp_jwt_validated');
+    localStorage.removeItem('wp_jwt_validation_time');
     return { success: true, message: 'Wallet unlinked locally' };
   }
 }
@@ -225,7 +373,7 @@ export async function deductTrincredits(userId: string, amount: number): Promise
     if (currentBalance < amount) {
       return { 
         success: false, 
-        error: `Insufficient balance. You have TT$${currentBalance.toFixed(2)} but need TT$${amount.toFixed(2)}` 
+        error: `Insufficient balance. You have TT${currentBalance.toFixed(2)} but need TT${amount.toFixed(2)}` 
       };
     }
 

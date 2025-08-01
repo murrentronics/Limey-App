@@ -141,30 +141,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       // Add timeout to prevent hanging
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
       
       const res = await fetch('https://theronm18.sg-host.com/wp-json/jwt-auth/v1/token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({ username: email, password }),
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
-      const data = await res.json();
       
-      if (data.token) {
-        localStorage.setItem('wp_jwt_token', data.token);
-        localStorage.setItem('wp_jwt_validated', 'true');
-        localStorage.setItem('wp_jwt_validation_time', Date.now().toString());
-        return true; // JWT validation successful
-      } else {
-        localStorage.removeItem('wp_jwt_token');
-        localStorage.removeItem('wp_jwt_validated');
-        localStorage.removeItem('wp_jwt_validation_time');
-        return false; // JWT validation failed
+      if (res.ok) {
+        const data = await res.json();
+        
+        if (data.token) {
+          localStorage.setItem('wp_jwt_token', data.token);
+          localStorage.setItem('wp_jwt_validated', 'true');
+          localStorage.setItem('wp_jwt_validation_time', Date.now().toString());
+          console.log('WordPress JWT token stored successfully');
+          return true; // JWT validation successful
+        }
       }
+      
+      // Clear tokens on failure
+      localStorage.removeItem('wp_jwt_token');
+      localStorage.removeItem('wp_jwt_validated');
+      localStorage.removeItem('wp_jwt_validation_time');
+      console.warn('WordPress JWT token fetch failed');
+      return false; // JWT validation failed
+      
     } catch (err) {
+      console.error('WordPress JWT token fetch error:', err);
       localStorage.removeItem('wp_jwt_token');
       localStorage.removeItem('wp_jwt_validated');
       localStorage.removeItem('wp_jwt_validation_time');
@@ -179,14 +190,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     if (!error) {
-      // Fetch and store the WordPress JWT token after successful Supabase login (non-blocking)
-      fetchWpJwtToken(email, password).catch((err) => {
+      // Fetch and store the WordPress JWT token after successful Supabase login
+      try {
+        const jwtSuccess = await fetchWpJwtToken(email, password);
+        if (!jwtSuccess) {
+          console.warn('WordPress JWT token could not be obtained, wallet features may not work');
+        }
+      } catch (err) {
         console.error('JWT token fetch failed:', err);
         // Clear any existing tokens on failure
         localStorage.removeItem('wp_jwt_token');
         localStorage.removeItem('wp_jwt_validated');
         localStorage.removeItem('wp_jwt_validation_time');
-      });
+      }
     }
 
     if (error) {
