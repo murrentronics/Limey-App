@@ -182,10 +182,12 @@ const Profile = () => {
   useEffect(() => {
     fetchProfile();
     if (isOwnProfile) {
-      fetchSavedVideos();
+      if (!isAdmin) {
+        fetchSavedVideos();
+      }
       if (user?.id) fetchUserSponsoredAds(user.id);
     }
-  }, [username, user, isOwnProfile]);
+  }, [username, user, isOwnProfile, isAdmin]);
 
   // Fetch follow counts when profile loads
   useEffect(() => {
@@ -799,7 +801,8 @@ const Profile = () => {
           from_user_id: user?.id,
           type: 'admin',
           title: pushNotification.title,
-          message: `[ALL_USERS] ${pushNotification.message}`
+          message: `[ALL_USERS] ${pushNotification.message}`,
+          recipient_count: allUsers.length
         }));
 
         console.log('About to save All Users notifications:', {
@@ -861,7 +864,8 @@ const Profile = () => {
             type: 'admin',
             title: notificationTitle,
             message: notificationMessage,
-            sent_to_username: targetUsername
+            sent_to_username: targetUsername,
+            recipient_count: 1
           }
         ];
 
@@ -873,7 +877,8 @@ const Profile = () => {
             type: 'admin_tracking',
             title: notificationTitle,
             message: notificationMessage,
-            sent_to_username: targetUsername
+            sent_to_username: targetUsername,
+            recipient_count: 1
           });
         }
 
@@ -1066,6 +1071,16 @@ const Profile = () => {
               targetUser = Object.values(userProfiles).find((profile: any) =>
                 profile.username === sentToUsername
               );
+              
+              // If we can't find the user in profiles, create a fallback user object
+              if (!targetUser) {
+                targetUser = {
+                  username: sentToUsername,
+                  display_name: sentToUsername,
+                  avatar_url: null,
+                  user_id: firstNotification.to_user_id
+                };
+              }
 
             } else {
               // Fallback: check message for markers (for old notifications)
@@ -1076,6 +1091,16 @@ const Profile = () => {
                 targetUser = Object.values(userProfiles).find((profile: any) =>
                   profile.username === targetUsername
                 );
+                
+                // If we can't find the user in profiles, create a fallback user object
+                if (!targetUser) {
+                  targetUser = {
+                    username: targetUsername,
+                    display_name: targetUsername,
+                    avatar_url: null,
+                    user_id: firstNotification.to_user_id
+                  };
+                }
               } else {
                 // For notifications without markers, check if it's sent to multiple users
                 const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
@@ -1106,26 +1131,31 @@ const Profile = () => {
               cleaned: cleanMessage
             });
 
-            // Calculate proper recipient count
-            let recipientCount;
+            // Use stored recipient count if available, otherwise calculate
+            let recipientCount = firstNotification.recipient_count;
 
-            if (allUsersMatch) {
-              // For all users notifications, count unique recipients
-              const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
-              recipientCount = uniqueRecipients.size;
-            } else if (sentToUsername) {
-              // For individual notifications (identified by sent_to_username), always show 1
-              recipientCount = 1;
-            } else {
-              // For other notifications, count unique recipients
-              const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
-              recipientCount = uniqueRecipients.size;
+            if (!recipientCount) {
+              // Fallback calculation for older notifications without recipient_count
+              if (allUsersMatch) {
+                // For all users notifications, count unique recipients
+                const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
+                recipientCount = uniqueRecipients.size;
+              } else if (sentToUsername) {
+                // For individual notifications (identified by sent_to_username), always show 1
+                recipientCount = 1;
+              } else {
+                // For other notifications, count unique recipients
+                const uniqueRecipients = new Set(group.map((n: any) => n.to_user_id));
+                recipientCount = uniqueRecipients.size;
+              }
             }
 
             console.log('Final notification data:', {
               isAllUsers,
               recipientCount,
               targetUser: targetUser?.username,
+              sentToUsername,
+              availableProfiles: Object.values(userProfiles).map((p: any) => p.username),
               cleanMessage: cleanMessage.substring(0, 50) + '...'
             });
 
@@ -1621,7 +1651,7 @@ const Profile = () => {
               </div>
             </>
           )}
-          {isOwnProfile && (
+          {isOwnProfile && !isAdmin && (
             <div className="flex items-center justify-center gap-8 mb-4">
               <button
                 className="flex flex-col items-center group"
@@ -1721,7 +1751,7 @@ const Profile = () => {
       {/* Tabs and Videos */}
       <div className="px-4">
         <Tabs defaultValue={isAdmin ? "push" : "videos"} className="w-full">
-          <TabsList className={`grid w-full ${isAdmin && isOwnProfile ? 'grid-cols-2' : isOwnProfile ? 'grid-cols-3' : 'grid-cols-1'}`}>
+          <TabsList className={`grid w-full ${isAdmin && isOwnProfile ? 'grid-cols-3' : isOwnProfile ? 'grid-cols-3' : 'grid-cols-1'}`}>
             {isAdmin ? (
               <>
                 <TabsTrigger value="push" className={!isOwnProfile ? 'justify-center' : ''}>
@@ -1730,6 +1760,11 @@ const Profile = () => {
                 {isOwnProfile && (
                   <TabsTrigger value="sent">
                     <Send className="inline mr-1" size={16} />Sent
+                  </TabsTrigger>
+                )}
+                {isOwnProfile && (
+                  <TabsTrigger value="ads">
+                    <TrendingUp className="inline mr-1" size={16} />My Ads
                   </TabsTrigger>
                 )}
               </>
@@ -2172,21 +2207,7 @@ const Profile = () => {
             <TabsContent value="sent" className="mt-4">
               <div className="max-w-4xl mx-auto">
                 <div className="text-center mb-6">
-                  <div className="flex items-center justify-center gap-4 mb-4">
-                    <h2 className="text-2xl font-bold text-white">Sent Notifications</h2>
-                    <Button
-                      onClick={fetchSentNotifications}
-                      disabled={loadingSentNotifications}
-                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
-                      size="sm"
-                    >
-                      {loadingSentNotifications ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      ) : (
-                        "Reload"
-                      )}
-                    </Button>
-                  </div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Sent Notifications</h2>
                   <p className="text-white/70">View your sent push notifications</p>
                 </div>
 
