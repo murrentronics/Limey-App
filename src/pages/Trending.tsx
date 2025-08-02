@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 import BottomNavigation from "@/components/BottomNavigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Settings, TrendingUp, Eye, Trophy, Medal, Award, Play } from "lucide-react";
+import { Settings, TrendingUp, Eye, Trophy, Medal, Award, Play, MessageCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import CommentsModal from "@/components/CommentsModal";
 
 const Trending = () => {
   const navigate = useNavigate();
@@ -53,6 +54,8 @@ const Trending = () => {
   const [modalIndex, setModalIndex] = useState<number | null>(null);
   const [trendingVideos, setTrendingVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCommentsModal, setShowCommentsModal] = useState<string | null>(null);
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const { user } = useAuth();
 
   const VIDEOS_PER_PAGE = 25;
@@ -231,11 +234,59 @@ const Trending = () => {
 
       // Fetch latest profile data
       await fetchLatestProfileData(sortedVideos);
+      
+      // Fetch comment counts
+      await checkCommentCounts(sortedVideos);
     } catch (err) {
       console.error('Error in fetchTrending:', err);
     }
 
     setLoading(false);
+  };
+
+  const checkCommentCounts = async (videosList: any[]) => {
+    if (!videosList || videosList.length === 0) return;
+
+    try {
+      const videoIds = videosList.map(video => video.id);
+      
+      // Get comment counts for all videos
+      const { data: commentData, error } = await supabase
+        .from('comments')
+        .select('video_id')
+        .in('video_id', videoIds)
+        .is('parent_id', null); // Only count top-level comments
+
+      if (error) {
+        // If comments table doesn't exist yet, set all counts to 0
+        if (error.message?.includes('relation "comments" does not exist')) {
+          const initialCommentCounts = {};
+          videosList.forEach(video => {
+            initialCommentCounts[video.id] = 0;
+          });
+          setCommentCounts(initialCommentCounts);
+          return;
+        }
+        console.error('Error fetching comment counts:', error);
+        return;
+      }
+
+      // Count comments per video
+      const commentCountsMap = {};
+      videosList.forEach(video => {
+        commentCountsMap[video.id] = 0;
+      });
+
+      if (commentData) {
+        commentData.forEach(comment => {
+          commentCountsMap[comment.video_id] = (commentCountsMap[comment.video_id] || 0) + 1;
+        });
+      }
+
+      setCommentCounts(commentCountsMap);
+    } catch (error) {
+      console.error('Error checking comment counts:', error);
+    }
   };
 
   useEffect(() => {
@@ -304,11 +355,38 @@ const Trending = () => {
       })
       .subscribe();
 
+    // Subscribe to comments changes for comment counts
+    const commentsChannel = supabase
+      .channel('trending_comments_realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'comments'
+      }, async (payload) => {
+        console.log('Trending: Comment change detected:', payload);
+
+        if (payload.new && payload.new.video_id && !payload.new.parent_id) {
+          // New top-level comment
+          setCommentCounts(prev => ({
+            ...prev,
+            [payload.new.video_id]: (prev[payload.new.video_id] || 0) + 1
+          }));
+        } else if (payload.old && payload.old.video_id && !payload.old.parent_id) {
+          // Deleted top-level comment
+          setCommentCounts(prev => ({
+            ...prev,
+            [payload.old.video_id]: Math.max((prev[payload.old.video_id] || 0) - 1, 0)
+          }));
+        }
+      })
+      .subscribe();
+
     return () => {
       console.log('Cleaning up real-time subscriptions for trending page');
       supabase.removeChannel(videosChannel);
       supabase.removeChannel(likesChannel);
       supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(commentsChannel);
     };
   }, [user, trendingVideos]);
 
@@ -428,6 +506,16 @@ const Trending = () => {
                       <Eye size={12} />
                       <span>{video.genuine_view_count >= 1000 ? `${(video.genuine_view_count / 1000).toFixed(1)}K` : video.genuine_view_count || 0}</span>
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCommentsModal(video.id);
+                      }}
+                      className="flex items-center gap-1 hover:text-blue-400 transition-colors"
+                    >
+                      <MessageCircle size={12} />
+                      <span>{commentCounts[video.id] || 0}</span>
+                    </button>
                   </div>
                   {video.duration && (
                     <div className="bg-black/60 rounded-full px-2 py-1">
@@ -446,6 +534,16 @@ const Trending = () => {
           videos={trendingVideos}
           startIndex={modalIndex}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {/* Comments Modal */}
+      {showCommentsModal && (
+        <CommentsModal
+          isOpen={!!showCommentsModal}
+          onClose={() => setShowCommentsModal(null)}
+          videoId={showCommentsModal}
+          videoTitle={trendingVideos.find(v => v.id === showCommentsModal)?.title}
         />
       )}
 

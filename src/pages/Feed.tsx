@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,6 +9,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import ShareModal from "@/components/ShareModal";
+import CommentsModal from "@/components/CommentsModal";
 import { trackAdImpression, trackAdClick } from "@/lib/adminUtils";
 import React from "react";
 
@@ -248,6 +249,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
 // Note: VideoData interface is already defined above
 
 const Feed = () => {
+  const location = useLocation();
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
@@ -266,8 +268,10 @@ const Feed = () => {
   const [shareCounts, setShareCounts] = useState<Record<string, number>>({});
   const [saveCounts, setSaveCounts] = useState<Record<string, number>>({});
   const [viewCounts, setViewCounts] = useState<Record<string, number>>({});
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const [globalMuted, setGlobalMuted] = useState<boolean>(false);
   const [savedStatus, setSavedStatus] = useState<Record<string, boolean>>({});
+  const [showCommentsModal, setShowCommentsModal] = useState<string | null>(null);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareVideo, setShareVideo] = useState<VideoData | null>(null);
   const [sponsoredAds, setSponsoredAds] = useState<SponsoredAdData[]>([]);
@@ -619,6 +623,17 @@ const Feed = () => {
     // This effect is no longer needed as videos auto-play with sound ON
   }, [videos, loading]);
 
+  // Handle comment modal from notification navigation
+  useEffect(() => {
+    if (location.state?.showCommentsForVideo && videos.length > 0) {
+      const videoId = location.state.showCommentsForVideo;
+      setShowCommentsModal(videoId);
+      
+      // Clear the state to prevent reopening on subsequent renders
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, videos, navigate, location.pathname]);
+
   // Search function
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -815,16 +830,20 @@ const Feed = () => {
       const initialLikeCounts = {};
       const initialShareCounts = {};
       const initialSaveCounts = {};
+      const initialCommentCounts = {};
       data?.forEach(video => {
         initialLikeCounts[video.id] = video.like_count || 0;
         initialShareCounts[video.id] = video.share_count || 0;
         initialSaveCounts[video.id] = video.save_count || 0;
+        // Set comment count to 0 for now since the column doesn't exist yet
+        initialCommentCounts[video.id] = 0;
       });
 
       // Update counts immediately
       setLikeCounts(prev => ({ ...prev, ...initialLikeCounts }));
       setShareCounts(prev => ({ ...prev, ...initialShareCounts }));
       setSaveCounts(prev => ({ ...prev, ...initialSaveCounts }));
+      setCommentCounts(prev => ({ ...prev, ...initialCommentCounts }));
 
       // After fetching, filter out videos where profiles.deactivated is true//
       const filtered = (data || []).filter(v => {
@@ -843,6 +862,7 @@ const Feed = () => {
       await checkLikeStatus(filtered as VideoData[]);
       await checkViewCounts(filtered as VideoData[]);
       await checkSavedStatus(filtered as VideoData[]);
+      await checkCommentCounts(filtered as VideoData[]);
       await fetchLatestProfileData(filtered as VideoData[]); // Fetch latest profile data
     } catch (error) {
       // Handle fetchVideos errors
@@ -1153,6 +1173,45 @@ const Feed = () => {
 
     } catch (error) {
       console.error('Error checking view counts:', error);
+    }
+  };
+
+  // Comment count functions
+  const checkCommentCounts = async (videosArr: VideoData[]) => {
+    try {
+      const newCommentCounts: { [key: string]: number } = {};
+
+      // Try to get comment counts from the database
+      for (const video of videosArr) {
+        try {
+          const { count, error } = await supabase
+            .from('comments')
+            .select('*', { count: 'exact', head: true })
+            .eq('video_id', video.id)
+            .is('parent_id', null); // Only count top-level comments
+
+          if (!error && typeof count === 'number') {
+            newCommentCounts[video.id] = count;
+          } else {
+            // Fallback to 0 if comments table doesn't exist yet
+            newCommentCounts[video.id] = 0;
+          }
+        } catch (err) {
+          // Handle comment count errors (table might not exist yet)
+          newCommentCounts[video.id] = 0;
+        }
+      }
+
+      setCommentCounts(prev => ({ ...prev, ...newCommentCounts }));
+
+    } catch (error) {
+      console.error('Error checking comment counts:', error);
+      // Set all comment counts to 0 if there's an error
+      const fallbackCounts: { [key: string]: number } = {};
+      videosArr.forEach(video => {
+        fallbackCounts[video.id] = 0;
+      });
+      setCommentCounts(prev => ({ ...prev, ...fallbackCounts }));
     }
   };
 
@@ -1652,6 +1711,25 @@ const Feed = () => {
                           </span>
                         </div>
 
+                        {/* Comment Button */}
+                        <div className="flex flex-col items-center">
+                          <button
+                            onClick={e => { 
+                              e.stopPropagation(); 
+                              setShowCommentsModal(video.id);
+                            }}
+                            className="p-0 bg-transparent border-none"
+                            data-control
+                          >
+                            <MessageCircle
+                              size={28}
+                              className="text-white fill-white transition-colors"
+                            />
+                          </button>
+                          <span className="text-white text-xs mt-1 font-medium">
+                            {commentCounts[video.id] || 0}
+                          </span>
+                        </div>
 
                         {/* View Count */}
                         <div className="flex flex-col items-center">
@@ -1896,7 +1974,25 @@ const Feed = () => {
                               </span>
                             </div>
 
-
+                            {/* Comment Button */}
+                            <div className="flex flex-col items-center">
+                              <button
+                                onClick={e => { 
+                                  e.stopPropagation(); 
+                                  setShowCommentsModal(video.id);
+                                }}
+                                className="p-0 bg-transparent border-none"
+                                data-control
+                              >
+                                <MessageCircle
+                                  size={28}
+                                  className="text-white fill-white transition-colors"
+                                />
+                              </button>
+                              <span className="text-white text-xs mt-1 font-medium">
+                                {commentCounts[video.id] || 0}
+                              </span>
+                            </div>
 
                             {/* View Count */}
                             <div className="flex flex-col items-center">
@@ -2055,6 +2151,19 @@ const Feed = () => {
             setShareVideo(null);
           }}
           video={shareVideo}
+        />
+      )}
+
+      {/* Comments Modal */}
+      {showCommentsModal && (
+        <CommentsModal
+          isOpen={!!showCommentsModal}
+          onClose={() => setShowCommentsModal(null)}
+          videoId={showCommentsModal}
+          videoTitle={videos.find(v => v.id === showCommentsModal)?.title}
+          onCommentCountChange={(videoId, newCount) => {
+            setCommentCounts(prev => ({ ...prev, [videoId]: newCount }));
+          }}
         />
       )}
     </div>

@@ -3,13 +3,21 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
 export const useUnreadCount = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
   const [totalUnreadCount, setTotalUnreadCount] = useState(0);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [systemUnreadCount, setSystemUnreadCount] = useState(0);
 
   const fetchUnreadCounts = async () => {
-    if (!user) return;
+    if (!user || loading) return;
+
+    // Don't show any counts for admin users
+    if (isAdmin) {
+      setTotalUnreadCount(0);
+      setInboxUnreadCount(0);
+      setSystemUnreadCount(0);
+      return;
+    }
 
     try {
       // Get unread messages count
@@ -50,7 +58,7 @@ export const useUnreadCount = () => {
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && !loading) {
       fetchUnreadCounts();
 
       // Set up periodic refresh to ensure counts stay accurate
@@ -130,7 +138,7 @@ export const useUnreadCount = () => {
         }
       };
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, loading]);
 
   return {
     totalUnreadCount,

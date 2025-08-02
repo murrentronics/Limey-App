@@ -1,12 +1,13 @@
 import AutoPlayVideo from "@/components/AutoPlayVideo";
 import { useRef, useEffect, useState } from "react";
-import { X, Share2, Volume2, VolumeX, Plus, Heart, Eye, Bookmark } from "lucide-react";
+import { X, Share2, Volume2, VolumeX, Plus, Heart, Eye, Bookmark, MessageCircle } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import ShareModal from "@/components/ShareModal";
+import CommentsModal from "@/components/CommentsModal";
 
 
 // Move this to the top after the imports
@@ -36,6 +37,8 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
   const [savedStatus, setSavedStatus] = useState<{ [key: string]: boolean }>({});
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareVideo, setShareVideo] = useState<any>(null);
+  const [showCommentsModal, setShowCommentsModal] = useState<string | null>(null);
+  const [commentCounts, setCommentCounts] = useState<{ [key: string]: number }>({});
 
   // Only update modalVideos when videos prop changes
   useEffect(() => {
@@ -146,7 +149,53 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
 
     checkLikeStatus();
     checkViewCounts();
+    checkCommentCounts();
   }, [user, modalVideos]);
+
+  const checkCommentCounts = async () => {
+    if (modalVideos.length === 0) return;
+
+    try {
+      const videoIds = modalVideos.map(video => video.id);
+      
+      // Get comment counts for all videos
+      const { data: commentData, error } = await supabase
+        .from('comments')
+        .select('video_id')
+        .in('video_id', videoIds)
+        .is('parent_id', null); // Only count top-level comments
+
+      if (error) {
+        // If comments table doesn't exist yet, set all counts to 0
+        if (error.message?.includes('relation "comments" does not exist')) {
+          const initialCommentCounts = {};
+          modalVideos.forEach(video => {
+            initialCommentCounts[video.id] = 0;
+          });
+          setCommentCounts(initialCommentCounts);
+          return;
+        }
+        console.error('Error fetching comment counts:', error);
+        return;
+      }
+
+      // Count comments per video
+      const commentCountsMap = {};
+      modalVideos.forEach(video => {
+        commentCountsMap[video.id] = 0;
+      });
+
+      if (commentData) {
+        commentData.forEach(comment => {
+          commentCountsMap[comment.video_id] = (commentCountsMap[comment.video_id] || 0) + 1;
+        });
+      }
+
+      setCommentCounts(commentCountsMap);
+    } catch (error) {
+      console.error('Error checking comment counts:', error);
+    }
+  };
 
   // Then update the function:
   const checkSavedStatus = async () => {
@@ -310,10 +359,37 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
       })
       .subscribe();
 
+    // Subscribe to comments changes for comment counts
+    const commentsChannel = supabase
+      .channel('modal_comments_realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'comments'
+      }, async (payload) => {
+        console.log('ModalVerticalFeed: Comment change detected:', payload);
+
+        if (payload.new && payload.new.video_id && !payload.new.parent_id) {
+          // New top-level comment
+          setCommentCounts(prev => ({
+            ...prev,
+            [payload.new.video_id]: (prev[payload.new.video_id] || 0) + 1
+          }));
+        } else if (payload.old && payload.old.video_id && !payload.old.parent_id) {
+          // Deleted top-level comment
+          setCommentCounts(prev => ({
+            ...prev,
+            [payload.old.video_id]: Math.max((prev[payload.old.video_id] || 0) - 1, 0)
+          }));
+        }
+      })
+      .subscribe();
+
     // Cleanup subscriptions
     return () => {
       supabase.removeChannel(viewsChannel);
       supabase.removeChannel(videosChannel);
+      supabase.removeChannel(commentsChannel);
     };
   }, [user, modalVideos]);
 
@@ -660,6 +736,23 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
                     </span>
                   </div>
 
+                  {/* Comments */}
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCommentsModal(video.id);
+                      }}
+                      className="p-0 bg-transparent border-none"
+                      data-control
+                    >
+                      <MessageCircle size={28} className="text-white fill-white" />
+                    </button>
+                    <span className="text-white text-xs mt-1 font-medium">
+                      {commentCounts[video.id] || 0}
+                    </span>
+                  </div>
+
                   {/* Share */}
                   <div className="flex flex-col items-center">
                     <button
@@ -693,6 +786,19 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
             setShareVideo(null);
           }}
           video={shareVideo}
+        />
+      )}
+
+      {/* Comments Modal */}
+      {showCommentsModal && (
+        <CommentsModal
+          isOpen={!!showCommentsModal}
+          onClose={() => setShowCommentsModal(null)}
+          videoId={showCommentsModal}
+          videoTitle={modalVideos.find(v => v.id === showCommentsModal)?.title}
+          onCommentCountChange={(videoId, newCount) => {
+            setCommentCounts(prev => ({ ...prev, [videoId]: newCount }));
+          }}
         />
       )}
     </div>

@@ -1584,11 +1584,6 @@ const Profile = () => {
               <>
                 <Button variant="ghost" size="sm" onClick={() => setShowWalletModal(true)}><Wallet size={16} /></Button>
                 <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}><Settings size={16} /></Button>
-                {isAdmin && (
-                  <Button variant="ghost" size="sm" onClick={() => navigate('/admin')} title="Admin Dashboard">
-                    👑
-                  </Button>
-                )}
                 <Button variant="outline" size="sm" onClick={signOut}>Logout</Button>
               </>
             ) : (
@@ -1732,8 +1727,18 @@ const Profile = () => {
               )}
             </div>
 
-            {/* Message button - only show if following */}
-            {isFollowing && (
+            {/* Admin crown button or Message button */}
+            {isAdmin ? (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => navigate('/admin')}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white min-w-[100px]"
+                title="Admin Dashboard"
+              >
+                👑 Admin
+              </Button>
+            ) : isFollowing && (
               <Button
                 variant="default"
                 size="sm"
@@ -2564,15 +2569,15 @@ const Profile = () => {
       {/* Notification Detail Modal */}
       {showNotificationModal && selectedNotification && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black flex flex-col"
           onClick={() => setShowNotificationModal(false)}
         >
           <div
-            className="bg-black/90 border border-white/20 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            className="w-full h-full flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center">
                   <Shield size={20} className="text-white" />
@@ -2588,12 +2593,12 @@ const Profile = () => {
                 onClick={() => setShowNotificationModal(false)}
                 className="text-white hover:bg-white/10"
               >
-                <X size={20} />
+                <X size={24} />
               </Button>
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-4">
+            <div className="flex-1 p-4 space-y-6 overflow-y-auto">
               {/* Title */}
               <div>
                 <label className="text-sm font-medium text-white/70 block mb-2">Title</label>
@@ -2645,10 +2650,10 @@ const Profile = () => {
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-white/10">
+            <div className="p-4 border-t border-white/10">
               <Button
                 onClick={() => setShowNotificationModal(false)}
-                className="w-full bg-white/10 hover:bg-white/20 text-white border-white/20"
+                className="w-full bg-white/10 hover:bg-white/20 text-white border-white/20 h-12 text-lg"
                 variant="outline"
               >
                 Close

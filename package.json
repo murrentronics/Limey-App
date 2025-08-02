@@ -3,16 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://murrentronics.github.io/limey-app",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
-    "build:gh-pages": "vite build --base=/limey-app/"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.11.6",
