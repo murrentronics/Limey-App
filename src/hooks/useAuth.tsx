@@ -183,6 +183,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
+
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -247,6 +249,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
     }
   };
+
+
 
   const value = {
     user,

@@ -52,6 +52,8 @@ export async function getWalletStatus() {
   }
 }
 
+
+
 export async function getUserLimits() {
   const token = getWpToken();
   if (!token) {
@@ -163,7 +165,23 @@ export async function depositToApp({ amount }: { amount: number }) {
       throw new Error(msg);
     }
     
-    return await res.json();
+    const result = await res.json();
+    
+    // Auto-sync balance after successful deposit
+    try {
+      // Get current balance from Supabase and sync to WordPress
+      const { supabase } = await import('@/integrations/supabase/client');
+      const currentUser = JSON.parse(localStorage.getItem('sb-supabase-auth-token') || '{}')?.user;
+      if (currentUser?.id) {
+        const newBalance = await getTrincreditsBalance(currentUser.id);
+        await syncTriniCreditToWordPress(newBalance);
+      }
+    } catch (syncError) {
+      console.warn('Auto-sync after deposit failed:', syncError);
+      // Don't fail the deposit if sync fails
+    }
+    
+    return result;
   } catch (error) {
     console.error('Deposit error:', error);
     throw error;
@@ -192,7 +210,7 @@ export async function withdrawToWallet({ amount }: { amount: number }) {
       try { 
         const data = await res.json(); 
         msg = data.message || data.error || msg; 
-      } catch {}
+      } catch { }
       
       if (res.status === 401 || res.status === 403) {
         localStorage.removeItem('wp_jwt_token');
@@ -204,9 +222,58 @@ export async function withdrawToWallet({ amount }: { amount: number }) {
       throw new Error(msg);
     }
     
-    return await res.json();
+    const result = await res.json();
+    
+    // Auto-sync balance after successful withdrawal
+    try {
+      // Get current balance from Supabase and sync to WordPress
+      const { supabase } = await import('@/integrations/supabase/client');
+      const currentUser = JSON.parse(localStorage.getItem('sb-supabase-auth-token') || '{}')?.user;
+      if (currentUser?.id) {
+        const newBalance = await getTrincreditsBalance(currentUser.id);
+        await syncTriniCreditToWordPress(newBalance);
+      }
+    } catch (syncError) {
+      console.warn('Auto-sync after withdrawal failed:', syncError);
+      // Don't fail the withdrawal if sync fails
+    }
+    
+    return result;
   } catch (error) {
     console.error('Withdraw error:', error);
+    throw error;
+  }
+}
+
+export async function syncBalanceToWordPress(correctBalance: number) {
+  const token = getWpToken();
+  if (!token) {
+    throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
+  }
+  
+  try {
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/sync-balance", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ balance: correctBalance }),
+    });
+    
+    if (!res.ok) {
+      let msg = "Failed to sync balance";
+      try { 
+        const data = await res.json(); 
+        msg = data.message || data.error || msg; 
+      } catch {}
+      throw new Error(msg);
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('Balance sync error:', error);
     throw error;
   }
 }
@@ -359,10 +426,46 @@ export async function recordTrincreditsTransaction({
       throw new Error('Failed to update balance');
     }
 
+    // CRITICAL: Also sync the balance to WordPress trinicredit_balance
+    try {
+      await syncTriniCreditToWordPress(newBalance);
+    } catch (wpError) {
+      console.warn('Failed to sync balance to WordPress:', wpError);
+      // Don't fail the transaction if WordPress sync fails
+    }
+
     return transaction;
   } catch (error) {
     console.error('Error recording transaction:', error);
     throw new Error('Failed to record transaction');
+  }
+}
+
+async function syncTriniCreditToWordPress(balance: number) {
+  const token = getWpToken();
+  if (!token) {
+    throw new Error('No WordPress token available');
+  }
+  
+  try {
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/sync-trinicredit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ balance: balance }),
+    });
+    
+    if (!res.ok) {
+      throw new Error(`WordPress sync failed: ${res.status}`);
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.error('WordPress TriniCredit sync error:', error);
+    throw error;
   }
 }
 
@@ -385,6 +488,15 @@ export async function deductTrincredits(userId: string, amount: number): Promise
       referenceId: `boost_${Date.now()}`
     });
 
+    // Auto-sync balance after deduction
+    try {
+      const newBalance = await getTrincreditsBalance(userId);
+      await syncTriniCreditToWordPress(newBalance);
+    } catch (syncError) {
+      console.warn('Auto-sync after deduction failed:', syncError);
+      // Don't fail the deduction if sync fails
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error deducting balance:', error);
@@ -392,6 +504,21 @@ export async function deductTrincredits(userId: string, amount: number): Promise
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to deduct balance' 
     };
+  }
+}
+
+export async function fixWordPressBalance(userId: string) {
+  try {
+    // Get the correct balance from Supabase
+    const correctBalance = await getTrincreditsBalance(userId);
+    
+    // Sync it to WordPress
+    await syncTriniCreditToWordPress(correctBalance);
+    
+    return { success: true, balance: correctBalance };
+  } catch (error) {
+    console.error('Error fixing WordPress balance:', error);
+    throw error;
   }
 }
 

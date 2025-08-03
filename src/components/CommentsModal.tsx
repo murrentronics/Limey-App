@@ -695,7 +695,7 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                           View replies ({comment.replies.length})
                         </button>
                       )}
-                      
+
                       {/* Show first 3 replies or all if expanded */}
                       {(expandedReplies[comment.id] ? comment.replies : comment.replies.slice(0, 3)).map((reply) => (
                         <div key={reply.id} className="flex gap-3 mb-3">
@@ -753,7 +753,7 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                           </div>
                         </div>
                       ))}
-                      
+
                       {/* Hide replies link if expanded and has more than 3 */}
                       {expandedReplies[comment.id] && comment.replies.length > 3 && (
                         <button

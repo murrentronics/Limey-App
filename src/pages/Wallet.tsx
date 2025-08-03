@@ -9,6 +9,7 @@ import {
   getTrincreditsBalance,
   getUserLimits,
   withdrawToWallet,
+  fixWordPressBalance,
 } from "@/lib/trinepayApi";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase, getLinkedWallet } from "@/integrations/supabase/client";
@@ -35,6 +36,7 @@ export default function Wallet() {
   const [walletLinked, setWalletLinked] = useState<boolean | null>(null);
   const [linkedWalletEmail, setLinkedWalletEmail] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [fixing, setFixing] = useState(false);
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { loading: statusLoading, linked, refresh } = useWalletLinkStatus(user?.id);
@@ -99,19 +101,19 @@ export default function Wallet() {
       .reduce((acc, tx) => acc + tx.amount, 0);
 
     if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
-      setError(`This transaction would exceed your monthly debit transaction limit of TT$${limits.max_monthly_transactions.toLocaleString()}`);
+      setError(`This transaction would exceed your monthly debit transaction limit of TT${limits.max_monthly_transactions.toLocaleString()}`);
       setLoading(false);
       return;
     }
 
     if (walletBal + amountValue > limits.max_wallet_balance) {
-      setError(`This transaction would exceed your maximum wallet balance of TT$${limits.max_wallet_balance.toLocaleString()}`);
+      setError(`This transaction would exceed your maximum wallet balance of TT${limits.max_wallet_balance.toLocaleString()}`);
       setLoading(false);
       return;
     }
 
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your TrinEPay account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your TrinEPay account type is TT${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -155,7 +157,7 @@ export default function Wallet() {
     }
 
     if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your TrinEPay account type is TT$${limits.per_transaction_limit.toLocaleString()}`);
+      setError(`Maximum per transaction for your TrinEPay account type is TT${limits.per_transaction_limit.toLocaleString()}`);
       setLoading(false);
       return;
     }
@@ -176,6 +178,23 @@ export default function Wallet() {
       setError(err.message || "Failed to withdraw");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFixBalance = async () => {
+    if (!user) return;
+    setFixing(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await fixWordPressBalance(user.id);
+      setSuccess(`Balance fixed! Synced TT$${result.balance.toFixed(2)} to WordPress server.`);
+      await fetchWalletData();
+    } catch (err: any) {
+      setError(`Fix failed: ${err.message}. The sync endpoint may not exist on the server yet.`);
+    } finally {
+      setFixing(false);
     }
   };
 
@@ -277,6 +296,8 @@ export default function Wallet() {
           {success && (
             <div className="text-green-400 mt-2 text-center">{success}</div>
           )}
+
+
         </div>
 
         <div className="mt-8">
@@ -298,11 +319,10 @@ export default function Wallet() {
                   </div>
                 </div>
                 <div
-                  className={`font-bold ${
-                    tx.transaction_type === "deposit"
-                      ? "text-green-400"
-                      : "text-red-400"
-                  }`}
+                  className={`font-bold ${tx.transaction_type === "deposit"
+                    ? "text-green-400"
+                    : "text-red-400"
+                    }`}
                 >
                   {tx.transaction_type === "deposit" ? "+" : "-"}TT$
                   {tx.amount.toFixed(2)}
