@@ -197,6 +197,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const jwtSuccess = await fetchWpJwtToken(email, password);
         if (!jwtSuccess) {
           console.warn('WordPress JWT token could not be obtained, wallet features may not work');
+        } else {
+          // AUTO-SYNC: Sync balance to WordPress after successful login
+          try {
+            const { fixWordPressBalance, getTrincreditsBalance } = await import('@/lib/trinepayApi');
+            // Get the user ID from the session that was just created
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.id) {
+              await fixWordPressBalance(session.user.id);
+              console.log('Auto-synced balance to WordPress after login');
+            }
+          } catch (syncError) {
+            console.warn('Auto-sync after login failed:', syncError);
+            // Don't fail login if sync fails
+          }
         }
       } catch (err) {
         console.error('JWT token fetch failed:', err);

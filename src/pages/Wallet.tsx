@@ -56,6 +56,15 @@ export default function Wallet() {
       const balance = await getTrincreditsBalance(user.id);
       setWalletBal(balance);
 
+      // AUTO-SYNC: Always sync balance to WordPress when wallet loads
+      try {
+        await fixWordPressBalance(user.id);
+        console.log('Auto-synced balance to WordPress:', balance);
+      } catch (syncError) {
+        console.warn('Auto-sync failed on wallet load:', syncError);
+        // Don't fail wallet loading if sync fails
+      }
+
       const limitsRes = await getUserLimits();
       if (limitsRes) {
         setLimits(limitsRes);

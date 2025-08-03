@@ -218,9 +218,19 @@ const Profile = () => {
 
 
   useEffect(() => {
-    if (isOwnProfile) {
-      getTrincreditsBalance(user?.id || '').then(balance => {
+    if (isOwnProfile && user?.id) {
+      getTrincreditsBalance(user.id).then(async (balance) => {
         setWalletBalance(balance);
+        
+        // AUTO-SYNC: Sync balance to WordPress when profile loads
+        try {
+          const { fixWordPressBalance } = await import('@/lib/trinepayApi');
+          await fixWordPressBalance(user.id);
+          console.log('Auto-synced balance to WordPress from profile:', balance);
+        } catch (syncError) {
+          console.warn('Auto-sync from profile failed:', syncError);
+          // Don't fail profile loading if sync fails
+        }
       }).catch(() => setWalletBalance(0));
     }
   }, [isOwnProfile, user?.id]);
