@@ -440,9 +440,9 @@ const Trending = () => {
       </div>
 
       {/* Trending Videos */}
-      <div className="grid grid-cols-3 gap-2 p-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 p-4">
         {trendingVideos.length === 0 ? (
-          <div className="col-span-3 text-center py-12">
+          <div className="col-span-2 md:col-span-3 lg:col-span-5 text-center py-12">
             <TrendingUp size={48} className="text-gray-500 mx-auto mb-4" />
             <p className="text-gray-400 text-lg">No trending videos found</p>
             <p className="text-gray-500 text-sm">Check back later for the latest trending content!</p>

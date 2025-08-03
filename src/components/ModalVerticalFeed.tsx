@@ -19,9 +19,11 @@ interface ModalVerticalFeedProps {
   videos: any[];
   startIndex: number;
   onClose: () => void;
+  highlightCommentId?: string; // ID of comment to highlight
+  autoOpenComments?: boolean; // Whether to auto-open comments modal
 }
 
-const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedProps) => {
+const ModalVerticalFeed = ({ videos, startIndex, onClose, highlightCommentId, autoOpenComments }: ModalVerticalFeedProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -52,6 +54,16 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
       if (child) child.scrollIntoView({ behavior: "auto" });
     }
   }, [startIndex]);
+
+  // Auto-open comments modal when highlightCommentId is provided
+  useEffect(() => {
+    if (autoOpenComments && modalVideos.length > 0 && startIndex !== null) {
+      const currentVideo = modalVideos[startIndex];
+      if (currentVideo) {
+        setShowCommentsModal(currentVideo.id);
+      }
+    }
+  }, [autoOpenComments, modalVideos, startIndex]);
 
   // Follow status check
   useEffect(() => {
@@ -796,6 +808,7 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose }: ModalVerticalFeedPro
           onClose={() => setShowCommentsModal(null)}
           videoId={showCommentsModal}
           videoTitle={modalVideos.find(v => v.id === showCommentsModal)?.title}
+          highlightCommentId={highlightCommentId}
           onCommentCountChange={(videoId, newCount) => {
             setCommentCounts(prev => ({ ...prev, [videoId]: newCount }));
           }}

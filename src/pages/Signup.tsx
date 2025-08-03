@@ -6,6 +6,9 @@ import { Eye, EyeOff } from "@/components/ui/password-eye-icons";
 import { Card } from "@/components/ui/card";
 import LimeyLogo from "@/components/LimeyLogo";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Check, X, Loader2 } from "lucide-react";
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -17,14 +20,64 @@ const Signup = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [usernameCheckTimeout, setUsernameCheckTimeout] = useState<NodeJS.Timeout | null>(null);
   const { signUp, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (user && !authLoading) {
-      navigate("/");
+      // After signup, redirect to phone verification
+      navigate("/verify-phone");
     }
   }, [user, authLoading, navigate]);
+
+  // Check username availability with debouncing
+  useEffect(() => {
+    if (usernameCheckTimeout) {
+      clearTimeout(usernameCheckTimeout);
+    }
+
+    if (formData.username.length < 3) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    // Validate username format (alphanumeric and underscores only)
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(formData.username)) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    setUsernameStatus('checking');
+
+    const timeout = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc('is_username_available', {
+          username_to_check: formData.username
+        });
+
+        if (error) {
+          console.error('Error checking username:', error);
+          setUsernameStatus('idle');
+          return;
+        }
+
+        setUsernameStatus(data ? 'available' : 'taken');
+      } catch (error) {
+        console.error('Error checking username:', error);
+        setUsernameStatus('idle');
+      }
+    }, 500); // 500ms debounce
+
+    setUsernameCheckTimeout(timeout);
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [formData.username]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

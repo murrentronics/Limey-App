@@ -1,4 +1,4 @@
-import ModalVerticalFeed from "@/components/ModalVerticalFeed";
+
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import clsx from "clsx";
 import { getUserSponsoredAds, deleteSponsoredAd } from "@/lib/adminUtils";
+import ModalVerticalFeed from "@/components/ModalVerticalFeed";
 
 const Profile = () => {
   const { user, signOut, isAdmin, loading: authLoading } = useAuth();
@@ -83,10 +84,318 @@ const Profile = () => {
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<any>(null);
   const [manualAdminCheck, setManualAdminCheck] = useState<boolean | null>(null);
+  const [videoModalData, setVideoModalData] = useState<{
+    videos: any[];
+    startIndex: number;
+    highlightCommentId?: string;
+  } | null>(null);
+
+  // Missing state variables for notification system
+  const [notificationDetails, setNotificationDetails] = useState<{
+    comment?: any;
+    video?: any;
+    replyText: string;
+    isReplying: boolean;
+  }>({ replyText: '', isReplying: false });
+
+  const [replyModalData, setReplyModalData] = useState<{
+    comment?: any;
+    video?: any;
+    notification?: any;
+  }>({});
+
+  const [showReplyModal, setShowReplyModal] = useState(false);
+
+  const [videoCommentData, setVideoCommentData] = useState<{
+    video?: any;
+    commentId?: string;
+  }>({});
+
+  const [showVideoWithComment, setShowVideoWithComment] = useState(false);
 
   const location = useLocation();
 
 
+
+  // Function to fetch detailed notification data
+  const fetchNotificationDetails = async (notification: any) => {
+    console.log('Fetching details for notification:', notification);
+    try {
+      let comment = null;
+      let video = null;
+
+      // Fetch video data if video_id exists
+      if (notification.video_id) {
+        const { data: videoData } = await supabase
+          .from('videos')
+          .select('*')
+          .eq('id', notification.video_id)
+          .single();
+        video = videoData;
+      }
+
+      // Fetch the specific comment that triggered the notification
+      if (notification.video_id && (notification.type === 'comment_reply' || notification.type === 'comment_thread_activity' || notification.type === 'video_comment')) {
+        // First, get the profile of the notification sender
+        const { data: senderProfile } = await supabase
+          .from('profiles')
+          .select('username, avatar_url, display_name')
+          .eq('user_id', notification.from_user_id)
+          .single();
+
+        // Try to find the most recent comment from the notification sender
+        const { data: commentsData } = await supabase
+          .from('comments')
+          .select('*')
+          .eq('video_id', notification.video_id)
+          .eq('user_id', notification.from_user_id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (commentsData && commentsData.length > 0) {
+          comment = commentsData[0];
+
+          // Attach the sender's profile
+          comment.profiles = senderProfile || {
+            username: 'Unknown User',
+            avatar_url: null,
+            display_name: null
+          };
+        } else {
+          // If no comment found, create a placeholder with the notification message
+          comment = {
+            id: 'notification-' + notification.id,
+            content: notification.message || 'New activity',
+            user_id: notification.from_user_id,
+            created_at: notification.created_at,
+            profiles: senderProfile || {
+              username: 'Unknown User',
+              avatar_url: null,
+              display_name: null
+            }
+          };
+        }
+      }
+
+      console.log('Fetched notification details:', { comment, video });
+      setNotificationDetails({ comment, video, replyText: '', isReplying: false });
+    } catch (error) {
+      console.error('Error fetching notification details:', error);
+    }
+  };
+
+  // Function to open the fullscreen reply modal
+  const openReplyModal = () => {
+    setReplyModalData({
+      comment: notificationDetails.comment,
+      video: notificationDetails.video,
+      notification: selectedNotification
+    });
+    setShowNotificationModal(false);
+    setShowReplyModal(true);
+  };
+
+  // Function to handle quick reply from notification modal
+  const handleQuickReply = async () => {
+    if (!notificationDetails.replyText?.trim() || !user || !notificationDetails.comment) return;
+
+    setNotificationDetails(prev => ({ ...prev, isReplying: true }));
+
+    try {
+      // Insert the reply
+      const { data: replyData, error } = await supabase
+        .from('comments')
+        .insert({
+          content: notificationDetails.replyText.trim(),
+          user_id: user.id,
+          video_id: selectedNotification.video_id,
+          parent_id: notificationDetails.comment.id
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      // Get user profile for the reply
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('user_id, username, avatar_url, display_name')
+        .eq('user_id', user.id)
+        .single();
+
+      // Send notifications to thread participants (reuse the logic from CommentsModal)
+      const { data: parentComment } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          replies:comments!parent_id(user_id)
+        `)
+        .eq('id', notificationDetails.comment.id)
+        .single();
+
+      if (parentComment) {
+        const threadParticipants = new Set<string>();
+        threadParticipants.add(parentComment.user_id);
+
+        if (parentComment.replies) {
+          parentComment.replies.forEach((reply: any) => {
+            threadParticipants.add(reply.user_id);
+          });
+        }
+
+        threadParticipants.delete(user.id);
+
+        const participantIds = Array.from(threadParticipants);
+        if (participantIds.length > 0) {
+          const currentUserProfile = userProfile || { username: user.email?.split('@')[0] || 'Someone' };
+
+          const notifications = participantIds.map(participantId => ({
+            to_user_id: participantId,
+            from_user_id: user.id,
+            type: participantId === parentComment.user_id ? 'comment_reply' : 'comment_thread_activity',
+            title: participantId === parentComment.user_id ? 'New reply to your comment' : 'New activity in followed thread',
+            message: participantId === parentComment.user_id
+              ? `@${currentUserProfile.username} replied to your comment`
+              : `@${currentUserProfile.username} replied in a comment thread you're following`,
+            video_id: selectedNotification.video_id
+          }));
+
+          await supabase
+            .from('system_notifications')
+            .insert(notifications);
+        }
+      }
+
+      toast({
+        title: 'Reply sent!',
+        description: 'Your reply has been posted.',
+        className: 'bg-green-600 text-white border-green-700'
+      });
+
+      // Clear reply text and close modal
+      setNotificationDetails(prev => ({ ...prev, replyText: '', isReplying: false }));
+      setShowNotificationModal(false);
+
+    } catch (error) {
+      console.error('Error sending quick reply:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send reply. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setNotificationDetails(prev => ({ ...prev, isReplying: false }));
+    }
+  };
+
+  // Function to handle reply from fullscreen modal
+  const handleFullscreenReply = async () => {
+    if (!notificationDetails.replyText?.trim() || !user || !replyModalData.comment) return;
+
+    setNotificationDetails(prev => ({ ...prev, isReplying: true }));
+
+    try {
+      // Ensure the reply includes @username mention
+      let replyContent = notificationDetails.replyText.trim();
+      const mentionedUsername = replyModalData.comment.profiles?.username;
+
+      // Add @username if not already present
+      if (mentionedUsername && !replyContent.includes(`@${mentionedUsername}`)) {
+        replyContent = `@${mentionedUsername} ${replyContent}`;
+      }
+
+      // Insert the reply
+      const { data: replyData, error } = await supabase
+        .from('comments')
+        .insert({
+          content: replyContent,
+          user_id: user.id,
+          video_id: replyModalData.notification.video_id,
+          parent_id: replyModalData.comment.id
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      // Get user profile for the reply
+      const { data: userProfile } = await supabase
+        .from('profiles')
+        .select('user_id, username, avatar_url, display_name')
+        .eq('user_id', user.id)
+        .single();
+
+      // Send notifications to thread participants
+      const { data: parentComment } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          replies:comments!parent_id(user_id)
+        `)
+        .eq('id', replyModalData.comment.id)
+        .single();
+
+      if (parentComment) {
+        const threadParticipants = new Set<string>();
+        threadParticipants.add(parentComment.user_id);
+
+        if (parentComment.replies) {
+          parentComment.replies.forEach((reply: any) => {
+            threadParticipants.add(reply.user_id);
+          });
+        }
+
+        threadParticipants.delete(user.id);
+
+        const participantIds = Array.from(threadParticipants);
+        if (participantIds.length > 0) {
+          const currentUserProfile = userProfile || { username: user.email?.split('@')[0] || 'Someone' };
+
+          const notifications = participantIds.map(participantId => ({
+            to_user_id: participantId,
+            from_user_id: user.id,
+            type: participantId === parentComment.user_id ? 'comment_reply' : 'comment_thread_activity',
+            title: participantId === parentComment.user_id ? 'New reply to your comment' : 'New activity in followed thread',
+            message: participantId === parentComment.user_id
+              ? `@${currentUserProfile.username} replied to your comment`
+              : `@${currentUserProfile.username} replied in a comment thread you're following`,
+            video_id: replyModalData.notification.video_id
+          }));
+
+          await supabase
+            .from('system_notifications')
+            .insert(notifications);
+        }
+      }
+
+      toast({
+        title: 'Reply sent!',
+        description: 'Redirecting to video...',
+        className: 'bg-green-600 text-white border-green-700'
+      });
+
+      // Close the modal and redirect to video with comment highlighting
+      setShowReplyModal(false);
+      setNotificationDetails({ replyText: '', isReplying: false });
+
+      // Set up video modal data with the new reply highlighted
+      setVideoCommentData({
+        video: replyModalData.video,
+        commentId: replyData.id
+      });
+      setShowVideoWithComment(true);
+
+    } catch (error) {
+      console.error('Error sending fullscreen reply:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send reply. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setNotificationDetails(prev => ({ ...prev, isReplying: false }));
+    }
+  };
 
   useEffect(() => {
     if (location.pathname === "/profile" && showWalletModal) {
@@ -221,7 +530,7 @@ const Profile = () => {
     if (isOwnProfile && user?.id) {
       getTrincreditsBalance(user.id).then(async (balance) => {
         setWalletBalance(balance);
-        
+
         // AUTO-SYNC: Sync balance to WordPress when profile loads
         try {
           const { fixWordPressBalance } = await import('@/lib/trinepayApi');
@@ -1081,7 +1390,7 @@ const Profile = () => {
               targetUser = Object.values(userProfiles).find((profile: any) =>
                 profile.username === sentToUsername
               );
-              
+
               // If we can't find the user in profiles, create a fallback user object
               if (!targetUser) {
                 targetUser = {
@@ -1101,7 +1410,7 @@ const Profile = () => {
                 targetUser = Object.values(userProfiles).find((profile: any) =>
                   profile.username === targetUsername
                 );
-                
+
                 // If we can't find the user in profiles, create a fallback user object
                 if (!targetUser) {
                   targetUser = {
@@ -1801,7 +2110,7 @@ const Profile = () => {
           </TabsList>
           <TabsContent value="videos" className="mt-4">
             {Array.isArray(userVideos) && userVideos.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-2">
                 {userVideos.map((video, idx) => (
                   <Card key={video.id} className="relative aspect-[9/16] cursor-pointer group bg-black/10 overflow-hidden"
                     onClick={() => { setCurrentVideoIndex(idx); setModalVideos(userVideos); setShowVideoModal(true); }}>
@@ -1887,7 +2196,7 @@ const Profile = () => {
               </div>
 
               {sponsoredAds.length > 0 ? (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-2">
                   {sponsoredAds.map((ad) => (
                     <Card
                       key={ad.id}
@@ -2025,7 +2334,7 @@ const Profile = () => {
           )}
           {isOwnProfile && (
             <TabsContent value="saved" className="mt-4">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-5 gap-2">
                 {savedVideos.map((video, idx) => (
                   <Card key={video.id} className="relative aspect-[9/16] cursor-pointer group bg-black/10 overflow-hidden"
                     onClick={() => { setCurrentVideoIndex(idx); setModalVideos(savedVideos); setShowVideoModal(true); }}>
@@ -2625,6 +2934,67 @@ const Profile = () => {
                 </div>
               </div>
 
+              {/* Show comment content if it's a comment-related notification */}
+              {(selectedNotification.type === 'comment_reply' ||
+                selectedNotification.type === 'comment_thread_activity' ||
+                selectedNotification.type === 'video_comment') &&
+                notificationDetails.comment && (
+                  <div>
+                    <label className="text-sm font-medium text-white/70 block mb-2">
+                      {selectedNotification.type === 'video_comment' ? 'Comment on your video' : 'Related Comment'}
+                    </label>
+                    <div className="bg-black/40 border border-white/10 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="w-8 h-8 flex-shrink-0">
+                          <AvatarImage src={notificationDetails.comment.profiles?.avatar_url} />
+                          <AvatarFallback className="bg-white/10 text-white text-xs">
+                            {notificationDetails.comment.profiles?.username?.charAt(0).toUpperCase() || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-white font-medium text-sm">
+                              @{notificationDetails.comment.profiles?.username || 'Unknown'}
+                            </span>
+                            <span className="text-white/50 text-xs">
+                              {formatTime(notificationDetails.comment.created_at)}
+                            </span>
+                          </div>
+                          <p className="text-white/90 text-sm leading-relaxed">
+                            {notificationDetails.comment.content}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+              {/* Show video context if available */}
+              {notificationDetails.video && (
+                <div>
+                  <label className="text-sm font-medium text-white/70 block mb-2">Video</label>
+                  <div className="bg-black/40 border border-white/10 rounded-lg p-3">
+                    <div className="flex items-center gap-3">
+                      {notificationDetails.video.thumbnail_url && (
+                        <img
+                          src={notificationDetails.video.thumbnail_url}
+                          alt="Video thumbnail"
+                          className="w-16 h-12 object-cover rounded"
+                        />
+                      )}
+                      <div>
+                        <p className="text-white font-medium text-sm">
+                          {notificationDetails.video.title || 'Untitled Video'}
+                        </p>
+                        <p className="text-white/60 text-xs">
+                          {notificationDetails.video.view_count || 0} views
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Recipient Info */}
               <div>
                 <label className="text-sm font-medium text-white/70 block mb-2">Sent to</label>
@@ -2660,18 +3030,245 @@ const Profile = () => {
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-white/10">
+            {/* Reply section for comment notifications */}
+            {(selectedNotification.type === 'comment_reply' ||
+              selectedNotification.type === 'comment_thread_activity' ||
+              selectedNotification.type === 'video_comment') &&
+              notificationDetails.comment && (
+                <div className="p-4 border-t border-white/10">
+                  <label className="text-sm font-medium text-white/70 block mb-2">Quick Reply</label>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <Avatar className="w-8 h-8 flex-shrink-0">
+                        <AvatarImage src={user?.user_metadata?.avatar_url} />
+                        <AvatarFallback className="bg-white/10 text-white text-xs">
+                          {user?.email?.charAt(0).toUpperCase() || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <Input
+                          value={notificationDetails.replyText || ''}
+                          onChange={(e) => setNotificationDetails(prev => ({ ...prev, replyText: e.target.value }))}
+                          placeholder={`Reply to @${notificationDetails.comment.profiles?.username}...`}
+                          className="bg-white/10 border-white/20 text-white placeholder-white/50"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleQuickReply();
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={openReplyModal}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Reply
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setShowNotificationModal(false);
+                            // Open the video with comment highlighting
+                            if (notificationDetails.video && notificationDetails.comment) {
+                              setVideoCommentData({
+                                video: notificationDetails.video,
+                                commentId: notificationDetails.comment.id
+                              });
+                              setShowVideoWithComment(true);
+                            }
+                          }}
+                          variant="outline"
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white border-green-600"
+                        >
+                          Go to Video
+                        </Button>
+                      </div>
+                      <Button
+                        onClick={() => setShowNotificationModal(false)}
+                        variant="outline"
+                        className="w-full bg-white/10 hover:bg-white/20 text-white border-white/20"
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            {/* Close button for non-comment notifications */}
+            {!(selectedNotification.type === 'comment_reply' ||
+              selectedNotification.type === 'comment_thread_activity' ||
+              selectedNotification.type === 'video_comment') && (
+                <div className="p-4 border-t border-white/10">
+                  <Button
+                    onClick={() => setShowNotificationModal(false)}
+                    className="w-full bg-white/10 hover:bg-white/20 text-white border-white/20 h-12 text-lg"
+                    variant="outline"
+                  >
+                    Close
+                  </Button>
+                </div>
+              )}
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Reply Modal */}
+      {showReplyModal && replyModalData.comment && (
+        <div className="fixed inset-0 z-60 bg-black flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
+            <div className="flex items-center gap-3">
               <Button
-                onClick={() => setShowNotificationModal(false)}
-                className="w-full bg-white/10 hover:bg-white/20 text-white border-white/20 h-12 text-lg"
-                variant="outline"
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowReplyModal(false)}
+                className="text-white hover:bg-white/10"
               >
-                Close
+                ←
               </Button>
+              <h2 className="text-lg font-semibold text-white">Reply to Comment</h2>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowReplyModal(false)}
+              className="text-white hover:bg-white/10"
+            >
+              <X size={20} />
+            </Button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 flex flex-col">
+            {/* Video Context */}
+            {replyModalData.video && (
+              <div className="p-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  {replyModalData.video.thumbnail_url && (
+                    <img
+                      src={replyModalData.video.thumbnail_url}
+                      alt="Video thumbnail"
+                      className="w-20 h-15 object-cover rounded"
+                    />
+                  )}
+                  <div>
+                    <p className="text-white font-medium">
+                      {replyModalData.video.title || 'Untitled Video'}
+                    </p>
+                    <p className="text-white/60 text-sm">
+                      {replyModalData.video.view_count || 0} views
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Original Comment */}
+            <div className="p-4 border-b border-white/10">
+              <div className="flex items-start gap-3">
+                <Avatar className="w-10 h-10 flex-shrink-0">
+                  <AvatarImage src={replyModalData.comment.profiles?.avatar_url} />
+                  <AvatarFallback className="bg-white/10 text-white text-sm">
+                    {replyModalData.comment.profiles?.username?.charAt(0).toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-white font-medium">
+                      @{replyModalData.comment.profiles?.username || 'Unknown'}
+                    </span>
+                    <span className="text-white/50 text-sm">
+                      {formatTime(replyModalData.comment.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-white/90 leading-relaxed">
+                    {replyModalData.comment.content}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Reply Input Section */}
+            <div className="flex-1 flex flex-col p-4">
+              <div className="flex-1 flex flex-col">
+                <label className="text-white/70 text-sm mb-3">Your Reply</label>
+                <div className="flex gap-3 mb-4">
+                  <Avatar className="w-10 h-10 flex-shrink-0">
+                    <AvatarImage src={user?.user_metadata?.avatar_url} />
+                    <AvatarFallback className="bg-white/10 text-white text-sm">
+                      {user?.email?.charAt(0).toUpperCase() || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <Textarea
+                      value={notificationDetails.replyText || ''}
+                      onChange={(e) => setNotificationDetails(prev => ({ ...prev, replyText: e.target.value }))}
+                      placeholder={`Reply to @${replyModalData.comment.profiles?.username}...`}
+                      className="bg-white/10 border-white/20 text-white placeholder-white/50 min-h-[120px] resize-none"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                          e.preventDefault();
+                          handleFullscreenReply();
+                        }
+                      }}
+                      onFocus={() => {
+                        // Auto-add @username mention if not already present
+                        const username = replyModalData.comment.profiles?.username;
+                        if (username && !notificationDetails.replyText?.includes(`@${username}`)) {
+                          setNotificationDetails(prev => ({
+                            ...prev,
+                            replyText: `@${username} ${prev.replyText || ''}`
+                          }));
+                        }
+                      }}
+                    />
+                    <p className="text-white/50 text-xs mt-2">
+                      Press Ctrl+Enter to send
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t border-white/10">
+                <Button
+                  onClick={() => setShowReplyModal(false)}
+                  variant="outline"
+                  className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/20"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleFullscreenReply}
+                  disabled={!notificationDetails.replyText?.trim() || notificationDetails.isReplying}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {notificationDetails.isReplying ? 'Sending...' : 'Send Reply'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Video Modal with Comment Highlighting */}
+      {showVideoWithComment && videoCommentData.video && (
+        <ModalVerticalFeed
+          videos={[videoCommentData.video]}
+          startIndex={0}
+          highlightCommentId={videoCommentData.commentId}
+          autoOpenComments={true}
+          onClose={() => {
+            setShowVideoWithComment(false);
+            setVideoCommentData({});
+          }}
+        />
+      )}
+
     </div>
   );
 }

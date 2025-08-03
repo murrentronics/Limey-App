@@ -32,7 +32,98 @@ interface CommentsModalProps {
   videoId: string;
   videoTitle?: string;
   onCommentCountChange?: (videoId: string, newCount: number) => void;
+  highlightCommentId?: string; // ID of comment/reply to highlight
 }
+
+// Component to render comment content with GIF support
+const CommentContent: React.FC<{ content: string }> = ({ content }) => {
+  // Check if content contains GIF markdown syntax
+  const gifRegex = /!\[GIF\]\((https?:\/\/[^\s)]+)\)/g;
+  const parts = content.split(gifRegex);
+
+  return (
+    <div className="whitespace-pre-wrap">
+      {parts.map((part, index) => {
+        // If this part is a URL (every odd index after split), render as GIF
+        if (index % 2 === 1 && part.startsWith('http')) {
+          return (
+            <div key={index} className="my-2">
+              <img
+                src={part}
+                alt="GIF"
+                className="max-w-full h-auto rounded-lg max-h-48 object-contain"
+                loading="lazy"
+              />
+            </div>
+          );
+        }
+        // Otherwise render as text
+        return part ? <span key={index}>{part}</span> : null;
+      })}
+    </div>
+  );
+};
+
+// Simple GIF Picker Component
+const GifPicker: React.FC<{ onGifSelect: (gifUrl: string) => void }> = ({ onGifSelect }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [gifs, setGifs] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Popular GIF URLs for quick access
+  const popularGifs = [
+    'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif', // thumbs up
+    'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif', // clapping
+    'https://media.giphy.com/media/3o6Zt4HU9uwXmXSAuI/giphy.gif', // laughing
+    'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif', // dancing
+    'https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.gif', // heart eyes
+    'https://media.giphy.com/media/3o7abAHdYvZdBNnGZq/giphy.gif', // mind blown
+    'https://media.giphy.com/media/l0MYGb8Q5IoAhR844/giphy.gif', // celebration
+    'https://media.giphy.com/media/3o6ZtaO9BZHcOjmErm/giphy.gif', // shocked
+    'https://media.giphy.com/media/26BRrSvJUa0crqw4E/giphy.gif', // happy
+    'https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif', // love
+    'https://media.giphy.com/media/l0MYEqEzwMWFCg8rm/giphy.gif', // cool
+    'https://media.giphy.com/media/3o6Zt6KHxJTbXCnSvu/giphy.gif', // fire
+  ];
+
+  const handleGifSelect = (gifUrl: string) => {
+    // Insert GIF as an image tag
+    onGifSelect(`![GIF](${gifUrl})`);
+  };
+
+  return (
+    <div className="space-y-3">
+      <Input
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        placeholder="Search GIFs..."
+        className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm"
+      />
+
+      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+        {popularGifs.map((gifUrl, index) => (
+          <button
+            key={index}
+            onClick={() => handleGifSelect(gifUrl)}
+            className="relative aspect-square rounded overflow-hidden hover:opacity-80 hover:scale-105 transition-all bg-white/10"
+            title="Click to insert GIF"
+          >
+            <img
+              src={gifUrl}
+              alt="GIF"
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          </button>
+        ))}
+      </div>
+
+      <p className="text-white/50 text-xs text-center">
+        Click a GIF to insert it into your comment
+      </p>
+    </div>
+  );
+};
 
 const EMOJI_CATEGORIES = {
   smileys: {
@@ -42,11 +133,11 @@ const EMOJI_CATEGORIES = {
       '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
       '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
       '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪',
-      '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨',
+      '😝', '🤑', '🤗', '🤭', '😎', '🤔', '🤐', '🤨',
       '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥',
       '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢',
       '🤮', '🤧', '🥵', '🥶', '🥴', '😵', '🤯', '🤠',
-      '🥳', '😎', '🤓', '🧐', '😕', '😟', '🙁', '☹️',
+      '🥳', '🤫', '🤓', '🧐', '😕', '😟', '🙁', '☹️',
       '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤',
       '😠', '😡', '🤬', '😳', '😱'
     ]
@@ -63,7 +154,7 @@ const EMOJI_CATEGORIES = {
       '🍗', '🍖', '🌭', '🍔', '🍟', '🍕', '🥪', '🥙',
       '🌮', '🌯', '🥗', '🥘', '🥫', '🍝', '🍜', '🍲',
       '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚',
-      '☕', '🍵', '🧃', '🥤', '🧋', '🍶', '🍺', '🍻',
+      '☕', '🍵', '🧃', '🥤', '🍶', '🍺', '🍻',
       '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍼', '🥛'
     ]
   },
@@ -72,8 +163,8 @@ const EMOJI_CATEGORIES = {
     name: 'Travel & Places',
     emojis: [
       '🚗', '🚕', '🚙', '🚎', '🏎️', '🚓', '🚑',
-      '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵',
-      '🚲', '🛴', '🛼', '🚁', '🛸', '✈️', '🛩️',
+      '🚒', '🚐', '🚚', '🚛', '🚜', '🏍️', '🛵',
+      '🚲', '🛴', '🚁', '🛸', '✈️', '🛩️',
       '🛫', '🛬', '🪂', '💺', '🚀', '🛰️', '🚢', '⛵',
       '🚤', '🛥️', '🛳️', '⛴️', '🚟', '🚠', '🚡',
       '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉',
@@ -87,23 +178,23 @@ const EMOJI_CATEGORIES = {
     emojis: [
       '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉',
       '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍',
-      '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿',
+      '🏏', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿',
       '🥊', '🥋', '🎽', '🛷', '⛸️', '🥌', '🎿',
       '⛷️', '🏂', '🏋️‍♀️', '🏋️‍♂️', '🤼‍♀️', '🤼‍♂️', '🤸‍♀️',
       '🤸‍♂️', '⛹️‍♀️', '⛹️‍♂️', '🤺', '🤾‍♀️', '🤾‍♂️', '🏌️‍♀️', '🏌️‍♂️',
       '🏇', '🧘‍♀️', '🧘‍♂️', '🏄‍♀️', '🏄‍♂️', '🏊‍♀️', '🏊‍♂️', '🤽‍♀️',
-      '🤽‍♂️', '🚣‍♀️', '🚣‍♂️', '🧗‍♀️', '🧗‍♂️', '🚵‍♀️', '🚵‍♂️', '🚴‍♀️'
+      '🤽‍♂️', '🚣‍♂️', '🧗‍♀️', '🧗‍♂️', '🚵‍♀️', '🚵‍♂️', '🚴‍♀️'
     ]
   },
   objects: {
     icon: Shirt,
     name: 'Objects & Symbols',
     emojis: [
-      '👑', '🎩', '🧢', '🪖', '⛑️', '📿', '💄', '💍',
+      '👑', '🎩', '🧢', '⛑️', '📿', '💄', '💍',
       '💎', '🔇', '🔈', '🔉', '🔊', '📢', '📣', '📯',
       '🔔', '🔕', '🎼', '🎵', '🎶', '🎙️', '🎚️', '🎛️',
-      '🎧', '📻', '🎷', '🪗', '🎸', '🎹', '🎺',
-      '🎻', '🪕', '🥁', '🪘', '📱', '📲', '☎️', '📞',
+      '🎧', '📻', '🎷', '🎸', '🎹', '🎺',
+      '🎻', '🪕', '🥁', '📱', '📲', '☎️', '📞',
       '📟', '📠', '🔋', '🔌', '💻', '🖥️', '🖨️', '⌨️',
       '🖱️', '🖲️', '💽', '💾', '💿', '📀', '🧮', '🎥',
       '🎞️', '📽️', '📺', '📷', '📸', '📹', '📼',
@@ -118,7 +209,7 @@ const EMOJI_CATEGORIES = {
   }
 };
 
-const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId, videoTitle, onCommentCountChange }) => {
+const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId, videoTitle, onCommentCountChange, highlightCommentId }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -136,15 +227,24 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [expandedReplies, setExpandedReplies] = useState<{ [key: string]: boolean }>({});
+  const [highlightedComment, setHighlightedComment] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const replyInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const commentRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     if (isOpen) {
       fetchComments();
     }
   }, [isOpen, videoId]);
+
+  // SIMPLE highlighting - exactly what you asked for
+  useEffect(() => {
+    if (highlightCommentId && comments.length > 0) {
+      highlightSpecificComment(highlightCommentId);
+    }
+  }, [highlightCommentId, comments]);
 
   // Note: Real-time subscriptions removed to prevent reloads
   // All updates are now handled locally for better UX
@@ -313,15 +413,53 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
 
       setComments(prev => {
         const newComments = [commentWithProfile, ...prev];
-        // Update comment count in parent component
-        if (onCommentCountChange) {
-          onCommentCountChange(videoId, newComments.length);
-        }
         return newComments;
       });
+
+      // Update comment count in parent component
+      if (onCommentCountChange) {
+        onCommentCountChange(videoId, comments.length + 1);
+      }
       setNewComment('');
 
       await supabase.rpc('increment_comment_count' as any, { video_uuid: videoId });
+
+      // Optional: Notify video owner about new comment (if different from commenter)
+      try {
+        const { data: videoData } = await supabase
+          .from('videos')
+          .select('user_id')
+          .eq('id', videoId)
+          .single();
+
+        if (videoData && videoData.user_id !== user.id) {
+          const currentUserProfile = userProfile || { username: user.email?.split('@')[0] || 'Someone' };
+          console.log('Sending video comment notification to video owner:', videoData.user_id);
+
+          const { error: notificationError } = await supabase
+            .from('system_notifications' as any)
+            .insert({
+              to_user_id: videoData.user_id,
+              from_user_id: user.id,
+              type: 'video_comment',
+              title: 'New comment on your video',
+              message: `@${currentUserProfile.username} commented on your video`,
+              video_id: videoId
+              // TODO: Add comment_id: data.id when database schema is updated
+            });
+
+          if (notificationError) {
+            console.error('Failed to send video comment notification:', notificationError);
+          } else {
+            console.log('Video comment notification sent successfully');
+          }
+        } else {
+          console.log('No video comment notification needed (same user or no video data)');
+        }
+      } catch (notificationError) {
+        console.warn('Failed to send video comment notification:', notificationError);
+        // Don't fail the comment posting if notification fails
+      }
 
       toast({
         title: 'Comment posted!',
@@ -379,18 +517,74 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
       setReplyText('');
       setReplyingTo(null);
 
+      // Send notifications to all users in the comment thread
       const parentComment = comments.find(c => c.id === parentId);
-      if (parentComment && parentComment.user_id !== user.id) {
-        await supabase
-          .from('system_notifications' as any)
-          .insert({
-            to_user_id: parentComment.user_id,
-            from_user_id: user.id,
-            type: 'comment_reply',
-            title: 'New comment reply',
-            message: `New comment reply from ${user.email?.split('@')[0] || 'Someone'}`,
-            video_id: videoId
+      if (parentComment) {
+        // Get all unique user IDs who have participated in this comment thread
+        const threadParticipants = new Set<string>();
+
+        // Add the original comment author
+        threadParticipants.add(parentComment.user_id);
+
+        // Add all reply authors
+        if (parentComment.replies) {
+          parentComment.replies.forEach(reply => {
+            threadParticipants.add(reply.user_id);
           });
+        }
+
+        // Remove the current user (don't notify themselves)
+        threadParticipants.delete(user.id);
+
+        // Get usernames for the participants
+        const participantIds = Array.from(threadParticipants);
+        if (participantIds.length > 0) {
+          const { data: participantProfiles } = await supabase
+            .from('profiles')
+            .select('user_id, username')
+            .in('user_id', participantIds);
+
+          const currentUserProfile = userProfile || { username: user.email?.split('@')[0] || 'Someone' };
+
+          // Send notifications to all thread participants
+          const notifications = participantIds.map(participantId => {
+            const isOriginalAuthor = participantId === parentComment.user_id;
+            const participantProfile = participantProfiles?.find(p => p.user_id === participantId);
+
+            return {
+              to_user_id: participantId,
+              from_user_id: user.id,
+              type: isOriginalAuthor ? 'comment_reply' : 'comment_thread_activity',
+              title: isOriginalAuthor ? 'New reply to your comment' : 'New activity in followed thread',
+              message: isOriginalAuthor
+                ? `@${currentUserProfile.username} replied to your comment`
+                : `@${currentUserProfile.username} replied in a comment thread you're following`,
+              video_id: videoId
+              // TODO: Add comment_id: data.id when database schema is updated
+            };
+          });
+
+          if (notifications.length > 0) {
+            console.log('Sending notifications to:', notifications.length, 'users');
+            try {
+              const { error: notificationError } = await supabase
+                .from('system_notifications' as any)
+                .insert(notifications);
+
+              if (notificationError) {
+                console.error('Failed to send thread notifications:', notificationError);
+                // Don't fail the reply if notifications fail
+              } else {
+                console.log('Thread notifications sent successfully');
+              }
+            } catch (notificationError) {
+              console.error('Exception sending thread notifications:', notificationError);
+              // Don't fail the reply if notifications fail
+            }
+          } else {
+            console.log('No notifications to send (no other participants)');
+          }
+        }
       }
 
       toast({
@@ -510,6 +704,42 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
     }
   };
 
+  // Simple function to highlight a specific comment - EXACTLY what you asked for
+  const highlightSpecificComment = (commentId: string) => {
+    console.log('Highlighting comment:', commentId);
+    
+    // 1. Click "See all comments" - show fullscreen
+    setShowFullscreenComments(true);
+    
+    // 2. Find and expand parent thread if it's a reply
+    comments.forEach(comment => {
+      if (comment.replies) {
+        const replyFound = comment.replies.find(reply => reply.id === commentId);
+        if (replyFound) {
+          setExpandedReplies(prev => ({ ...prev, [comment.id]: true }));
+        }
+      }
+    });
+    
+    // 3. Highlight and scroll after a short delay
+    setTimeout(() => {
+      setHighlightedComment(commentId);
+      
+      const commentElement = commentRefs.current[commentId];
+      if (commentElement) {
+        commentElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        
+        // 4. Remove highlight after 3 seconds (fade away)
+        setTimeout(() => {
+          setHighlightedComment(null);
+        }, 3000);
+      }
+    }, 500);
+  };
+
   const formatTime = (timestamp: string) => {
     return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
   };
@@ -541,13 +771,13 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
           }
           return true;
         });
-
-        // Update comment count in parent component
-        if (onCommentCountChange) {
-          onCommentCountChange(videoId, newComments.length);
-        }
         return newComments;
       });
+
+      // Update comment count in parent component
+      if (onCommentCountChange) {
+        onCommentCountChange(videoId, comments.length - 1);
+      }
 
       setShowDeleteConfirm(false);
       setCommentToDelete(null);
@@ -591,9 +821,29 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
     <div className="fixed inset-0 z-50 bg-black/80 flex items-end">
       <div className="w-full bg-black rounded-t-2xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <h2 className="text-lg font-semibold text-white">
-            Comments {comments.length > 0 && `(${comments.length})`}
-          </h2>
+          <div className="flex items-center gap-3">
+            {showFullscreenComments && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowFullscreenComments(false)}
+                className="text-white hover:bg-white/10"
+              >
+                ←
+              </Button>
+            )}
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Comments {comments.length > 0 && `(${comments.length})`}
+              </h2>
+              {comments.length > 0 && !showFullscreenComments && (
+                <p className="text-xs text-white/60 mt-1">Most recent</p>
+              )}
+              {showFullscreenComments && (
+                <p className="text-xs text-white/60 mt-1">All comments</p>
+              )}
+            </div>
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -616,8 +866,16 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
             </div>
           ) : (
             <>
-              {comments.slice(0, 25).map((comment) => (
-                <div key={comment.id} className="space-y-3">
+              {/* Show only 5 most recent comments in compact view */}
+              {(!showFullscreenComments ? comments.slice(0, 5) : comments).map((comment) => (
+                <div
+                  key={comment.id}
+                  ref={(el) => commentRefs.current[comment.id] = el}
+                  className={`space-y-3 transition-all duration-500 rounded-lg p-2 ${highlightedComment === comment.id
+                    ? 'bg-green-500/20 border-2 border-green-500 shadow-lg'
+                    : ''
+                    }`}
+                >
                   <div className="flex gap-3">
                     <Avatar
                       className="w-8 h-8 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
@@ -650,16 +908,16 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                           {formatTime(comment.created_at)}
                         </span>
                       </div>
-                      <p
-                        className="text-white/90 text-sm leading-relaxed whitespace-pre-wrap select-none"
+                      <div
+                        className="text-white/90 text-sm leading-relaxed select-none"
                         onTouchStart={() => handleLongPressStart(comment.id, comment.user_id === user?.id)}
                         onTouchEnd={handleLongPressEnd}
                         onMouseDown={() => handleLongPressStart(comment.id, comment.user_id === user?.id)}
                         onMouseUp={handleLongPressEnd}
                         onMouseLeave={handleLongPressEnd}
                       >
-                        {comment.content}
-                      </p>
+                        <CommentContent content={comment.content} />
+                      </div>
                       <div className="flex items-center gap-4 mt-2">
                         <button
                           onClick={() => handleLikeComment(comment.id)}
@@ -698,7 +956,14 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
 
                       {/* Show first 3 replies or all if expanded */}
                       {(expandedReplies[comment.id] ? comment.replies : comment.replies.slice(0, 3)).map((reply) => (
-                        <div key={reply.id} className="flex gap-3 mb-3">
+                        <div
+                          key={reply.id}
+                          ref={(el) => commentRefs.current[reply.id] = el}
+                          className={`flex gap-3 mb-3 transition-all duration-500 rounded-lg p-2 ${highlightedComment === reply.id
+                            ? 'bg-green-500/20 border-2 border-green-500 shadow-lg'
+                            : ''
+                            }`}
+                        >
                           <Avatar
                             className="w-6 h-6 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                             onClick={() => {
@@ -730,16 +995,16 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                                 {formatTime(reply.created_at)}
                               </span>
                             </div>
-                            <p
-                              className="text-white/90 text-sm leading-relaxed whitespace-pre-wrap select-none"
+                            <div
+                              className="text-white/90 text-sm leading-relaxed select-none"
                               onTouchStart={() => handleLongPressStart(reply.id, reply.user_id === user?.id)}
                               onTouchEnd={handleLongPressEnd}
                               onMouseDown={() => handleLongPressStart(reply.id, reply.user_id === user?.id)}
                               onMouseUp={handleLongPressEnd}
                               onMouseLeave={handleLongPressEnd}
                             >
-                              {reply.content}
-                            </p>
+                              <CommentContent content={reply.content} />
+                            </div>
                             <button
                               onClick={() => handleLikeComment(reply.id)}
                               className="flex items-center gap-1 text-white/60 hover:text-red-500 transition-colors mt-2"
@@ -805,10 +1070,23 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                   )}
                 </div>
               ))}
+
+              {/* See all comments link - only show if there are more than 5 comments and not in fullscreen */}
+              {!showFullscreenComments && comments.length > 5 && (
+                <div className="text-center py-4">
+                  <button
+                    onClick={() => setShowFullscreenComments(true)}
+                    className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
+                  >
+                    See all {comments.length} comments
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
 
+        {/* Comment input - always available */}
         <div className="p-4 border-t border-white/10">
           {showEmojiPicker && (
             <div className="mb-3 bg-white/10 rounded-lg max-h-64 overflow-hidden">
@@ -831,9 +1109,7 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
               </div>
               <div className="p-3 max-h-48 overflow-y-auto">
                 {activeEmojiTab === 'gifs' ? (
-                  <div className="text-center py-8">
-                    <p className="text-white/60 text-sm">GIF support coming soon!</p>
-                  </div>
+                  <GifPicker onGifSelect={(gifUrl) => insertEmoji(gifUrl)} />
                 ) : (
                   <div className="grid grid-cols-8 gap-2">
                     {EMOJI_CATEGORIES[activeEmojiTab]?.emojis.map((emoji, index) => (
@@ -899,40 +1175,40 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-black/90 rounded-lg max-w-sm w-full mx-4 border border-white/20">
-            <div className="p-4">
-              <h3 className="text-white font-semibold mb-2">Delete Comment</h3>
-              <p className="text-white/70 text-sm mb-4">
-                Are you sure you want to delete this comment? This action cannot be undone.
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => {
-                    setShowDeleteConfirm(false);
-                    setCommentToDelete(null);
-                    setLongPressedComment(null);
-                  }}
-                  variant="outline"
-                  className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/20"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => commentToDelete && handleDeleteComment(commentToDelete)}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                >
-                  Delete
-                </Button>
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
+            <div className="bg-black/90 rounded-lg max-w-sm w-full mx-4 border border-white/20">
+              <div className="p-4">
+                <h3 className="text-white font-semibold mb-2">Delete Comment</h3>
+                <p className="text-white/70 text-sm mb-4">
+                  Are you sure you want to delete this comment? This action cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setCommentToDelete(null);
+                      setLongPressedComment(null);
+                    }}
+                    variant="outline"
+                    className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/20"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => commentToDelete && handleDeleteComment(commentToDelete)}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    Delete
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
