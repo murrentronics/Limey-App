@@ -17,6 +17,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 const EditProfile = () => {
   const { user } = useAuth();
   const [username, setUsername] = useState("");
+  const [originalUsername, setOriginalUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -46,6 +47,7 @@ const EditProfile = () => {
         .single();
       if (!error && data) {
         setUsername(data.username || "");
+        setOriginalUsername(data.username || "");
         setDisplayName(data.display_name || "");
         setBio(data.bio || "");
         setAvatarUrl(data.avatar_url || null);
@@ -133,6 +135,11 @@ const EditProfile = () => {
       clearTimeout(usernameCheckTimeout);
     }
 
+    if (username === originalUsername) {
+      setUsernameStatus('idle');
+      return;
+    }
+
     if (username.length < 3) {
       setUsernameStatus('idle');
       return;
@@ -170,7 +177,7 @@ const EditProfile = () => {
     return () => {
       if (timeout) clearTimeout(timeout);
     };
-  }, [username]);
+  }, [username, originalUsername]);
 
   return (
     <div className="min-h-screen bg-background pb-20">
