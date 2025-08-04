@@ -6,6 +6,7 @@ import { Eye, EyeOff } from "@/components/ui/password-eye-icons";
 import { Card } from "@/components/ui/card";
 import LimeyLogo from "@/components/LimeyLogo";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from '@/integrations/supabase/client';
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -17,6 +18,8 @@ const Signup = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [usernameCheckTimeout, setUsernameCheckTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const { signUp, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -25,6 +28,50 @@ const Signup = () => {
       navigate("/");
     }
   }, [user, authLoading, navigate]);
+
+  useEffect(() => {
+    if (usernameCheckTimeout) {
+      clearTimeout(usernameCheckTimeout);
+    }
+
+    if (formData.username.length < 3) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(formData.username)) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    setUsernameStatus('checking');
+
+    const timeout = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc('is_username_available', {
+          username_to_check: formData.username
+        });
+
+        if (error) {
+          console.error('Error checking username:', error);
+          setUsernameStatus('idle');
+          return;
+        }
+
+        setUsernameStatus(data ? 'available' : 'taken');
+      } catch (error) {
+        console.error('Error checking username:', error);
+        setUsernameStatus('idle');
+      }
+    }, 500);
+
+    setUsernameCheckTimeout(timeout);
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [formData.username]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -72,6 +119,9 @@ const Signup = () => {
               onChange={(e) => handleInputChange("username", e.target.value)}
               required
             />
+            {usernameStatus === 'checking' && <p className="text-sm text-muted-foreground">Checking username...</p>}
+            {usernameStatus === 'available' && <p className="text-sm text-green-600">Username is available!</p>}
+            {usernameStatus === 'taken' && <p className="text-sm text-red-600">Username is already taken.</p>}
           </div>
           
           <div>

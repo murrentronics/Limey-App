@@ -870,6 +870,10 @@ export type Database = {
         Args: { username: string }
         Returns: boolean
       }
+      is_username_available: {
+        Args: { username_to_check: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
@@ -891,7 +895,7 @@ export type Tables<
   }
     ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never,
 > = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
   ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {

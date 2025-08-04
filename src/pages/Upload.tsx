@@ -398,7 +398,11 @@ const Upload = () => {
         {/* Upload Tips */}
         <Card className="mt-6 p-4 bg-muted/50">
           <h4 className="font-medium text-foreground mb-2">📝 Upload Tips</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
+          <ul className="text-sm text-muted-foreground space-y-4 text-center">
+            <li>• <b>Max video duration:</b> 5 minutes</li>
+            <li>• <b>Max file size:</b> 50 MB</li>
+            <li>• <b>Supported file types:</b> mp4, mov, webm, 3gp, ogg, mkv, mpeg, jpeg</li>
+            <li>• If your video is too large, use free apps like <b>CapCut</b>, <b>InShot</b>, or your phone's built-in editor to compress the video and maintain quality before uploading.</li>
             <li>• Keep videos under 60 seconds for best engagement</li>
             <li>• Use good lighting and clear audio</li>
             <li>• Add hashtags in your description to reach more viewers</li>

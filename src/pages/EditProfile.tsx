@@ -28,6 +28,8 @@ const EditProfile = () => {
   const [showCropModal, setShowCropModal] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [usernameCheckTimeout, setUsernameCheckTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -124,6 +126,51 @@ const EditProfile = () => {
       toast({ title: "Failed to update profile", variant: "destructive" });
     }
   };
+
+  // Username uniqueness validation
+  useEffect(() => {
+    if (usernameCheckTimeout) {
+      clearTimeout(usernameCheckTimeout);
+    }
+
+    if (username.length < 3) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username)) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    setUsernameStatus('checking');
+
+    const timeout = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc('is_username_available', {
+          username_to_check: username
+        });
+
+        if (error) {
+          console.error('Error checking username:', error);
+          setUsernameStatus('idle');
+          return;
+        }
+
+        setUsernameStatus(data ? 'available' : 'taken');
+      } catch (error) {
+        console.error('Error checking username:', error);
+        setUsernameStatus('idle');
+      }
+    }, 500);
+
+    setUsernameCheckTimeout(timeout);
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [username]);
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -245,6 +292,9 @@ const EditProfile = () => {
         value={username}
         onChange={e => setUsername(e.target.value)}
         />
+        {usernameStatus === 'checking' && <p className="text-sm text-muted-foreground">Checking username...</p>}
+        {usernameStatus === 'available' && <p className="text-sm text-green-600">Username is available!</p>}
+        {usernameStatus === 'taken' && <p className="text-sm text-red-600">Username is already taken.</p>}
         {/* Display Name */}
         <Input
         className="mb-4"
