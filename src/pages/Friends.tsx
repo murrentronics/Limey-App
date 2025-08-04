@@ -8,6 +8,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import ShareModal from "@/components/ShareModal";
+import CommentsModal from "@/components/CommentsModal";
 
 // --- AutoPlayVideo component ---
 const AutoPlayVideo = ({ src, className, globalMuted, ...props }: { src: string; className: string; globalMuted: boolean;[key: string]: any }) => {
@@ -146,6 +147,8 @@ const Friends = () => {
   const [globalMuted, setGlobalMuted] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareVideo, setShareVideo] = useState<any>(null);
+  const [showCommentsModal, setShowCommentsModal] = useState<string | null>(null);
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
 
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -192,6 +195,39 @@ const Friends = () => {
 
   useEffect(() => {
     fetchFriendsVideos();
+  }, [user]);
+
+  // Real-time subscriptions for comments
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to comments changes for comment counts
+    const commentsChannel = supabase
+      .channel('friends_comments_realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'comments'
+      }, async (payload) => {
+        if (payload.new && payload.new.video_id && !payload.new.parent_id) {
+          // New top-level comment
+          setCommentCounts(prev => ({
+            ...prev,
+            [payload.new.video_id]: (prev[payload.new.video_id] || 0) + 1
+          }));
+        } else if (payload.old && payload.old.video_id && !payload.old.parent_id) {
+          // Deleted top-level comment
+          setCommentCounts(prev => ({
+            ...prev,
+            [payload.old.video_id]: Math.max((prev[payload.old.video_id] || 0) - 1, 0)
+          }));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(commentsChannel);
+    };
   }, [user]);
 
 
@@ -311,6 +347,7 @@ const Friends = () => {
       await checkLikeStatus(filteredVideos);
       await checkViewCounts(filteredVideos);
       await checkSavedStatus(filteredVideos);
+      await checkCommentCounts(filteredVideos);
     } catch (error) {
       console.error('Error in fetchFriendsVideos:', error);
       setError('Failed to load videos. Please try again.');
@@ -432,6 +469,51 @@ const Friends = () => {
       setSavedStatus(newSavedStatus);
     } catch (error) {
       console.error('Error checking saved status:', error);
+    }
+  };
+
+  const checkCommentCounts = async (videosArr: any[]) => {
+    if (!videosArr || videosArr.length === 0) return;
+
+    try {
+      const videoIds = videosArr.map(video => video.id);
+      
+      // Get comment counts for all videos
+      const { data: commentData, error } = await supabase
+        .from('comments')
+        .select('video_id')
+        .in('video_id', videoIds)
+        .is('parent_id', null); // Only count top-level comments
+
+      if (error) {
+        // If comments table doesn't exist yet, set all counts to 0
+        if (error.message?.includes('relation "comments" does not exist')) {
+          const initialCommentCounts = {};
+          videosArr.forEach(video => {
+            initialCommentCounts[video.id] = 0;
+          });
+          setCommentCounts(initialCommentCounts);
+          return;
+        }
+        console.error('Error fetching comment counts:', error);
+        return;
+      }
+
+      // Count comments per video
+      const commentCountsMap = {};
+      videosArr.forEach(video => {
+        commentCountsMap[video.id] = 0;
+      });
+
+      if (commentData) {
+        commentData.forEach(comment => {
+          commentCountsMap[comment.video_id] = (commentCountsMap[comment.video_id] || 0) + 1;
+        });
+      }
+
+      setCommentCounts(commentCountsMap);
+    } catch (error) {
+      console.error('Error checking comment counts:', error);
     }
   };
 
@@ -845,6 +927,26 @@ const Friends = () => {
                         </span>
                       </div>
 
+                      {/* Comment Button */}
+                      <div className="flex flex-col items-center">
+                        <button
+                          onClick={e => { 
+                            e.stopPropagation(); 
+                            setShowCommentsModal(video.id);
+                          }}
+                          className="p-0 bg-transparent border-none"
+                          data-control
+                        >
+                          <MessageCircle
+                            size={28}
+                            className="text-white fill-white transition-colors"
+                          />
+                        </button>
+                        <span className="text-white text-xs mt-1 font-medium">
+                          {commentCounts[video.id] || 0}
+                        </span>
+                      </div>
+
                       {/* View Count */}
                       <div className="flex flex-col items-center">
                         <Eye size={28} className="text-white" />
@@ -898,6 +1000,22 @@ const Friends = () => {
       {/* Bottom Navigation */}
       <BottomNavigation />
 
+      {/* Comments Modal */}
+      {showCommentsModal && (
+        <CommentsModal
+          isOpen={!!showCommentsModal}
+          onClose={() => setShowCommentsModal(null)}
+          videoId={showCommentsModal}
+          videoTitle={videos.find(v => v.id === showCommentsModal)?.title}
+          onCommentCountChange={(videoId, newCount) => {
+            setCommentCounts(prev => ({
+              ...prev,
+              [videoId]: newCount
+            }));
+          }}
+        />
+      )}
+
       {/* Share Modal */}
       {shareVideo && (
         <ShareModal
@@ -907,6 +1025,19 @@ const Friends = () => {
             setShareVideo(null);
           }}
           video={shareVideo}
+        />
+      )}
+
+      {/* Comments Modal */}
+      {showCommentsModal && (
+        <CommentsModal
+          isOpen={!!showCommentsModal}
+          onClose={() => setShowCommentsModal(null)}
+          videoId={showCommentsModal}
+          videoTitle={videos.find(v => v.id === showCommentsModal)?.title}
+          onCommentCountChange={(videoId, newCount) => {
+            setCommentCounts(prev => ({ ...prev, [videoId]: newCount }));
+          }}
         />
       )}
     </div>

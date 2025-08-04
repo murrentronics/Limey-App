@@ -41,7 +41,7 @@ const Inbox = () => {
       fetchChats();
       fetchSystemNotifications();
       const cleanup = subscribeToChats();
-      
+
       let systemCleanup: (() => void) | null = null;
       if (!isAdmin) {
         systemCleanup = subscribeToSystemNotifications();
@@ -64,7 +64,7 @@ const Inbox = () => {
 
   const fetchChatUnreadCountsForChats = async (chatList: any[]) => {
     if (!user || chatList.length === 0) return;
-    
+
     try {
       const chatIds = chatList.map(chat => chat.id);
       const { data: unreadData, error } = await supabase
@@ -81,9 +81,12 @@ const Inbox = () => {
         return;
       }
 
+      // Use any type to avoid deep type instantiation issues
+      const typedUnreadData = unreadData as any[] | null;
+
       // Count unread messages per chat
       const counts: { [chatId: string]: number } = {};
-      unreadData?.forEach(msg => {
+      typedUnreadData?.forEach(msg => {
         counts[msg.chat_id] = (counts[msg.chat_id] || 0) + 1;
       });
 
@@ -96,56 +99,38 @@ const Inbox = () => {
   // Fetch system notifications
   const fetchSystemNotifications = async () => {
     if (!user) return;
-    
+
     if (isAdmin) {
       setSystemNotifications([]);
       setSystemLoading(false);
       return;
     }
-    
+
     try {
       setSystemLoading(true);
-      // First try with join
+      // Fetch notifications without join to avoid type issues
       let { data, error } = await supabase
-        .from('system_notifications')
-        .select(`
-          *,
-          from_user:profiles!inner(username, avatar_url)
-        `)
+        .from('system_notifications' as any)
+        .select('*')
         .eq('to_user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50);
 
-      // If join fails, try without join and fetch profiles separately
-      if (error) {
-        console.log('Join failed, trying without join:', error);
-        const { data: notificationsData, error: notificationsError } = await supabase
-          .from('system_notifications')
-          .select('*')
-          .eq('to_user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(50);
+      // Always fetch profiles separately to avoid type issues
+      if (!error && data) {
+        // Fetch profiles separately
+        const userIds = data.map((n: any) => n.from_user_id).filter(Boolean);
+        if (userIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('user_id, username, avatar_url')
+            .in('user_id', userIds);
 
-        if (!notificationsError && notificationsData) {
-          // Fetch profiles separately
-          const userIds = notificationsData.map(n => n.from_user_id).filter(Boolean);
-          if (userIds.length > 0) {
-            const { data: profilesData } = await supabase
-              .from('profiles')
-              .select('user_id, username, avatar_url')
-              .in('user_id', userIds);
-
-            // Combine the data
-            data = notificationsData.map(notification => ({
-              ...notification,
-              from_user: profilesData?.find(p => p.user_id === notification.from_user_id) || null
-            }));
-          } else {
-            data = notificationsData;
-          }
-          error = null;
-        } else {
-          error = notificationsError;
+          // Combine the data
+          data = data.map((notification: any) => ({
+            ...notification,
+            from_user: profilesData?.find((p: any) => p.user_id === notification.from_user_id) || null
+          }));
         }
       }
 
@@ -188,7 +173,7 @@ const Inbox = () => {
     try {
       setLoading(true);
       // Fetch chats where current user is either sender or receiver
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('chats')
         .select(`*,
           sender:profiles!chats_sender_id_fkey(username, avatar_url, deactivated),
@@ -196,7 +181,10 @@ const Inbox = () => {
         `)
         .or(`sender_id.eq.${user?.id},receiver_id.eq.${user?.id}`)
         .order('updated_at', { ascending: false });
-  
+
+      // Use any type to avoid deep type instantiation issues
+      const typedChatsData = data as any[] | null;
+
       if (error) {
         console.error('Error fetching chats:', error);
         toast({
@@ -206,26 +194,26 @@ const Inbox = () => {
         });
       } else {
         // Filter out chats that the current user has deleted or where users are deactivated
-        const filteredChats = (data || []).filter((chat: any) => {
+        const filteredChats = (typedChatsData || []).filter((chat) => {
           // Filter out chats with deactivated users
           if (chat.sender?.deactivated || chat.receiver?.deactivated) {
             return false;
           }
-  
+
           // Filter out chats that the current user has deleted
           if ((chat.sender_id === user?.id && chat.deleted_for_sender) ||
             (chat.receiver_id === user?.id && chat.deleted_for_receiver)) {
             return false;
           }
-  
+
           return true;
         });
-  
-        console.log('Filtered chats:', filteredChats.length, 'out of', data?.length || 0);
+
+        console.log('Filtered chats:', filteredChats.length, 'out of', typedChatsData?.length || 0);
         setChats(filteredChats);
-  
+
         // For each chat, fetch the latest visible message for the current user
-        const chatIds = filteredChats.map((chat: any) => chat.id);
+        const chatIds = filteredChats.map((chat) => chat.id);
         let lastMessages = [];
         if (chatIds.length > 0) {
           // Fetch up to 5 recent messages per chat (to handle edge cases)
@@ -236,14 +224,15 @@ const Inbox = () => {
             .order('created_at', { ascending: false })
             .limit(chatIds.length * 5);
           if (!messagesError && messagesData) {
-            lastMessages = messagesData;
+            // Use any type to avoid deep type instantiation issues
+            lastMessages = messagesData as any[];
           }
         }
         // Attach last visible message to each chat
-        const chatsWithLastVisible = filteredChats.map((chat: any) => {
+        const chatsWithLastVisible = filteredChats.map((chat) => {
           // Find the latest message for this chat that is visible to the user
-          const messages = lastMessages.filter((m: any) => m.chat_id === chat.id);
-          let lastVisible = null;
+          const messages = lastMessages.filter((m) => m.chat_id === chat.id);
+          let lastVisible: any = null;
           for (const msg of messages) {
             const isOwn = msg.sender_id === user?.id;
             const isDeletedForEveryone = msg.deleted_for_everyone === true;
@@ -257,7 +246,7 @@ const Inbox = () => {
           return { ...chat, last_visible_message: lastVisible };
         });
         setChats(chatsWithLastVisible);
-        
+
         // Fetch chat-specific unread counts after chats are loaded
         if (chatsWithLastVisible.length > 0) {
           setTimeout(() => {
@@ -276,7 +265,7 @@ const Inbox = () => {
       setLoading(false);
     }
   };
-  
+
   const subscribeToChats = () => {
     console.log('Setting up real-time subscription for chats');
 
@@ -374,7 +363,7 @@ const Inbox = () => {
           ...prev,
           [payload.new.chat_id]: (prev[payload.new.chat_id] || 0) + 1
         }));
-        
+
 
 
         // Update the last message for this chat
@@ -393,7 +382,7 @@ const Inbox = () => {
             ...prev,
             [payload.new.chat_id]: Math.max(0, (prev[payload.new.chat_id] || 0) - 1)
           }));
-          
+
           // Also refresh counts to ensure accuracy
           setTimeout(() => refreshCounts(), 100);
 
@@ -424,21 +413,32 @@ const Inbox = () => {
         filter: `to_user_id=eq.${user?.id}`
       }, async (payload) => {
         console.log('New system notification received:', payload.new);
-        
-        // Fetch the complete notification with user data
-        const { data: fullNotification, error } = await supabase
-          .from('system_notifications')
-          .select(`
-            *,
-            from_user:profiles(username, avatar_url)
-          `)
+
+        // Fetch the notification and profile separately
+        const { data: notification, error } = await supabase
+          .from('system_notifications' as any)
+          .select('*')
           .eq('id', payload.new.id)
           .single();
+
+        let fullNotification = notification;
+        if (notification && notification.from_user_id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('username, avatar_url')
+            .eq('user_id', notification.from_user_id)
+            .single();
+
+          fullNotification = {
+            ...notification,
+            from_user: profile
+          };
+        }
 
         if (fullNotification && !error) {
           // Add to the beginning of the notifications list
           setSystemNotifications(prev => [fullNotification, ...prev]);
-          
+
           // Show toast notification for follow notifications
           if (fullNotification.type === 'follow') {
             toast({
@@ -462,16 +462,16 @@ const Inbox = () => {
         filter: `to_user_id=eq.${user?.id}`
       }, (payload) => {
         console.log('System notification updated:', payload.new);
-        
+
         // Update the notification in the list
-        setSystemNotifications(prev => 
-          prev.map(notif => 
-            notif.id === payload.new.id 
+        setSystemNotifications(prev =>
+          prev.map(notif =>
+            notif.id === payload.new.id
               ? { ...notif, ...payload.new }
               : notif
           )
         );
-        
+
         // Refresh counts if read status changed
         if (payload.new.read !== payload.old.read) {
           refreshCounts();
@@ -595,14 +595,14 @@ const Inbox = () => {
   const handleOpenChat = async (chatId: string) => {
     // Clear unread count immediately for better UX
     setUnreadCounts(prev => ({ ...prev, [chatId]: 0 }));
-    
+
     // Navigate immediately for better UX
     navigate(`/chat/${chatId}`);
     setShowMenu(null);
-    
+
     // Mark messages as read in the background
     try {
-      const { error } = await supabase.rpc('mark_messages_as_read', {
+      const { error } = await supabase.rpc('mark_messages_as_read' as any, {
         chat_id_param: chatId,
         user_id_param: user?.id
       });
@@ -689,18 +689,18 @@ const Inbox = () => {
   const handleNotificationClick = async (notification: any) => {
     // Mark as read first
     await markNotificationAsRead(notification.id);
-    
+
     // Handle different notification types
     if (notification.type === 'admin') {
       // Show admin notification modal
       setSelectedAdminNotification(notification);
       setShowAdminModal(true);
-    } else if (notification.type === 'comment_reply' && notification.video_id) {
+    } else if ((notification.type === 'comment_reply' || notification.type === 'video_comment') && notification.video_id) {
       // Navigate to home feed and show comments modal for the video
-      navigate('/', { 
-        state: { 
-          showCommentsForVideo: notification.video_id 
-        } 
+      navigate('/', {
+        state: {
+          showCommentsForVideo: notification.video_id
+        }
       });
     } else if (notification.type === 'follow' && notification.from_user?.username) {
       // Navigate to the follower's profile
@@ -716,19 +716,19 @@ const Inbox = () => {
   const markNotificationAsRead = async (notificationId: string) => {
     try {
       const { error } = await supabase
-        .from('system_notifications')
+        .from('system_notifications' as any)
         .update({ read: true })
         .eq('id', notificationId);
 
       if (!error) {
-        setSystemNotifications(prev => 
-          prev.map(notif => 
-            notif.id === notificationId 
+        setSystemNotifications(prev =>
+          prev.map(notif =>
+            notif.id === notificationId
               ? { ...notif, read: true }
               : notif
           )
         );
-        
+
         // Refresh counts after marking as read
         refreshCounts();
       }
@@ -946,67 +946,66 @@ const Inbox = () => {
           {/* System Notifications Tab - Only show for non-admins */}
           {!isAdmin && (
             <TabsContent value="system">
-            {systemLoading ? (
-              <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-              </div>
-            ) : systemNotifications.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Bell size={24} />
+              {systemLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
                 </div>
-                <h3 className="text-lg font-semibold mb-2">No notifications</h3>
-                <p className="text-white/70">
-                  System notifications will appear here
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-0">
-                {systemNotifications.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`flex items-center p-4 border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${
-                      !notification.read ? 'bg-blue-900/20' : ''
-                    }`}
-                    onClick={() => handleNotificationClick(notification)}
-                  >
-                    <div className="mr-3">
-                      {getNotificationIcon(notification.type)}
-                    </div>
-                    
-                    {notification.from_user && (
-                      <div className="relative mr-3">
-                        <Avatar className="w-10 h-10">
-                          <AvatarImage src={notification.from_user.avatar_url} alt={notification.from_user.username} />
-                          <AvatarFallback className="bg-white/10 text-white">
-                            {notification.from_user.username?.charAt(0).toUpperCase() || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                      </div>
-                    )}
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-semibold text-white truncate">
-                          {notification.title}
-                        </h3>
-                        <span className="text-xs text-white/60 flex-shrink-0 ml-2">
-                          {formatTime(notification.created_at)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-white/60">
-                        Click to view full message
-                      </p>
-                    </div>
-
-                    {!notification.read && (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
-                    )}
+              ) : systemNotifications.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Bell size={24} />
                   </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
+                  <h3 className="text-lg font-semibold mb-2">No notifications</h3>
+                  <p className="text-white/70">
+                    System notifications will appear here
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-0">
+                  {systemNotifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className={`flex items-center p-4 border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${!notification.read ? 'bg-blue-900/20' : ''
+                        }`}
+                      onClick={() => handleNotificationClick(notification)}
+                    >
+                      <div className="mr-3">
+                        {getNotificationIcon(notification.type)}
+                      </div>
+
+                      {notification.from_user && (
+                        <div className="relative mr-3">
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={notification.from_user.avatar_url} alt={notification.from_user.username} />
+                            <AvatarFallback className="bg-white/10 text-white">
+                              {notification.from_user.username?.charAt(0).toUpperCase() || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <h3 className="font-semibold text-white truncate">
+                            {notification.title}
+                          </h3>
+                          <span className="text-xs text-white/60 flex-shrink-0 ml-2">
+                            {formatTime(notification.created_at)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-white/60">
+                          Click to view full message
+                        </p>
+                      </div>
+
+                      {!notification.read && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full ml-2"></div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
           )}
 
         </Tabs>

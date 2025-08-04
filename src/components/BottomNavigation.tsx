@@ -3,12 +3,63 @@ import { Button } from "@/components/ui/button";
 import { Home, Users, Plus, MessageSquare, CircleUser, Crown } from "lucide-react";
 import { useUnreadCount } from "@/hooks/useUnreadCount";
 import { useAuth } from "@/hooks/useAuth";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const BottomNavigation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { totalUnreadCount } = useUnreadCount();
-  const { isAdmin, loading } = useAuth();
+  const { isAdmin, loading, user } = useAuth();
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserProfile();
+    }
+  }, [user]);
+
+  // Subscribe to profile changes for real-time updates
+  useEffect(() => {
+    if (!user) return;
+
+    const profilesChannel = supabase
+      .channel('profile_updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        if (payload.new) {
+          setUserProfile(payload.new);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profilesChannel);
+    };
+  }, [user]);
+
+  const fetchUserProfile = async () => {
+    if (!user) return;
+    
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('user_id, username, avatar_url')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!error && profile) {
+        setUserProfile(profile);
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  };
 
   const navItems = isAdmin ? [
     { path: '/', icon: Home },
@@ -32,10 +83,14 @@ const BottomNavigation = () => {
           return (
             <Button
               key={item.path}
-              variant={item.isUpload ? "neon" : location.pathname === item.path ? "default" : "ghost"}
+              variant={item.isUpload ? "neon" : "ghost"}
               size="sm"
               onClick={() => navigate(item.path)}
-              className={item.isUpload ? "px-3" : "p-3"}
+              className={`${item.isUpload ? "px-3" : "p-3"} ${
+                location.pathname === item.path && !item.isUpload 
+                  ? "relative border-b-2 border-green-500 rounded-none bg-transparent" 
+                  : ""
+              }`}
             >
               {item.isAdmin ? (
                 <span className="text-xl" role="img" aria-label="Admin">👑</span>
@@ -48,6 +103,13 @@ const BottomNavigation = () => {
                     </div>
                   )}
                 </div>
+              ) : item.path === '/profile' ? (
+                <Avatar className="w-7 h-7">
+                  <AvatarImage src={userProfile?.avatar_url || user?.user_metadata?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-white/10 text-white text-xs">
+                    {userProfile?.username?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                  </AvatarFallback>
+                </Avatar>
               ) : (
                 <IconComponent size={20} />
               )}

@@ -1731,13 +1731,7 @@ const Feed = () => {
                           </span>
                         </div>
 
-                        {/* View Count */}
-                        <div className="flex flex-col items-center">
-                          <Eye size={24} className="text-white" />
-                          <span className="text-white text-xs mt-1 font-medium">
-                            {formatViews(viewCounts[video.id] || 0)}
-                          </span>
-                        </div>
+
 
 
 
@@ -1994,13 +1988,7 @@ const Feed = () => {
                               </span>
                             </div>
 
-                            {/* View Count */}
-                            <div className="flex flex-col items-center">
-                              <Eye size={24} className="text-white" />
-                              <span className="text-white text-xs mt-1 font-medium">
-                                {formatViews(viewCounts[video.id] || 0)}
-                              </span>
-                            </div>
+
 
                             {/* Save Button */}
                             <div className="flex flex-col items-center">

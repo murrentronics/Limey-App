@@ -58,12 +58,37 @@ const Upload = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, mode: 'camera' | 'gallery') => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Only allow supported video types
-      const supportedTypes = ["video/mp4", "video/webm", "video/quicktime", "video/mov", "video/3gpp", "video/ogg", "video/x-matroska"];
+      // Only allow supported video types - expanded for smartphone compatibility
+      const supportedTypes = [
+        "video/mp4", 
+        "video/webm", 
+        "video/quicktime", 
+        "video/mov", 
+        "video/3gpp", 
+        "video/3gpp2",
+        "video/ogg", 
+        "video/x-matroska",
+        "video/avi",
+        "video/x-msvideo",
+        "video/mpeg",
+        "video/mp2t",
+        "video/x-flv",
+        "video/x-ms-wmv",
+        "video/hevc", // iPhone HEVC format
+        "video/h264", // H.264 format
+        "video/x-m4v", // iPhone M4V format
+        "image/jpeg", // JPEG images
+        "image/jpg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/heic", // iPhone HEIC format
+        "image/heif"  // iPhone HEIF format
+      ];
       if (!supportedTypes.includes(selectedFile.type)) {
         toast({
           title: "Unsupported File Type",
-          description: "Please select a supported video file (mp4, webm, mov, etc.)",
+          description: "Please select a supported video or image file. Most smartphone formats are supported including iPhone videos (mov, mp4, m4v) and images (jpeg, png, heic).",
           variant: "destructive"
         });
         e.target.value = "";
@@ -141,7 +166,7 @@ const Upload = () => {
         console.error('Video metadata extraction error:', e);
         toast({
           title: "Failed to Load Video",
-          description: "Could not read video metadata. This may happen with unsupported formats or corrupted files. Try a different video, preferably one recorded with your phone camera (mp4, mov, webm).",
+          description: "Could not read video metadata. This may happen with unsupported formats or corrupted files. Try a different video, preferably one recorded with your phone camera (mp4, mov, m4v, 3gp).",
           variant: "destructive"
         });
         setFile(null);
@@ -245,6 +270,55 @@ const Upload = () => {
             }
           } catch (thumbnailError) {
             console.warn('Failed to generate thumbnail:', thumbnailError);
+            // Continue without thumbnail
+          }
+        }
+      } else if (file.type.startsWith('image/')) {
+        // For images, use the image itself as the thumbnail
+        if (coverImageFile) {
+          // Use custom cover image
+          const coverFileName = `${user.id}/thumbnails/cover_${Date.now()}.jpg`;
+          const { error: coverError } = await supabase.storage
+            .from('limeytt-uploads')
+            .upload(coverFileName, coverImageFile);
+          if (!coverError) {
+            thumbnailUrl = coverFileName;
+          }
+        } else {
+          // Use the uploaded image as its own thumbnail
+          const thumbnailFileName = `${user.id}/thumbnails/img_${Date.now()}.jpg`;
+          
+          // Convert image to JPEG for consistent thumbnail format
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = URL.createObjectURL(file);
+            });
+            
+            canvas.width = 320;
+            canvas.height = 568;
+            
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob(async (blob) => {
+                if (blob) {
+                  const thumbnailFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
+                  const { error: thumbnailError } = await supabase.storage
+                    .from('limeytt-uploads')
+                    .upload(thumbnailFileName, thumbnailFile);
+                  if (!thumbnailError) {
+                    thumbnailUrl = thumbnailFileName;
+                  }
+                }
+              }, 'image/jpeg', 0.8);
+            }
+          } catch (error) {
+            console.warn('Failed to generate image thumbnail:', error);
             // Continue without thumbnail
           }
         }
@@ -408,7 +482,7 @@ const Upload = () => {
               {/* Hidden file input for changing video */}
               <input
         type="file"
-        accept="video/*"
+        accept="video/*,image/*"
         className="hidden"
         ref={changeVideoInputRef}
         onChange={e => handleFileSelect(e, 'gallery')}
@@ -421,7 +495,7 @@ const Upload = () => {
             changeVideoInputRef.current?.click();
           }}
         >
-          Change Video
+          Change File
         </Button>
       </div>
             </>
@@ -433,13 +507,13 @@ const Upload = () => {
                 </div>
                 <h3 className="text-lg font-semibold mb-2">Create or Upload Your Content</h3>
                 <p className="text-muted-foreground mb-4">
-                  Use the Create button to record a new video, or Upload to select an existing video or image to share with the Limey community.
+                  Use the Create button to record a new video or take a photo, or Upload to select an existing video or image to share with the Limey community.
                 </p>
               </div>
               {/* Hidden file input for Create (camera) */}
               <input
                 type="file"
-                accept="video/*"
+                accept="video/*,image/*"
                 capture="environment"
                 className="hidden"
                 ref={fileInputRef}
@@ -448,7 +522,7 @@ const Upload = () => {
               {/* Upload/Change Video button triggers the regular input (no capture) */}
               <input
                 type="file"
-                accept="video/*"
+                accept="video/*,image/*"
                 onChange={e => handleFileSelect(e, 'gallery')}
                 className="hidden"
                 id="file-upload"
@@ -639,7 +713,10 @@ const Upload = () => {
   <ul className="text-sm text-muted-foreground space-y-4 text-center">
     <li>• <b>Max video duration:</b> 5 minutes</li>
     <li>• <b>Max file size:</b> 50 MB</li>
-    <li>• <b>Supported file types:</b> mp4, mov, webm, 3gp, ogg, mkv</li>
+    <li>• <b>Supported video formats:</b> mp4, mov, webm, 3gp, 3gpp2, avi, mpeg, m4v, hevc, h264</li>
+    <li>• <b>Supported image formats:</b> jpeg, jpg, png, gif, webp, heic, heif</li>
+    <li>• <b>iPhone users:</b> All iPhone camera formats supported (mov, mp4, m4v, heic, heif)</li>
+    <li>• <b>Android users:</b> All standard Android formats supported (mp4, 3gp, jpeg, png)</li>
     <li>• If your video is too large, use free apps like <b>CapCut</b>, <b>InShot</b>, or your phone's built-in editor to compress the video and maintain quality before uploading.</li>
     <li>• Keep videos under 60 seconds for best engagement</li>
     <li>• Use good lighting and clear audio</li>

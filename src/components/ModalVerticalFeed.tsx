@@ -568,15 +568,15 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose, highlightCommentId, au
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-[9998] bg-black flex flex-col">
       <button
-        className="absolute top-4 right-4 z-50 text-white bg-black/60 rounded-full p-2"
+        className="absolute top-4 right-4 z-[9999] text-white bg-black/60 rounded-full p-2"
         onClick={onClose}
       >
         <X size={32} />
       </button>
       {/* Mute Toggle */}
-      <div className="fixed top-20 right-4 z-40">
+      <div className="fixed top-20 right-4 z-[9999]">
         <Button
           variant="ghost"
           size="icon"
@@ -721,14 +721,23 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose, highlightCommentId, au
                     </span>
                   </div>
 
-
-                  {/* View Count */}
+                  {/* Comments */}
                   <div className="flex flex-col items-center">
-                    <Eye size={28} className="text-white" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowCommentsModal(video.id);
+                      }}
+                      className="p-0 bg-transparent border-none"
+                      data-control
+                    >
+                      <MessageCircle size={28} className="text-white fill-white" />
+                    </button>
                     <span className="text-white text-xs mt-1 font-medium">
-                      {formatViews(viewCounts[video.id] || 0)}
+                      {commentCounts[video.id] || 0}
                     </span>
                   </div>
+
 
 
                   {/* Save Button */}
@@ -745,23 +754,6 @@ const ModalVerticalFeed = ({ videos, startIndex, onClose, highlightCommentId, au
                     </button>
                     <span className="text-white text-xs mt-1 font-medium">
                       {saveCounts[video.id] || 0}
-                    </span>
-                  </div>
-
-                  {/* Comments */}
-                  <div className="flex flex-col items-center">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowCommentsModal(video.id);
-                      }}
-                      className="p-0 bg-transparent border-none"
-                      data-control
-                    >
-                      <MessageCircle size={28} className="text-white fill-white" />
-                    </button>
-                    <span className="text-white text-xs mt-1 font-medium">
-                      {commentCounts[video.id] || 0}
                     </span>
                   </div>
 

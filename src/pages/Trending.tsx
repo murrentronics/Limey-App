@@ -502,10 +502,6 @@ const Trending = () => {
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
                 <div className="flex items-center justify-between text-white text-xs">
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <Eye size={12} />
-                      <span>{video.genuine_view_count >= 1000 ? `${(video.genuine_view_count / 1000).toFixed(1)}K` : video.genuine_view_count || 0}</span>
-                    </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -516,6 +512,10 @@ const Trending = () => {
                       <MessageCircle size={12} />
                       <span>{commentCounts[video.id] || 0}</span>
                     </button>
+                    <div className="flex items-center gap-1">
+                      <Eye size={12} />
+                      <span>{video.genuine_view_count >= 1000 ? `${(video.genuine_view_count / 1000).toFixed(1)}K` : video.genuine_view_count || 0}</span>
+                    </div>
                   </div>
                   {video.duration && (
                     <div className="bg-black/60 rounded-full px-2 py-1">

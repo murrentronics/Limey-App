@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { X, Send, Smile, Heart, Keyboard, Coffee, Plane, Trophy, Shirt, Zap } from 'lucide-react';
+import { X, Send, Smile, Heart, Keyboard, Coffee, Plane, Trophy, Shirt, Zap, MoreVertical } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -66,10 +66,6 @@ const CommentContent: React.FC<{ content: string }> = ({ content }) => {
 
 // Simple GIF Picker Component
 const GifPicker: React.FC<{ onGifSelect: (gifUrl: string) => void }> = ({ onGifSelect }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [gifs, setGifs] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-
   // Popular GIF URLs for quick access
   const popularGifs = [
     'https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif', // thumbs up
@@ -78,29 +74,59 @@ const GifPicker: React.FC<{ onGifSelect: (gifUrl: string) => void }> = ({ onGifS
     'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif', // dancing
     'https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.gif', // heart eyes
     'https://media.giphy.com/media/3o7abAHdYvZdBNnGZq/giphy.gif', // mind blown
-    'https://media.giphy.com/media/l0MYGb8Q5IoAhR844/giphy.gif', // celebration
     'https://media.giphy.com/media/3o6ZtaO9BZHcOjmErm/giphy.gif', // shocked
     'https://media.giphy.com/media/26BRrSvJUa0crqw4E/giphy.gif', // happy
     'https://media.giphy.com/media/3o7aCSPqXE5C6T8tBC/giphy.gif', // love
     'https://media.giphy.com/media/l0MYEqEzwMWFCg8rm/giphy.gif', // cool
     'https://media.giphy.com/media/3o6Zt6KHxJTbXCnSvu/giphy.gif', // fire
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGZpMzA2cHRrZTBrbHptZWgxajBidW83YW9rMnk1b2lhdGQybWYyOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/nqT2V4HpFuomc/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGZpMzA2cHRrZTBrbHptZWgxajBidW83YW9rMnk1b2lhdGQybWYyOCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8iOzrJARYNURO/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3OTN6dWo2OG9sMGU4amxqaGpkMTFnc3R3dGN3bjc4eG5vOG4zNzhrZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/eGl4ZnPBvOCkDqVLJo/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3bHJ1amNjNTIzejl5bG1vc2dpMzl5NmF4MjN4cmM3ZXM0b2hlcnVlZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/lnIZZfwNzeYow/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3bHJ1amNjNTIzejl5bG1vc2dpMzl5NmF4MjN4cmM3ZXM0b2hlcnVlZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26CaLKiimsm3ibpE4/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWdnaXRkdXMwb3JkZ294Mmp1eHppbDltc3N6OGI1OHV0Zzh3Mmx4cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/VyB31XTqZNJhFRZNyl/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWdnaXRkdXMwb3JkZ294Mmp1eHppbDltc3N6OGI1OHV0Zzh3Mmx4cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/ljuSksqL9j0yI/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWdnaXRkdXMwb3JkZ294Mmp1eHppbDltc3N6OGI1OHV0Zzh3Mmx4cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/6WFScxN6fi95z3YVQD/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWdnaXRkdXMwb3JkZ294Mmp1eHppbDltc3N6OGI1OHV0Zzh3Mmx4cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xSlDYEXknFwY4ucrZV/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWdnaXRkdXMwb3JkZ294Mmp1eHppbDltc3N6OGI1OHV0Zzh3Mmx4cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/wGKrkvHxZT6PVpw635/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWdnaXRkdXMwb3JkZ294Mmp1eHppbDltc3N6OGI1OHV0Zzh3Mmx4cSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/wel1vvgXM2a7hRWttF/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYm9tamZwbGVna3JjanB6NGxlbzliYXl2MmhmZ3Y1eGxpcndxZzFtNyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/WXB88TeARFVvi/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYm9tamZwbGVna3JjanB6NGxlbzliYXl2MmhmZ3Y1eGxpcndxZzFtNyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/ZGU890vUpxuOKjKcpZ/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYm9tamZwbGVna3JjanB6NGxlbzliYXl2MmhmZ3Y1eGxpcndxZzFtNyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8lgqAbycBjosxjfi9k/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYm9tamZwbGVna3JjanB6NGxlbzliYXl2MmhmZ3Y1eGxpcndxZzFtNyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/okfvUCpgArv3y/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYm9tamZwbGVna3JjanB6NGxlbzliYXl2MmhmZ3Y1eGxpcndxZzFtNyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/cjnErkOZtvq5sHTM7c/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3MndhNWR6YmE3eWU3eTl0YXNrMnF0bXV6bDhnaXZkdDlobzhsMGg2ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/ES9osccp5aUdq/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3M3k1ZmUxMXd6bzFzZGVjMzNhdm95Ym84eDh0MjU3aDZtb3FneXNwbiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/286RXzjX37vtZOwXQq/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3NGVmOWw4bnRrdTZiaWJrajE1MDRkZGt5Mzg5dTc3bHFxZGRkbW01YyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/IVIRMpSAlSnHq/giphy.gif',
+    'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExMHQydGR4ZXUyY25mM3JiczUzbmtoYmlnMW5vMWQ4ZTl2dGh6aDd0NSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/nGEO47ShV3Us0/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2RvenM4Y2lyNTdwaXBpa2VkODQ3ejl3NmttemVvam9iaWh6MHE3ZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/bECCppRU0yRiS0iVJH/giphy.gif',
+    'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExcXpmbHNlajF4MDRuN3d1cHhjZngyNWUwaXM3a3gyM3YxOWRlaXY5cyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/WeiYU1ea1Poqs/giphy.gif',
+    'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExZXY1Y2c0NmV2MXdob200MnNmbzdlc3d2MG16c21vbHVlZ3I2NWV3eiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/2D8g2rXcWx1DO/giphy.gif',
+    'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExbW1xOHAyZXFlbDI0azB4cDd1eG1uMzNlbnVieGg2dm11NnAzMGdzbSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/dhz1gKi7WKWpW/giphy.gif',
+    'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYmtoOTNlengybTZjc3dubWRvYWMzNHg5eWxrcXZtdTZsdjV6NHIwcSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/7waKDy5RbDYVG/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3cnBuejd0M2xxM21mcjE4bmR6eXpqdHIzdmx6ZXdvZmMxcjNucG40aiZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/zIwAuqRp2Ki7S/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3cnBuejd0M2xxM21mcjE4bmR6eXpqdHIzdmx6ZXdvZmMxcjNucG40aiZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/A7ZbCuv0fJ0POGucwV/giphy.gif',
+    'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExcXp4YWprbDJsbnAxNXloYWVyenNmYWs1cXJucW1ncHc4emxocTEycyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5t3fgYmnNfRICx34Wj/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2RvenM4Y2lyNTdwaXBpa2VkODQ3ejl3NmttemVvam9iaWh6MHE3ZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/jkRTu2tTfpwJbwvZz3/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2RvenM4Y2lyNTdwaXBpa2VkODQ3ejl3NmttemVvam9iaWh6MHE3ZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/cE5TH06rukeFIHbaKs/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2RvenM4Y2lyNTdwaXBpa2VkODQ3ejl3NmttemVvam9iaWh6MHE3ZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/CWBgyqeF5344RsP4b9/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3anh6bzh6bzd6cGhzeDZsNzRubjRkY3phaWVqaWtyazVzOGZxeDF6aCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/QZsDxgHYw3VpLDubUS/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2RvenM4Y2lyNTdwaXBpa2VkODQ3ejl3NmttemVvam9iaWh6MHE3ZyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8CuA9BgLtQs3pBFF1J/giphy.gif',
+    'https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3anh6bzh6bzd6cGhzeDZsNzRubjRkY3phaWVqaWtyazVzOGZxeDF6aCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/9zylPz0kQKzmAWydBi/giphy.gif',
+
   ];
 
   const handleGifSelect = (gifUrl: string) => {
-    // Insert GIF as an image tag
-    onGifSelect(`![GIF](${gifUrl})`);
+    try {
+      onGifSelect(`![GIF](${gifUrl})`);
+    } catch (error) {
+      console.error('Error selecting GIF:', error);
+    }
   };
 
   return (
     <div className="space-y-3">
-      <Input
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        placeholder="Search GIFs..."
-        className="bg-white/10 border-white/20 text-white placeholder-white/50 text-sm"
-      />
-
-      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+      <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
         {popularGifs.map((gifUrl, index) => (
           <button
             key={index}
@@ -219,32 +245,79 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
   const [replyText, setReplyText] = useState('');
   const [loading, setLoading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [activeEmojiTab, setActiveEmojiTab] = useState('smileys');
+  const [activeEmojiTab, setActiveEmojiTab] = useState<keyof typeof EMOJI_CATEGORIES>('smileys');
   const [showKeyboard, setShowKeyboard] = useState(true);
   const [showFullscreenComments, setShowFullscreenComments] = useState(false);
   const [commentLikes, setCommentLikes] = useState<{ [key: string]: boolean }>({});
-  const [longPressedComment, setLongPressedComment] = useState<string | null>(null);
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
   const [expandedReplies, setExpandedReplies] = useState<{ [key: string]: boolean }>({});
   const [highlightedComment, setHighlightedComment] = useState<string | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const replyInputRef = useRef<HTMLInputElement>(null);
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+
   const commentRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     if (isOpen) {
       fetchComments();
+      fetchCurrentUserProfile();
     }
   }, [isOpen, videoId]);
+
+  const fetchCurrentUserProfile = async () => {
+    if (!user) return;
+
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('user_id, username, avatar_url, display_name')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!error && profile) {
+        setCurrentUserProfile(profile);
+      }
+    } catch (error) {
+      console.error('Error fetching current user profile:', error);
+    }
+  };
 
   // SIMPLE highlighting - exactly what you asked for
   useEffect(() => {
     if (highlightCommentId && comments.length > 0) {
-      highlightSpecificComment(highlightCommentId);
+      try {
+        highlightSpecificComment(highlightCommentId);
+      } catch (error) {
+        console.error('Error highlighting comment:', error);
+      }
     }
   }, [highlightCommentId, comments]);
+
+  // Subscribe to current user profile changes
+  useEffect(() => {
+    if (!user) return;
+
+    const profilesChannel = supabase
+      .channel('current_user_profile_updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        if (payload.new) {
+          setCurrentUserProfile(payload.new);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profilesChannel);
+    };
+  }, [user]);
 
   // Note: Real-time subscriptions removed to prevent reloads
   // All updates are now handled locally for better UX
@@ -275,7 +348,10 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
         return;
       }
 
-      const userIds = [...new Set(commentsData.map(comment => comment.user_id))];
+      // Use any type to avoid deep type instantiation issues
+      const typedCommentsData = commentsData as any[];
+
+      const userIds = [...new Set(typedCommentsData.map(comment => comment.user_id))];
 
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -292,14 +368,16 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
       }, {} as { [key: string]: any });
 
       const commentsWithReplies = await Promise.all(
-        commentsData.map(async (comment) => {
+        typedCommentsData.map(async (comment) => {
           // Get accurate like count from comment_likes table
           const { data: likesData, error: likesError } = await supabase
             .from('comment_likes' as any)
             .select('id')
             .eq('comment_id', comment.id);
 
-          const actualLikeCount = likesError ? 0 : (likesData?.length || 0);
+          // Use any type to avoid deep type instantiation issues
+          const typedLikesData = likesData as any[] | null;
+          const actualLikeCount = likesError ? 0 : (typedLikesData?.length || 0);
 
           const { data: replies, error: repliesError } = await supabase
             .from('comments' as any)
@@ -317,14 +395,19 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
             };
           }
 
-          const repliesWithProfiles = await Promise.all((replies || []).map(async (reply) => {
+          // Use any type to avoid deep type instantiation issues
+          const typedReplies = (replies || []) as any[];
+
+          const repliesWithProfiles = await Promise.all(typedReplies.map(async (reply) => {
             // Get accurate like count for replies too
             const { data: replyLikesData, error: replyLikesError } = await supabase
               .from('comment_likes' as any)
               .select('id')
               .eq('comment_id', reply.id);
 
-            const replyActualLikeCount = replyLikesError ? 0 : (replyLikesData?.length || 0);
+            // Use any type to avoid deep type instantiation issues
+            const typedReplyLikesData = replyLikesData as any[] | null;
+            const replyActualLikeCount = replyLikesError ? 0 : (typedReplyLikesData?.length || 0);
 
             return {
               ...reply,
@@ -355,7 +438,10 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
           .eq('user_id', user.id)
           .in('comment_id', allCommentIds);
 
-        const likesMap = (likesData || []).reduce((acc, like) => {
+        // Use any type to avoid deep type instantiation issues
+        const typedLikesData = likesData as any[] | null;
+
+        const likesMap = (typedLikesData || []).reduce((acc, like) => {
           acc[like.comment_id] = true;
           return acc;
         }, {} as { [key: string]: boolean });
@@ -706,38 +792,46 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
 
   // Simple function to highlight a specific comment - EXACTLY what you asked for
   const highlightSpecificComment = (commentId: string) => {
-    console.log('Highlighting comment:', commentId);
-    
-    // 1. Click "See all comments" - show fullscreen
-    setShowFullscreenComments(true);
-    
-    // 2. Find and expand parent thread if it's a reply
-    comments.forEach(comment => {
-      if (comment.replies) {
-        const replyFound = comment.replies.find(reply => reply.id === commentId);
-        if (replyFound) {
-          setExpandedReplies(prev => ({ ...prev, [comment.id]: true }));
+    try {
+      console.log('Highlighting comment:', commentId);
+
+      // 1. Click "See all comments" - show fullscreen
+      setShowFullscreenComments(true);
+
+      // 2. Find and expand parent thread if it's a reply
+      comments.forEach(comment => {
+        if (comment.replies) {
+          const replyFound = comment.replies.find(reply => reply.id === commentId);
+          if (replyFound) {
+            setExpandedReplies(prev => ({ ...prev, [comment.id]: true }));
+          }
         }
-      }
-    });
-    
-    // 3. Highlight and scroll after a short delay
-    setTimeout(() => {
-      setHighlightedComment(commentId);
-      
-      const commentElement = commentRefs.current[commentId];
-      if (commentElement) {
-        commentElement.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center' 
-        });
-        
-        // 4. Remove highlight after 3 seconds (fade away)
-        setTimeout(() => {
-          setHighlightedComment(null);
-        }, 3000);
-      }
-    }, 500);
+      });
+
+      // 3. Highlight and scroll after a short delay
+      setTimeout(() => {
+        try {
+          setHighlightedComment(commentId);
+
+          const commentElement = commentRefs.current[commentId];
+          if (commentElement) {
+            commentElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+
+            // 4. Remove highlight after 3 seconds (fade away)
+            setTimeout(() => {
+              setHighlightedComment(null);
+            }, 3000);
+          }
+        } catch (scrollError) {
+          console.error('Error scrolling to comment:', scrollError);
+        }
+      }, 500);
+    } catch (error) {
+      console.error('Error in highlightSpecificComment:', error);
+    }
   };
 
   const formatTime = (timestamp: string) => {
@@ -781,7 +875,6 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
 
       setShowDeleteConfirm(false);
       setCommentToDelete(null);
-      setLongPressedComment(null);
 
       toast({
         title: 'Comment deleted',
@@ -798,27 +891,12 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
     }
   };
 
-  const handleLongPressStart = (commentId: string, isOwnComment: boolean) => {
-    if (!isOwnComment) return;
 
-    longPressTimer.current = setTimeout(() => {
-      setLongPressedComment(commentId);
-      setCommentToDelete(commentId);
-      setShowDeleteConfirm(true);
-    }, 800); // 800ms long press
-  };
-
-  const handleLongPressEnd = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-end">
+    <div className="fixed inset-0 z-[100] bg-black/80 flex items-end">
       <div className="w-full bg-black rounded-t-2xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -908,36 +986,42 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                           {formatTime(comment.created_at)}
                         </span>
                       </div>
-                      <div
-                        className="text-white/90 text-sm leading-relaxed select-none"
-                        onTouchStart={() => handleLongPressStart(comment.id, comment.user_id === user?.id)}
-                        onTouchEnd={handleLongPressEnd}
-                        onMouseDown={() => handleLongPressStart(comment.id, comment.user_id === user?.id)}
-                        onMouseUp={handleLongPressEnd}
-                        onMouseLeave={handleLongPressEnd}
-                      >
+                      <div className="text-white/90 text-sm leading-relaxed select-none">
                         <CommentContent content={comment.content} />
                       </div>
-                      <div className="flex items-center gap-4 mt-2">
-                        <button
-                          onClick={() => handleLikeComment(comment.id)}
-                          className="flex items-center gap-1 text-white/60 hover:text-red-500 transition-colors"
-                        >
-                          <Heart
-                            size={14}
-                            className={commentLikes[comment.id] ? 'text-red-500 fill-red-500' : ''}
-                          />
-                          <span className="text-xs">{comment.like_count || 0}</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setReplyingTo(comment.id);
-                            setTimeout(() => replyInputRef.current?.focus(), 100);
-                          }}
-                          className="text-white/60 hover:text-white text-xs transition-colors"
-                        >
-                          Reply
-                        </button>
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-4">
+                          <button
+                            onClick={() => handleLikeComment(comment.id)}
+                            className="flex items-center gap-1 text-white/60 hover:text-red-500 transition-colors"
+                          >
+                            <Heart
+                              size={14}
+                              className={commentLikes[comment.id] ? 'text-red-500 fill-red-500' : ''}
+                            />
+                            <span className="text-xs">{comment.like_count || 0}</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setReplyingTo(comment.id);
+                              setTimeout(() => replyInputRef.current?.focus(), 100);
+                            }}
+                            className="text-white/60 hover:text-white text-xs transition-colors"
+                          >
+                            Reply
+                          </button>
+                        </div>
+                        {comment.user_id === user?.id && (
+                          <button
+                            onClick={() => {
+                              setCommentToDelete(comment.id);
+                              setShowDeleteConfirm(true);
+                            }}
+                            className="text-white/60 hover:text-white transition-colors p-1"
+                          >
+                            <MoreVertical size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -995,26 +1079,32 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                                 {formatTime(reply.created_at)}
                               </span>
                             </div>
-                            <div
-                              className="text-white/90 text-sm leading-relaxed select-none"
-                              onTouchStart={() => handleLongPressStart(reply.id, reply.user_id === user?.id)}
-                              onTouchEnd={handleLongPressEnd}
-                              onMouseDown={() => handleLongPressStart(reply.id, reply.user_id === user?.id)}
-                              onMouseUp={handleLongPressEnd}
-                              onMouseLeave={handleLongPressEnd}
-                            >
+                            <div className="text-white/90 text-sm leading-relaxed select-none">
                               <CommentContent content={reply.content} />
                             </div>
-                            <button
-                              onClick={() => handleLikeComment(reply.id)}
-                              className="flex items-center gap-1 text-white/60 hover:text-red-500 transition-colors mt-2"
-                            >
-                              <Heart
-                                size={14}
-                                className={commentLikes[reply.id] ? 'text-red-500 fill-red-500' : ''}
-                              />
-                              <span className="text-xs">{reply.like_count || 0}</span>
-                            </button>
+                            <div className="flex items-center justify-between mt-2">
+                              <button
+                                onClick={() => handleLikeComment(reply.id)}
+                                className="flex items-center gap-1 text-white/60 hover:text-red-500 transition-colors"
+                              >
+                                <Heart
+                                  size={14}
+                                  className={commentLikes[reply.id] ? 'text-red-500 fill-red-500' : ''}
+                                />
+                                <span className="text-xs">{reply.like_count || 0}</span>
+                              </button>
+                              {reply.user_id === user?.id && (
+                                <button
+                                  onClick={() => {
+                                    setCommentToDelete(reply.id);
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  className="text-white/60 hover:text-white transition-colors p-1"
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -1096,7 +1186,7 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                   return (
                     <button
                       key={key}
-                      onClick={() => setActiveEmojiTab(key)}
+                      onClick={() => setActiveEmojiTab(key as keyof typeof EMOJI_CATEGORIES)}
                       className={`flex-1 p-3 flex items-center justify-center transition-colors ${activeEmojiTab === key
                         ? 'bg-white/20 text-white'
                         : 'text-white/60 hover:text-white hover:bg-white/10'
@@ -1112,7 +1202,7 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                   <GifPicker onGifSelect={(gifUrl) => insertEmoji(gifUrl)} />
                 ) : (
                   <div className="grid grid-cols-8 gap-2">
-                    {EMOJI_CATEGORIES[activeEmojiTab]?.emojis.map((emoji, index) => (
+                    {(EMOJI_CATEGORIES[activeEmojiTab]?.emojis || []).map((emoji, index) => (
                       <button
                         key={index}
                         onClick={() => insertEmoji(emoji)}
@@ -1129,9 +1219,9 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
 
           <div className="flex gap-2">
             <Avatar className="w-8 h-8 flex-shrink-0">
-              <AvatarImage src={user?.user_metadata?.avatar_url} />
+              <AvatarImage src={currentUserProfile?.avatar_url || user?.user_metadata?.avatar_url || undefined} />
               <AvatarFallback className="bg-white/10 text-white text-xs">
-                {user?.email?.charAt(0).toUpperCase() || 'U'}
+                {currentUserProfile?.username?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 flex gap-2">
@@ -1178,7 +1268,7 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
 
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
-          <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[101] bg-black/80 flex items-center justify-center p-4">
             <div className="bg-black/90 rounded-lg max-w-sm w-full mx-4 border border-white/20">
               <div className="p-4">
                 <h3 className="text-white font-semibold mb-2">Delete Comment</h3>
@@ -1190,7 +1280,6 @@ const CommentsModal: React.FC<CommentsModalProps> = ({ isOpen, onClose, videoId,
                     onClick={() => {
                       setShowDeleteConfirm(false);
                       setCommentToDelete(null);
-                      setLongPressedComment(null);
                     }}
                     variant="outline"
                     className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/20"
