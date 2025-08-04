@@ -31,4 +31,5 @@ export default defineConfig(({ mode }: { mode: string }) => ({
       },
     },
   },
+  publicDir: 'public',
 }));
