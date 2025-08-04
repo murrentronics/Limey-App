@@ -1,0 +1,139 @@
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Settings, Search as SearchIcon, X as CloseIcon, Share2, Play, Volume2, VolumeX, Plus, Pause, TrendingUp, ArrowLeft, Heart, Eye, Bookmark, BookmarkCheck } from "lucide-react";
+import BottomNavigation from "@/components/BottomNavigation";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import React from "react";
+
+// --- AutoPlayVideo component ---
+const AutoPlayVideo = ({ src, className, globalMuted, videoId, videoData, onViewRecorded, ...props }) => {
+  const videoRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [viewRecorded, setViewRecorded] = useState(false);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Always start muted to allow autoplay
+    video.muted = true;
+    
+    // Add event listeners to track video playing state
+    const handlePlay = () => {
+      console.log('Video play event:', videoId);
+      setIsPlaying(true);
+    };
+    
+    const handlePause = () => {
+      console.log('Video pause event:', videoId);
+      setIsPlaying(false);
+    };
+    
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+
+    const observer = new window.IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          setIsVisible(true);
+          // Try to play the video
+          video.play().then(() => {
+            setIsPlaying(true); // Set isPlaying to true when video starts playing
+            console.log('Video playing:', videoId);
+          }).catch(error => {
+            console.log('Autoplay prevented:', error);
+            setIsPlaying(false);
+            // Video will remain paused until user interaction
+          });
+        } else {
+          setIsVisible(false);
+          setIsPlaying(false); // Set isPlaying to false when video is not visible
+          video.pause();
+          video.currentTime = 0;
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(video);
+
+    // After a short delay, apply the actual muted state
+    // This ensures autoplay works first, then we can unmute if needed
+    const timer = setTimeout(() => {
+      video.muted = globalMuted;
+    }, 1000);
+
+    return () => {
+      observer.unobserve(video);
+      clearTimeout(timer);
+      
+      // Remove event listeners
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+    };
+  }, [globalMuted, videoId]);
+
+  // Record view when video has been playing and visible for 5 seconds
+  useEffect(() => {
+    console.log('View recording effect running:', { isVisible, isPlaying, viewRecorded, videoId });
+    
+    if (isVisible && isPlaying && !viewRecorded && videoId) {
+      console.log('Starting view recording timer for video:', videoId);
+      
+      // Check if the current user is the creator of the video
+      // If so, don't record the view (prevent self-views)
+      if (user && videoData && videoData.user_id === user.id) {
+        console.log('Self-view detected, not recording view for video:', videoId);
+        setViewRecorded(true); // Mark as recorded to prevent further attempts
+        return;
+      }
+      
+      const timer = setTimeout(async () => {
+        console.log('View timer completed for video:', videoId);
+        try {
+          const { data, error } = await supabase.rpc('record_video_view', {
+            video_uuid: videoId
+          });
+
+          console.log('View recording response:', { data, error, videoId });
+
+          // Mark as recorded regardless of the response to prevent multiple attempts
+          setViewRecorded(true);
+          
+          // If there's no error, the view was processed (even if not counted due to server rules)
+          if (error === null) {
+            // Update the UI to show the view was counted
+            if (onViewRecorded) {
+              console.log('Calling onViewRecorded for video:', videoId);
+              onViewRecorded(videoId);
+            }
+          }
+        } catch (error) {
+          console.error('Error recording view:', error);
+        }
+      }, 5000); // 5 seconds delay
+
+      return () => {
+        console.log('Cleaning up view timer for video:', videoId);
+        clearTimeout(timer);
+      };
+    }
+  }, [isVisible, isPlaying, viewRecorded, videoId, onViewRecorded, user, videoData]);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      className={className}
+      loop
+      playsInline
+      muted={globalMuted}
+      {...props}
+    />
+  );
+};

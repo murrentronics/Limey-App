@@ -1,0 +1,38 @@
+// Updated User Profile section for search results
+{/* User Profile */}
+<div className="flex items-center space-x-3">
+  <div className="relative">
+    {/* Make Avatar clickable */}
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigate(getProfileUrl(video));
+      }}
+      className="hover:opacity-80 transition-opacity"
+      aria-label={`View ${getUsername(video)}'s profile`}
+      data-control
+    >
+      <Avatar className="w-12 h-12">
+        <AvatarImage src={video.avatar_url || undefined} alt={getUsername(video)} />
+        <AvatarFallback>{getUsername(video).charAt(0).toUpperCase()}</AvatarFallback>
+      </Avatar>
+    </button>
+    {/* Follow Button */}
+    {user && video.user_id !== user.id && (
+      <button
+        onClick={async (e) => {
+          e.stopPropagation();
+          await handleFollow(video.user_id, getUsername(video));
+        }}
+        className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center shadow-lg hover:bg-green-700 transition-colors"
+        data-control
+      >
+        {followStatus[video.user_id] ? (
+          <span className="text-white font-bold text-sm">✓</span>
+        ) : (
+          <Plus size={12} className="text-white" />
+        )}
+      </button>
+    )}
+  </div>
+</div>

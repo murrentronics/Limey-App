@@ -4,11 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { deleteUserAccount } from "@/lib/trinepayApi";
+import { ArrowLeft, Trash2, Edit, Eye, EyeOff } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 
 const Settings = () => {
@@ -16,35 +18,23 @@ const Settings = () => {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [deletionCountdown, setDeletionCountdown] = useState<Date | null>(null);
-  const [timeLeft, setTimeLeft] = useState("");
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [deletionCountdown, setDeletionCountdown] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [pendingDeactivateChecked, setPendingDeactivateChecked] = useState(false);
 
   useEffect(() => {
     fetchSettings();
   }, [user]);
 
-  useEffect(() => {
-    if (deletionCountdown) {
-      const timer = setInterval(() => {
-        const now = new Date();
-        const diff = deletionCountdown.getTime() - now.getTime();
-        
-        if (diff <= 0) {
-          setTimeLeft("Account will be deleted");
-          clearInterval(timer);
-        } else {
-          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-          
-          setTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
-        }
-      }, 1000);
-
-      return () => clearInterval(timer);
-    }
-  }, [deletionCountdown]);
 
   const fetchSettings = async () => {
     if (!user) return;
@@ -61,21 +51,11 @@ const Settings = () => {
       }
 
       setSettings(data || {
-        notification_settings: { likes: true, follows: true, comments: true },
+        notification_settings: {},
         privacy_settings: { private_account: false },
         account_settings: { dark_mode: false }
       });
 
-      // Check if account is scheduled for deletion
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('delete_at')
-        .eq('user_id', user.id)
-        .single();
-
-      if (profile?.delete_at) {
-        setDeletionCountdown(new Date(profile.delete_at));
-      }
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -99,7 +79,8 @@ const Settings = () => {
       setSettings(newSettings);
       toast({
         title: "Settings updated",
-        description: "Your settings have been saved successfully"
+        description: "Your settings have been saved successfully",
+        className: "bg-green-600 text-white border-green-700"
       });
     } catch (error) {
       toast({
@@ -110,56 +91,124 @@ const Settings = () => {
     }
   };
 
-  const scheduleAccountDeletion = async () => {
+  const handleDeleteAccount = async () => {
     if (!user) return;
 
     try {
-      const deleteDate = new Date();
-      deleteDate.setDate(deleteDate.getDate() + 7);
+      // Call the new function to delete the user account
+      await deleteUserAccount(user.id);
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({ delete_at: deleteDate.toISOString() })
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      setDeletionCountdown(deleteDate);
       toast({
-        title: "Account deletion scheduled",
-        description: "Your account will be deleted in 7 days"
+        title: "Account deleted",
+        description: "Your account has been permanently deleted.",
+        className: "bg-green-600 text-white border-green-700"
       });
-    } catch (error) {
+
+      // Sign out and navigate to home
+      await signOut();
+      navigate("/");
+
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to schedule account deletion",
+        description: error.message || "Failed to delete account",
         variant: "destructive"
       });
     }
   };
 
-  const cancelAccountDeletion = async () => {
-    if (!user) return;
+  const handleDeactivateToggle = (checked: boolean) => {
+    if (checked) {
+      setPendingDeactivateChecked(true);
+      setShowDeactivateConfirm(true);
+    } else {
+      // Reactivate immediately
+      doDeactivateToggle(false);
+    }
+  };
 
+  const doDeactivateToggle = async (checked: boolean) => {
+    if (!user) return;
+    setDeactivating(true);
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ delete_at: null })
+        .update({ deactivated: checked })
         .eq('user_id', user.id);
+      if (error) throw error;
+      if (!checked) {
+        toast({
+          title: "Account reactivated",
+          description: "Your account is now active.",
+          className: "bg-green-600 text-white border-green-700"
+        });
+      }
+      if (checked) {
+        await signOut();
+        navigate("/");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update account status",
+        variant: "destructive"
+      });
+    } finally {
+      setDeactivating(false);
+      setShowDeactivateConfirm(false);
+      setPendingDeactivateChecked(false);
+    }
+  };
+
+
+  const changePassword = async () => {
+    if (!user) return;
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "New passwords do not match",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
 
       if (error) throw error;
 
-      setDeletionCountdown(null);
       toast({
-        title: "Account deletion cancelled",
-        description: "Your account will not be deleted"
+        title: "Password updated",
+        description: "Your password has been changed successfully",
+        className: "bg-green-600 text-white border-green-700"
       });
-    } catch (error) {
+
+      // Reset form
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowPasswordForm(false);
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to cancel account deletion",
+        description: error.message || "Failed to update password",
         variant: "destructive"
       });
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -195,87 +244,136 @@ const Settings = () => {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Account Deletion Warning */}
-        {deletionCountdown && (
-          <Card className="border-red-500 bg-red-50 dark:bg-red-950">
-            <CardHeader>
-              <CardTitle className="text-red-600 dark:text-red-400 flex items-center">
-                <Trash2 size={20} className="mr-2" />
-                Account Deletion Scheduled
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-red-700 dark:text-red-300 mb-2">
-                Your account will be permanently deleted in:
-              </p>
-              <Badge variant="destructive" className="text-lg p-2">
-                {timeLeft}
-              </Badge>
-              <Button
-                onClick={cancelAccountDeletion}
-                className="mt-4 w-full"
-                variant="outline"
-              >
-                Cancel Deletion
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Notifications */}
         <Card>
           <CardHeader>
             <CardTitle>Notifications</CardTitle>
           </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              No notification settings available.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Security */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Security</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="likes">Likes</Label>
-              <Switch
-                id="likes"
-                checked={settings?.notification_settings?.likes || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    notification_settings: {
-                      ...settings.notification_settings,
-                      likes: checked
-                    }
-                  })
-                }
-              />
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <div className="text-sm text-muted-foreground">{user?.email}</div>
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="follows">Follows</Label>
-              <Switch
-                id="follows"
-                checked={settings?.notification_settings?.follows || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    notification_settings: {
-                      ...settings.notification_settings,
-                      follows: checked
-                    }
-                  })
-                }
-              />
+            
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Password</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPasswordForm(!showPasswordForm)}
+                >
+                  <Edit size={16} className="mr-2" />
+                  Edit
+                </Button>
+              </div>
+              <div className="text-sm text-muted-foreground">********</div>
             </div>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="comments">Comments</Label>
-              <Switch
-                id="comments"
-                checked={settings?.notification_settings?.comments || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    notification_settings: {
-                      ...settings.notification_settings,
-                      comments: checked
-                    }
-                  })
-                }
-              />
-            </div>
+
+            {showPasswordForm && (
+              <div className="space-y-4 pt-4 border-t">
+                <div className="space-y-2">
+                  <Label htmlFor="oldPassword">Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="oldPassword"
+                      type={showOldPassword ? "text" : "password"}
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      placeholder="Enter current password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowOldPassword(!showOldPassword)}
+                    >
+                      {showOldPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                    >
+                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={changePassword}
+                    disabled={changingPassword || !oldPassword || !newPassword || !confirmPassword}
+                    className="flex-1"
+                  >
+                    {changingPassword ? "Updating..." : "Update Password"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowPasswordForm(false);
+                      setOldPassword("");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                    }}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -285,22 +383,9 @@ const Settings = () => {
             <CardTitle>Privacy</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="private">Private Account</Label>
-              <Switch
-                id="private"
-                checked={settings?.privacy_settings?.private_account || false}
-                onCheckedChange={(checked) =>
-                  updateSettings({
-                    ...settings,
-                    privacy_settings: {
-                      ...settings.privacy_settings,
-                      private_account: checked
-                    }
-                  })
-                }
-              />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Privacy settings will be available here in future updates.
+            </p>
           </CardContent>
         </Card>
 
@@ -310,6 +395,24 @@ const Settings = () => {
             <CardTitle>Account Management</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center justify-between mt-4">
+              <Label htmlFor="deactivate">Deactivate Account</Label>
+              <Switch
+                id="deactivate"
+                checked={settings?.deactivated || false}
+                onCheckedChange={handleDeactivateToggle}
+                disabled={deactivating}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Sign Out */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign Out</CardTitle>
+          </CardHeader>
+          <CardContent>
             <Button
               onClick={signOut}
               variant="outline"
@@ -317,20 +420,36 @@ const Settings = () => {
             >
               Sign Out
             </Button>
-            
-            {!deletionCountdown && (
-              <Button
-                onClick={scheduleAccountDeletion}
-                variant="destructive"
-                className="w-full"
-              >
-                <Trash2 size={16} className="mr-2" />
-                Delete Account (7 day countdown)
-              </Button>
-            )}
           </CardContent>
         </Card>
       </div>
+
+      {showDeactivateConfirm && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95">
+          <div className="max-w-md w-full bg-card rounded-lg shadow-lg p-8 flex flex-col items-center">
+            <h2 className="text-2xl font-bold mb-4 text-primary">Confirm Deactivation</h2>
+            <p className="text-muted-foreground mb-8 text-center">Are you sure you want to deactivate your account? You will be logged out and your profile and videos will be hidden from others until you reactivate.</p>
+            <div className="flex w-full gap-4">
+              <Button
+                onClick={() => doDeactivateToggle(true)}
+                className="flex-1"
+              >
+                OK
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowDeactivateConfirm(false);
+                  setPendingDeactivateChecked(false);
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNavigation />
     </div>

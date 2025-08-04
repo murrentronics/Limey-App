@@ -32,21 +32,27 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_username_key UNIQUE (username);
 CREATE OR REPLACE FUNCTION validate_username(username TEXT)
 RETURNS BOOLEAN AS $$
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+  
   -- Username must be 3-30 characters, alphanumeric and underscores only
   RETURN username ~ '^[a-zA-Z0-9_]{3,30}$';
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Step 4: Create a trigger to validate username before insert/update
 CREATE OR REPLACE FUNCTION validate_username_trigger()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+  
   IF NOT validate_username(NEW.username) THEN
     RAISE EXCEPTION 'Username must be 3-30 characters long and contain only letters, numbers, and underscores';
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Create the trigger
 DROP TRIGGER IF EXISTS validate_username_trigger ON profiles;
@@ -63,6 +69,9 @@ DECLARE
   final_username TEXT;
   counter INTEGER := 1;
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+  
   -- Get base username from metadata or generate from email
   base_username := COALESCE(
     NEW.raw_user_meta_data->>'username',
@@ -118,6 +127,9 @@ DECLARE
   new_username TEXT;
   counter INTEGER;
 BEGIN
+  -- Set search_path for security
+  PERFORM set_config('search_path', 'public', true);
+  
   FOR profile_record IN 
     SELECT id, user_id, username 
     FROM profiles 
@@ -139,7 +151,7 @@ BEGIN
     WHERE id = profile_record.id;
   END LOOP;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Step 7: Run the fix function to ensure all profiles have valid usernames
 SELECT fix_existing_usernames();
@@ -164,4 +176,4 @@ DO $$
 BEGIN
   RAISE NOTICE 'Username uniqueness migration completed successfully!';
   RAISE NOTICE 'All usernames are now unique and properly formatted.';
-END $$; 
+END $$;

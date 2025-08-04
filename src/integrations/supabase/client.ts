@@ -15,3 +15,33 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// Function to link wallet for a specific user
+export async function linkWallet(userId) {
+  try {
+    const { data, error } = await supabase
+      .from('wallet_links')
+      .insert([{ user_id: userId }]);
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Exception in linkWallet:', err);
+    return { data: null, error: err };
+  }
+}
+
+// Function to get linked wallet for a specific user
+export async function getLinkedWallet(userId) {
+  try {
+    const { data, error } = await supabase
+      .from('wallet_links')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle(); // Use maybeSingle instead of single to handle no results gracefully
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Exception in getLinkedWallet:', err);
+    return { data: null, error: err };
+  }
+}
