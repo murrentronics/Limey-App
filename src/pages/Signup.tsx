@@ -6,6 +6,7 @@ import { Eye, EyeOff } from "@/components/ui/password-eye-icons";
 import { Card } from "@/components/ui/card";
 import LimeyLogo from "@/components/LimeyLogo";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const Signup = () => {
   const [formData, setFormData] = useState({
@@ -74,9 +75,7 @@ const Signup = () => {
               onChange={(e) => handleInputChange("username", e.target.value)}
               required
             />
-            {usernameStatus === 'checking' && <p className="text-sm text-muted-foreground">Checking username...</p>}
-            {usernameStatus === 'available' && <p className="text-sm text-green-600">Username is available!</p>}
-            {usernameStatus === 'taken' && <p className="text-sm text-red-600">Username is already taken.</p>}
+            {/* Username status messages removed because usernameStatus is not defined */}
           </div>
           
           <div>

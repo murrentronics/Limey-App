@@ -634,27 +634,19 @@ const Upload = () => {
         )}
 
         {/* Upload Tips */}
-        <Card className="mt-6 p-4 bg-muted/50">
-<<<<<<< HEAD
-          <h4 className="font-medium text-foreground mb-2">📝 Upload Tips</h4>
-          <ul className="text-sm text-muted-foreground space-y-4 text-center">
-            <li>• <b>Max video duration:</b> 5 minutes</li>
-            <li>• <b>Max file size:</b> 50 MB</li>
-            <li>• <b>Supported file types:</b> mp4, mov, webm, 3gp, ogg, mkv, mpeg, jpeg</li>
-=======
-          <h4 className="font-medium text-foreground mb-2 text-center">📝 Upload Tips</h4>
-          <ul className="text-sm text-muted-foreground space-y-4 text-center">
-            <li>• <b>Max video duration:</b> 5 minutes</li>
-            <li>• <b>Max file size:</b> 50 MB</li>
-            <li>• <b>Supported file types:</b> mp4, mov, webm, 3gp, ogg, mkv</li>
->>>>>>> 14f710fd596c52e6d1e7a21f55fc42e9bc3a58fa
-            <li>• If your video is too large, use free apps like <b>CapCut</b>, <b>InShot</b>, or your phone's built-in editor to compress the video and maintain quality before uploading.</li>
-            <li>• Keep videos under 60 seconds for best engagement</li>
-            <li>• Use good lighting and clear audio</li>
-            <li>• Add hashtags in your description to reach more viewers</li>
-            <li>• Upload during peak hours (6-9 PM) for maximum views</li>
-          </ul>
-        </Card>
+<Card className="mt-6 p-4 bg-muted/50">
+  <h4 className="font-medium text-foreground mb-2 text-center">📝 Upload Tips</h4>
+  <ul className="text-sm text-muted-foreground space-y-4 text-center">
+    <li>• <b>Max video duration:</b> 5 minutes</li>
+    <li>• <b>Max file size:</b> 50 MB</li>
+    <li>• <b>Supported file types:</b> mp4, mov, webm, 3gp, ogg, mkv</li>
+    <li>• If your video is too large, use free apps like <b>CapCut</b>, <b>InShot</b>, or your phone's built-in editor to compress the video and maintain quality before uploading.</li>
+    <li>• Keep videos under 60 seconds for best engagement</li>
+    <li>• Use good lighting and clear audio</li>
+    <li>• Add hashtags in your description to reach more viewers</li>
+    <li>• Upload during peak hours (6-9 PM) for maximum views</li>
+  </ul>
+</Card>
       </div>
 
       {/* Bottom Navigation */}
