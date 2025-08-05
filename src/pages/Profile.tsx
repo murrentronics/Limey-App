@@ -21,6 +21,7 @@ import { AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import clsx from "clsx";
 import { getUserSponsoredAds, deleteSponsoredAd } from "@/lib/adminUtils";
 import ModalVerticalFeed from "@/components/ModalVerticalFeed";
+import AutoPlayVideo from "@/components/AutoPlayVideo";
 
 const Profile = () => {
   const { user, signOut, isAdmin, loading: authLoading } = useAuth();
@@ -2136,23 +2137,13 @@ const Profile = () => {
                         </Button>
                       </div>
                     )}
-                    {video.thumbnail_url ? (
-                      <img
-                        src={
-                          video.thumbnail_url.startsWith('http')
-                            ? video.thumbnail_url
-                            : supabase.storage.from('limeytt-uploads').getPublicUrl(video.thumbnail_url).data.publicUrl
-                        }
-                        alt={video.title}
-                        className="w-full h-full object-cover rounded"
-                        onError={(e) => {
-                          console.error('Error loading thumbnail:', e);
-                          (e.target as HTMLImageElement).src = '/placeholder-thumbnail.png';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">No Cover</div>
-                    )}
+                    <AutoPlayVideo
+                      src={video.video_url}
+                      className="w-full h-full object-cover rounded"
+                      globalMuted={true}
+                      videoId={video.id}
+                      user={user}
+                    />
                     {/* Duration badge */}
                     <div className="absolute bottom-2 right-2">
                       <Badge variant="secondary" className="bg-black/70 text-white text-xs">
@@ -2343,23 +2334,13 @@ const Profile = () => {
                       <Eye size={16} className="text-white" />
                       <span className="text-xs text-white font-semibold">{formatViews(viewCounts[video.id] || 0)}</span>
                     </div>
-                    {video.thumbnail_url ? (
-                      <img
-                        src={
-                          video.thumbnail_url.startsWith('http')
-                            ? video.thumbnail_url
-                            : supabase.storage.from('limeytt-uploads').getPublicUrl(video.thumbnail_url).data.publicUrl
-                        }
-                        alt={video.title}
-                        className="w-full h-full object-cover rounded"
-                        onError={(e) => {
-                          console.error('Error loading thumbnail:', e);
-                          (e.target as HTMLImageElement).src = '/placeholder-thumbnail.png';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">No Cover</div>
-                    )}
+                    <AutoPlayVideo
+                      src={video.video_url}
+                      className="w-full h-full object-cover rounded"
+                      globalMuted={true}
+                      videoId={video.id}
+                      user={user}
+                    />
                     {/* Duration badge bottom right */}
                     <div className="absolute bottom-2 right-2">
                       <Badge variant="secondary" className="bg-black/70 text-white text-xs">
