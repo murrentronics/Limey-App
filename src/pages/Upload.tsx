@@ -467,6 +467,9 @@ const Upload = () => {
                     src={preview} 
                     className="w-full h-full object-cover"
                     controls
+                    preload="metadata"
+                    poster=""
+                    style={{ backgroundColor: '#000000' }}
                   />
                 ) : (
                   <img 
@@ -493,6 +496,8 @@ const Upload = () => {
           onClick={() => {
             if (changeVideoInputRef.current) changeVideoInputRef.current.value = '';
             changeVideoInputRef.current?.click();
+            // Call Android WebView function
+            (window as any).onChangeFileClick?.();
           }}
         >
           Change File
@@ -578,7 +583,7 @@ const Upload = () => {
                     {coverImagePreview ? (
                       <img src={coverImagePreview} alt="Cover Preview" className="w-full h-full object-cover" />
                     ) : preview ? (
-                      <video src={preview} className="w-full h-full object-cover" />
+                      <video src={preview} preload="metadata" poster="" style={{ backgroundColor: '#000000' }} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-white text-xs">No Cover</span>
                     )}
@@ -598,7 +603,15 @@ const Upload = () => {
                       }}
                     />
                     <label htmlFor="cover-image-input">
-                      <Button variant="outline" className="cursor-pointer" asChild>
+                      <Button 
+                        variant="outline" 
+                        className="cursor-pointer" 
+                        asChild
+                        onClick={() => {
+                          // Call Android WebView function
+                          (window as any).onChooseCoverImageClick?.();
+                        }}
+                      >
                         <span>Choose Cover Image</span>
                       </Button>
                     </label>

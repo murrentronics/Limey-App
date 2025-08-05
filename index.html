@@ -55,6 +55,19 @@
           Android.openImageGallery();
         }
       }
+
+      // Additional functions for other buttons
+      function onChangeFileClick() {
+        if (typeof Android !== 'undefined' && Android.openVideoGallery) {
+          Android.openVideoGallery();
+        }
+      }
+
+      function onChooseCoverImageClick() {
+        if (typeof Android !== 'undefined' && Android.openImageGallery) {
+          Android.openImageGallery();
+        }
+      }
     </script>
   </head>
 

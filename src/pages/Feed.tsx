@@ -223,7 +223,10 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
         loop
         muted={globalMuted}
         playsInline
+        preload="metadata"
+        poster=""
         className={className}
+        style={{ backgroundColor: '#000000' }}
         {...props}
       />
       {/* Show play/pause button overlay */}

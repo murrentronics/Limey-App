@@ -157,8 +157,13 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
         muted={globalMuted}
         playsInline
         controls={false}
+        preload="metadata"
+        poster=""
         className={className}
-        style={{ pointerEvents: 'auto' }}
+        style={{ 
+          pointerEvents: 'auto',
+          backgroundColor: '#000000'
+        }}
         {...props}
       />
       <style>{`
