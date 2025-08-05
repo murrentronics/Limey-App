@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }: { mode: string }) => ({
-  base: '/Limey-App/',
+  base: '/',
   server: {
     host: true, // <--- This enables LAN access and shows your local IP
     port: 8080,
