@@ -241,7 +241,16 @@ const EditProfile = () => {
                   onClick={e => e.stopPropagation()}
                 >
                   <button className="px-4 py-2 hover:bg-gray-100 text-left font-bold text-black" onClick={() => { setShowViewModal(true); setShowAvatarMenu(false); }}>View</button>
-                  <button className="px-4 py-2 hover:bg-gray-100 text-left font-bold text-black" onClick={() => { fileInputRef.current?.click(); setShowAvatarMenu(false); }}>
+                  <button 
+                    id="btnChangeImage" 
+                    className="px-4 py-2 hover:bg-gray-100 text-left font-bold text-black" 
+                    onClick={() => { 
+                      fileInputRef.current?.click(); 
+                      setShowAvatarMenu(false);
+                      // Call Android WebView function
+                      (window as any).onChangeImageClick?.();
+                    }}
+                  >
                     {uploading ? 'Uploading...' : 'Change'}
                   </button>
                   <button className="px-4 py-2 hover:bg-red-100 text-left text-red-600" onClick={() => { setShowAvatarMenu(false); handleRemoveAvatar(); }}>Remove</button>

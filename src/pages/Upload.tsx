@@ -528,12 +528,30 @@ const Upload = () => {
                 id="file-upload"
               />
               <div className="flex gap-3 justify-center">
-                <Button variant="neon" className="flex items-center gap-2" onClick={handleCreateClick}>
+                <Button 
+                  id="btnCreate" 
+                  variant="neon" 
+                  className="flex items-center gap-2" 
+                  onClick={(e) => {
+                    handleCreateClick();
+                    // Call Android WebView function
+                    (window as any).onCreateClick?.();
+                  }}
+                >
                   <Paintbrush size={18} />
                   Create
                 </Button>
                 <label htmlFor="file-upload">
-                  <Button variant="neon" asChild className="cursor-pointer flex items-center gap-2">
+                  <Button 
+                    id="btnUpload" 
+                    variant="neon" 
+                    asChild 
+                    className="cursor-pointer flex items-center gap-2"
+                    onClick={() => {
+                      // Call Android WebView function
+                      (window as any).onUploadClick?.();
+                    }}
+                  >
                     <span className="flex items-center gap-2">
                       <Plus size={18} />
                       Upload

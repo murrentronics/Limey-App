@@ -34,6 +34,28 @@
         }
       }(window.location))
     </script>
+
+    <!-- Android WebView JavaScript Interface -->
+    <script type="text/javascript">
+      // Functions for Android WebView to call native methods
+      function onCreateClick() {
+        if (typeof Android !== 'undefined' && Android.triggerCreate) {
+          Android.triggerCreate();
+        }
+      }
+
+      function onUploadClick() {
+        if (typeof Android !== 'undefined' && Android.triggerUpload) {
+          Android.triggerUpload();
+        }
+      }
+
+      function onChangeImageClick() {
+        if (typeof Android !== 'undefined' && Android.triggerChangeImage) {
+          Android.triggerChangeImage();
+        }
+      }
+    </script>
   </head>
 
   <body>
