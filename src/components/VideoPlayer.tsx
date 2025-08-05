@@ -490,6 +490,9 @@ const VideoPlayer = ({ video, videos, setVideos, currentIndex, onClose, onNext, 
           ref={videoRef}
           src={video.video_url}
           className="w-full h-full object-contain"
+          preload="metadata"
+          poster=""
+          style={{ backgroundColor: '#000000' }}
           onTimeUpdate={handleTimeUpdate}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}

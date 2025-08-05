@@ -110,6 +110,9 @@ const AutoPlayVideo = ({ src, className, globalMuted, ...props }: { src: string;
         loop
         muted={globalMuted}
         playsInline
+        preload="metadata"
+        poster=""
+        style={{ backgroundColor: '#000000' }}
         className={className}
         {...props}
       />

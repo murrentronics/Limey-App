@@ -275,6 +275,9 @@ const CreateVideoPage: React.FC = () => {
               controls
               autoPlay
               loop
+              preload="metadata"
+              poster=""
+              style={{ backgroundColor: '#000000' }}
               className="w-full h-full object-cover"
             />
           </div>
@@ -306,7 +309,7 @@ const CreateVideoPage: React.FC = () => {
                   {coverImagePreview ? (
                     <img src={coverImagePreview} alt="Cover Preview" className="w-full h-full object-cover" />
                   ) : videoUrl ? (
-                    <video src={videoUrl} className="w-full h-full object-cover" />
+                    <video src={videoUrl} preload="metadata" poster="" style={{ backgroundColor: '#000000' }} className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-white text-xs">No Cover</span>
                   )}

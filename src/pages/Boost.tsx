@@ -927,6 +927,9 @@ const Boost = () => {
                     src={videoPreview}
                     className="w-full h-full object-cover"
                     controls
+                    preload="metadata"
+                    poster=""
+                    style={{ backgroundColor: '#000000' }}
                   />
                 </div>
 

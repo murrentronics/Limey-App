@@ -201,6 +201,9 @@ const CampaignDetail = () => {
                   src={campaign.video_url}
                   className="w-full h-full object-cover"
                   controls={false}
+                  preload="metadata"
+                  poster=""
+                  style={{ backgroundColor: '#000000' }}
                   onClick={handleVideoToggle}
                 />
 

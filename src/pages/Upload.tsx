@@ -467,6 +467,9 @@ const Upload = () => {
                     src={preview} 
                     className="w-full h-full object-cover"
                     controls
+                    preload="metadata"
+                    poster=""
+                    style={{ backgroundColor: '#000000' }}
                   />
                 ) : (
                   <img 
@@ -578,7 +581,7 @@ const Upload = () => {
                     {coverImagePreview ? (
                       <img src={coverImagePreview} alt="Cover Preview" className="w-full h-full object-cover" />
                     ) : preview ? (
-                      <video src={preview} className="w-full h-full object-cover" />
+                      <video src={preview} preload="metadata" poster="" style={{ backgroundColor: '#000000' }} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-white text-xs">No Cover</span>
                     )}
