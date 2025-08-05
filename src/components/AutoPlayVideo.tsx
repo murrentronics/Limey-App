@@ -57,9 +57,17 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     video.muted = globalMuted;
     const observer = new window.IntersectionObserver(
       ([entry]) => {
+        console.log('AutoPlayVideo intersection:', {
+          isIntersecting: entry.isIntersecting,
+          intersectionRatio: entry.intersectionRatio,
+          videoSrc: src.substring(src.lastIndexOf('/') + 1, src.lastIndexOf('/') + 10)
+        });
+        
         if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
           setIsVisible(true);
-          video.play();
+          video.play().catch(error => {
+            console.log('Video play failed:', error);
+          });
         } else {
           setIsVisible(false);
           video.pause();
@@ -158,7 +166,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
         muted={globalMuted}
         playsInline
         controls={false}
-        preload="metadata"
+        preload="none"
         poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAwMDAiLz48L3N2Zz4="
         className={className}
         style={{ 
@@ -166,12 +174,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
           backgroundColor: '#000000',
           objectFit: 'cover'
         }}
-        onLoadStart={() => {
-          // Ensure video starts loading immediately
-          if (videoRef.current) {
-            videoRef.current.load();
-          }
-        }}
+
         {...props}
       />
       <style>{`
