@@ -68,6 +68,12 @@
           Android.openImageGallery();
         }
       }
+
+      function onRecaptureClick() {
+        if (typeof Android !== 'undefined' && Android.openCamera) {
+          Android.openCamera();
+        }
+      }
     </script>
   </head>
 

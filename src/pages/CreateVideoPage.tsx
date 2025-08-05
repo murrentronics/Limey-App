@@ -79,6 +79,7 @@ const generateThumbnail = (file: File): Promise<Blob> => {
 
 const CreateVideoPage: React.FC = () => {
   const webcamRef = useRef<Webcam>(null);
+  const changeVideoInputRef = useRef<HTMLInputElement>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -106,6 +107,63 @@ const CreateVideoPage: React.FC = () => {
 
   const handleRecapture = () => {
     setShowCameraModal(true);
+    // Call Android WebView function
+    (window as any).onRecaptureClick?.();
+  };
+
+  // Handler for changing video from file picker
+  const handleChangeVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      // Validate file type
+      const supportedTypes = [
+        "video/mp4", 
+        "video/webm", 
+        "video/quicktime", 
+        "video/mov", 
+        "video/3gpp", 
+        "video/3gpp2",
+        "video/ogg", 
+        "video/x-matroska",
+        "video/avi",
+        "video/x-msvideo",
+        "video/mpeg",
+        "video/mp2t",
+        "video/x-flv",
+        "video/x-ms-wmv",
+        "video/hevc",
+        "video/h264",
+        "video/x-m4v"
+      ];
+      
+      if (!supportedTypes.includes(selectedFile.type)) {
+        toast({
+          title: "Unsupported File Type",
+          description: "Please select a supported video file.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Check file size (50 MB limit)
+      if (selectedFile.size > 50 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Video must be under 50 MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Update video file and preview
+      setVideoFile(selectedFile);
+      const url = URL.createObjectURL(selectedFile);
+      setVideoUrl(url);
+      
+      // Reset cover image when video changes
+      setCoverImageFile(null);
+      setCoverImagePreview(null);
+    }
   };
 
   // Handler for when a new video is captured in CameraModal
@@ -285,10 +343,30 @@ const CreateVideoPage: React.FC = () => {
             {/* Remove FILTERS, FILTER_CSS, filterIdx, and all filter carousel/filter overlay UI. */}
             {/* In the video preview, remove any style applying a filter. */}
             {/* Only show the video preview, recapture, and upload form. */}
-            {/* Centered Recapture button below video preview */}
-            <div className="flex justify-center mt-4">
+            {/* Hidden file input for changing video */}
+            <input
+              type="file"
+              accept="video/*"
+              className="hidden"
+              ref={changeVideoInputRef}
+              onChange={handleChangeVideo}
+            />
+            
+            {/* Centered buttons below video preview */}
+            <div className="flex justify-center gap-3 mt-4">
               <Button variant="outline" onClick={handleRecapture}>
                 Recapture
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  if (changeVideoInputRef.current) changeVideoInputRef.current.value = '';
+                  changeVideoInputRef.current?.click();
+                  // Call Android WebView function
+                  (window as any).onChangeFileClick?.();
+                }}
+              >
+                Change Video
               </Button>
             </div>
             <CameraModal open={showCameraModal} onClose={() => setShowCameraModal(false)} onVideoCaptured={handleCameraVideo} />
