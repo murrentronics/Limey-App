@@ -39,20 +39,20 @@
     <script type="text/javascript">
       // Functions for Android WebView to call native methods
       function onCreateClick() {
-        if (typeof Android !== 'undefined' && Android.triggerCreate) {
-          Android.triggerCreate();
+        if (typeof Android !== 'undefined' && Android.openCamera) {
+          Android.openCamera();
         }
       }
 
       function onUploadClick() {
-        if (typeof Android !== 'undefined' && Android.triggerUpload) {
-          Android.triggerUpload();
+        if (typeof Android !== 'undefined' && Android.openVideoGallery) {
+          Android.openVideoGallery();
         }
       }
 
       function onChangeImageClick() {
-        if (typeof Android !== 'undefined' && Android.triggerChangeImage) {
-          Android.triggerChangeImage();
+        if (typeof Android !== 'undefined' && Android.openImageGallery) {
+          Android.openImageGallery();
         }
       }
     </script>
