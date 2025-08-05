@@ -122,8 +122,11 @@ const AutoPlayVideo = ({ src, className, globalMuted, ...props }: { src: string;
         muted={globalMuted}
         playsInline
         preload="metadata"
-        poster=""
-        style={{ backgroundColor: '#000000' }}
+        poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAwMDAiLz48L3N2Zz4="
+        style={{ 
+          backgroundColor: '#000000',
+          objectFit: 'cover'
+        }}
         className={className}
         {...props}
       />

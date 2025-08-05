@@ -318,19 +318,28 @@ const Upload = () => {
 
         // If user picked a custom cover image, upload it
         if (coverImageFile) {
-          const coverFileName = `${user.id}/thumbnails/cover_${Date.now()}.jpg`;
-          const { error: coverError } = await supabase.storage
-            .from('limeytt-uploads')
-            .upload(coverFileName, coverImageFile);
-          if (!coverError) {
-            thumbnailUrl = coverFileName;
-          } else {
-            toast({ title: "Cover upload failed", description: coverError.message, variant: "destructive" });
+          try {
+            const coverFileName = `${user.id}/thumbnails/cover_${Date.now()}.jpg`;
+            const { error: coverError } = await supabase.storage
+              .from('limeytt-uploads')
+              .upload(coverFileName, coverImageFile);
+            if (!coverError) {
+              thumbnailUrl = coverFileName;
+            } else {
+              console.warn('Cover upload failed:', coverError.message);
+              // Continue without thumbnail
+            }
+          } catch (error) {
+            console.warn('Cover upload error:', error);
+            // Continue without thumbnail
           }
         } else {
-          // Generate thumbnail from video
+          // Try to generate thumbnail from video, but don't block upload if it fails
           try {
-            const thumbnailBlob = await generateThumbnail(file);
+            const thumbnailBlob = await Promise.race([
+              generateThumbnail(file),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Thumbnail timeout')), 5000))
+            ]);
             const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
             const thumbnailFileName = `${user.id}/thumbnails/${Date.now()}.jpg`;
             const { error: thumbnailError } = await supabase.storage
@@ -340,8 +349,8 @@ const Upload = () => {
               thumbnailUrl = thumbnailFileName;
             }
           } catch (thumbnailError) {
-            console.warn('Failed to generate thumbnail:', thumbnailError);
-            // Continue without thumbnail
+            console.warn('Failed to generate thumbnail, continuing without:', thumbnailError);
+            // Continue without thumbnail - don't block the upload
           }
         }
       } else if (file.type.startsWith('image/')) {
