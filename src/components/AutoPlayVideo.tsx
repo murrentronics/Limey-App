@@ -55,13 +55,9 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     const video = videoRef.current;
     if (!video) return;
     video.muted = globalMuted;
-    
-    // More aggressive preloading for better performance
-    video.preload = 'metadata';
-    
     const observer = new window.IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.3) {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
           setIsVisible(true);
           video.play();
         } else {
@@ -70,15 +66,9 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
           video.currentTime = 0;
         }
       },
-      { 
-        threshold: [0, 0.1, 0.3, 0.5],
-        rootMargin: '50px 0px 50px 0px' // Start loading 50px before entering viewport
-      }
+      { threshold: 0.5 }
     );
     observer.observe(video);
-    
-    // Preload video metadata immediately
-    video.load();
     
     return () => {
       observer.unobserve(video);

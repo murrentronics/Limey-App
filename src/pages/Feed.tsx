@@ -109,13 +109,9 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
 
     // Always start muted to allow autoplay
     video.muted = true;
-    
-    // More aggressive preloading for better performance
-    video.preload = 'metadata';
-
     const observer = new window.IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.3) {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
           setIsVisible(true);
           // Try to play the video
           video.play().catch(error => {
@@ -127,10 +123,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({ src, className, globalMut
           video.currentTime = 0;
         }
       },
-      { 
-        threshold: [0, 0.1, 0.3, 0.5],
-        rootMargin: '100px 0px 100px 0px' // Start loading 100px before entering viewport
-      }
+      { threshold: 0.5 }
     );
     observer.observe(video);
     
