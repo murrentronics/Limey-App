@@ -54,29 +54,46 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     }
   }, [globalMuted]);
 
-  // Simple view recording without complex state tracking
+  // Simple view recording with less frequent checks
   useEffect(() => {
     if (!videoId || !user || viewRecorded) return;
 
     const video = videoRef.current;
     if (!video) return;
 
-    const handleTimeUpdate = () => {
-      if (video.currentTime >= 3 && !viewRecorded) {
-        setViewRecorded(true);
-        supabase.rpc('record_video_view', { video_uuid: videoId })
-          .then(({ data }) => {
-            if (data && onViewRecorded) {
-              onViewRecorded(videoId);
-            }
-          });
+    let viewTimer: NodeJS.Timeout;
+
+    const handlePlay = () => {
+      if (!viewRecorded) {
+        viewTimer = setTimeout(() => {
+          if (!viewRecorded && video.currentTime >= 3) {
+            setViewRecorded(true);
+            supabase.rpc('record_video_view', { video_uuid: videoId })
+              .then(({ data }) => {
+                if (data && onViewRecorded) {
+                  onViewRecorded(videoId);
+                }
+              });
+          }
+        }, 3000);
       }
     };
 
-    video.addEventListener('timeupdate', handleTimeUpdate);
+    const handlePause = () => {
+      if (viewTimer) {
+        clearTimeout(viewTimer);
+      }
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
 
     return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      if (viewTimer) {
+        clearTimeout(viewTimer);
+      }
     };
   }, [videoId, user, viewRecorded, onViewRecorded]);
 
@@ -89,6 +106,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
       playsInline
       controls={false}
       preload="metadata"
+      poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAwMDAiLz48L3N2Zz4="
       className={className}
       style={{
         backgroundColor: '#000000',
