@@ -176,7 +176,7 @@ const Upload = () => {
     });
   };
 
-  // Generate thumbnail from video file - Enhanced for Android WebView
+  // Generate thumbnail from video file - Same as CreateVideoPage
   const generateThumbnail = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
@@ -184,105 +184,34 @@ const Upload = () => {
       video.src = URL.createObjectURL(file);
       video.muted = true;
       video.playsInline = true;
-      video.crossOrigin = 'anonymous';
-
-      // Add video to DOM temporarily for better WebView compatibility
-      video.style.position = 'absolute';
-      video.style.top = '-9999px';
-      video.style.left = '-9999px';
-      video.style.width = '1px';
-      video.style.height = '1px';
-      document.body.appendChild(video);
-
-      let thumbnailGenerated = false;
-
-      const cleanup = () => {
-        try {
-          if (video.parentNode) {
-            document.body.removeChild(video);
-          }
-          URL.revokeObjectURL(video.src);
-        } catch (e) {
-          console.warn('Cleanup error:', e);
-        }
-      };
-
-      const generateFromCurrentFrame = () => {
-        if (thumbnailGenerated) return;
-        thumbnailGenerated = true;
-
-        try {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-          if (!ctx) {
-            cleanup();
-            reject(new Error('Failed to get canvas context'));
-            return;
-          }
-
-          // Set canvas size to match video aspect ratio
-          const aspectRatio = video.videoWidth / video.videoHeight;
-          if (aspectRatio > 0) {
-            canvas.width = 320;
-            canvas.height = Math.round(320 / aspectRatio);
-          } else {
-            canvas.width = 320;
-            canvas.height = 568; // Default 9:16 aspect ratio
-          }
-
-          // Fill with black background first
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Draw video frame
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          canvas.toBlob((blob) => {
-            cleanup();
-            if (blob && blob.size > 0) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to generate thumbnail blob'));
-            }
-          }, 'image/jpeg', 0.8);
-        } catch (error) {
-          cleanup();
-          reject(new Error(`Canvas error: ${error.message}`));
-        }
-      };
 
       video.onloadedmetadata = () => {
-        if (video.duration && video.duration > 0) {
-          // Seek to 1 second or 10% of the video, whichever is shorter
-          const seekTime = Math.min(1, video.duration * 0.1);
-          video.currentTime = seekTime;
+        // Seek to 1 second or 25% of the video, whichever is shorter
+        const seekTime = Math.min(1, video.duration * 0.25);
+        video.currentTime = seekTime;
+      };
+
+      video.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 320; // Thumbnail width
+        canvas.height = 568; // Thumbnail height (9:16 aspect ratio)
+
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Failed to generate thumbnail'));
+            }
+          }, 'image/jpeg', 0.8);
         } else {
-          // If duration is not available, try to generate from current frame
-          setTimeout(generateFromCurrentFrame, 100);
+          reject(new Error('Failed to get canvas context'));
         }
       };
 
-      video.onseeked = generateFromCurrentFrame;
-      video.oncanplay = () => {
-        // Fallback if seeking doesn't work
-        if (!thumbnailGenerated) {
-          setTimeout(generateFromCurrentFrame, 200);
-        }
-      };
-
-      video.onerror = (e) => {
-        cleanup();
-        reject(new Error('Failed to load video for thumbnail generation'));
-      };
-
-      // Timeout fallback
-      setTimeout(() => {
-        if (!thumbnailGenerated) {
-          cleanup();
-          reject(new Error('Thumbnail generation timeout'));
-        }
-      }, 10000);
+      video.onerror = (e) => reject(new Error('Failed to load video for thumbnail generation'));
     });
   };
 
@@ -334,12 +263,9 @@ const Upload = () => {
             // Continue without thumbnail
           }
         } else {
-          // Try to generate thumbnail from video, but don't block upload if it fails
+          // Generate thumbnail from video - same as CreateVideoPage
           try {
-            const thumbnailBlob = await Promise.race([
-              generateThumbnail(file),
-              new Promise<Blob>((_, reject) => setTimeout(() => reject(new Error('Thumbnail timeout')), 5000))
-            ]);
+            const thumbnailBlob = await generateThumbnail(file);
             const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
             const thumbnailFileName = `${user.id}/thumbnails/${Date.now()}.jpg`;
             const { error: thumbnailError } = await supabase.storage
@@ -349,8 +275,8 @@ const Upload = () => {
               thumbnailUrl = thumbnailFileName;
             }
           } catch (thumbnailError) {
-            console.warn('Failed to generate thumbnail, continuing without:', thumbnailError);
-            // Continue without thumbnail - don't block the upload
+            console.warn('Failed to generate thumbnail:', thumbnailError);
+            // Continue without thumbnail
           }
         }
       }
