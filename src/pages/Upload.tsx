@@ -710,19 +710,6 @@ const Upload = () => {
                         }
                       }}
                     />
-                    <label htmlFor="cover-image-input">
-                      <Button
-                        variant="outline"
-                        className="cursor-pointer"
-                        asChild
-                        onClick={() => {
-                          // Call Android WebView function
-                          (window as any).onChooseCoverImageClick?.();
-                        }}
-                      >
-                        <span>Choose Cover Image</span>
-                      </Button>
-                    </label>
                     {coverImageFile && (
                       <Button
                         variant="ghost"
