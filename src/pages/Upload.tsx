@@ -122,18 +122,11 @@ const Upload = () => {
     }
   };
 
-  // Direct camera capture: hybrid approach for browser vs Android app
+  // Direct camera capture: open camera and go to create-video page
   const handleCreateClick = () => {
-    // Check if we're in Android WebView (has the callback function)
-    if ((window as any).onCreateClick) {
-      // Android app: use file input with camera capture
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-        fileInputRef.current.click();
-      }
-    } else {
-      // Browser: navigate to CreateVideoPage which uses react-webcam
-      navigate('/create-video', { state: { directCamera: true } });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
     }
   };
 
@@ -627,7 +620,7 @@ const Upload = () => {
                 {/* Upload/Change Video button triggers the regular input (no capture) */}
                 <input
                   type="file"
-                  accept="video/*"
+                  accept="video/*,image/*"
                   onChange={e => handleFileSelect(e, 'gallery')}
                   className="hidden"
                   id="file-upload"
