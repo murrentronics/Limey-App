@@ -548,8 +548,14 @@ const Upload = () => {
                     className="w-full h-full object-cover"
                     controls
                     preload="metadata"
-                    poster=""
                     style={{ backgroundColor: '#000000' }}
+                    onLoadedData={(e) => {
+                      // Set the video to show a frame from 1 second in for better preview
+                      const video = e.target as HTMLVideoElement;
+                      if (video.duration > 1) {
+                        video.currentTime = 1;
+                      }
+                    }}
                   />
                 ) : (
                   <img 
@@ -568,7 +574,20 @@ const Upload = () => {
         accept="video/*,image/*"
         className="hidden"
         ref={changeVideoInputRef}
-        onChange={e => handleFileSelect(e, 'gallery')}
+        onChange={(e) => {
+          const selectedFile = e.target.files?.[0];
+          if (selectedFile) {
+            // Clear previous preview
+            if (preview) {
+              URL.revokeObjectURL(preview);
+            }
+            // Reset cover image when changing video
+            setCoverImageFile(null);
+            setCoverImagePreview(null);
+            // Handle the new file
+            handleFileSelect(e, 'gallery');
+          }
+        }}
       />
       <div className="flex justify-center mt-4">
         <Button
@@ -580,7 +599,7 @@ const Upload = () => {
             (window as any).onChangeFileClick?.();
           }}
         >
-          Change File
+          Change Video
         </Button>
       </div>
             </>
@@ -662,8 +681,21 @@ const Upload = () => {
                   <div className="w-24 h-36 bg-black rounded overflow-hidden flex items-center justify-center border border-border">
                     {coverImagePreview ? (
                       <img src={coverImagePreview} alt="Cover Preview" className="w-full h-full object-cover" />
-                    ) : preview ? (
-                      <video src={preview} preload="metadata" poster="" style={{ backgroundColor: '#000000' }} className="w-full h-full object-cover" />
+                    ) : preview && file?.type.startsWith('video/') ? (
+                      <video 
+                        src={preview} 
+                        preload="metadata" 
+                        className="w-full h-full object-cover"
+                        onLoadedData={(e) => {
+                          // Set the video to show a frame from 1 second in
+                          const video = e.target as HTMLVideoElement;
+                          if (video.duration > 1) {
+                            video.currentTime = 1;
+                          }
+                        }}
+                      />
+                    ) : preview && file?.type.startsWith('image/') ? (
+                      <img src={preview} alt="Preview" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-white text-xs">No Cover</span>
                     )}
