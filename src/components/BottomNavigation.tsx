@@ -111,7 +111,7 @@ const BottomNavigation = () => {
                   </AvatarFallback>
                 </Avatar>
               ) : (
-                <IconComponent size={20} />
+                <IconComponent size={28} />
               )}
             </Button>
           );
