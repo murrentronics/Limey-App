@@ -410,19 +410,6 @@ const CreateVideoPage: React.FC = () => {
                       }
                     }}
                   />
-                  <label htmlFor="cover-image-input">
-                    <Button 
-                      variant="outline" 
-                      asChild 
-                      className="cursor-pointer"
-                      onClick={() => {
-                        // Call Android WebView function
-                        (window as any).onChooseCoverImageClick?.();
-                      }}
-                    >
-                      <span>Choose Cover Image</span>
-                    </Button>
-                  </label>
                   {coverImageFile && (
                     <Button
                       variant="ghost"
@@ -438,7 +425,7 @@ const CreateVideoPage: React.FC = () => {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Choose a custom cover image or use the default video thumbnail.
+                Image auto selected from video.
               </p>
             </div>
             <div>
