@@ -353,55 +353,6 @@ const Upload = () => {
             // Continue without thumbnail - don't block the upload
           }
         }
-      } else if (file.type.startsWith('image/')) {
-        // For images, use the image itself as the thumbnail
-        if (coverImageFile) {
-          // Use custom cover image
-          const coverFileName = `${user.id}/thumbnails/cover_${Date.now()}.jpg`;
-          const { error: coverError } = await supabase.storage
-            .from('limeytt-uploads')
-            .upload(coverFileName, coverImageFile);
-          if (!coverError) {
-            thumbnailUrl = coverFileName;
-          }
-        } else {
-          // Use the uploaded image as its own thumbnail
-          const thumbnailFileName = `${user.id}/thumbnails/img_${Date.now()}.jpg`;
-
-          // Convert image to JPEG for consistent thumbnail format
-          try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const img = new Image();
-
-            await new Promise((resolve, reject) => {
-              img.onload = resolve;
-              img.onerror = reject;
-              img.src = URL.createObjectURL(file);
-            });
-
-            canvas.width = 320;
-            canvas.height = 568;
-
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              canvas.toBlob(async (blob) => {
-                if (blob) {
-                  const thumbnailFile = new File([blob], 'thumbnail.jpg', { type: 'image/jpeg' });
-                  const { error: thumbnailError } = await supabase.storage
-                    .from('limeytt-uploads')
-                    .upload(thumbnailFileName, thumbnailFile);
-                  if (!thumbnailError) {
-                    thumbnailUrl = thumbnailFileName;
-                  }
-                }
-              }, 'image/jpeg', 0.8);
-            }
-          } catch (error) {
-            console.warn('Failed to generate image thumbnail:', error);
-            // Continue without thumbnail
-          }
-        }
       }
 
       // Upload video file to new bucket
@@ -565,7 +516,7 @@ const Upload = () => {
                 {/* Hidden file input for changing video */}
                 <input
                   type="file"
-                  accept="video/*,image/*"
+                  accept="video/*"
                   className="hidden"
                   ref={changeVideoInputRef}
                   onChange={(e) => {
@@ -620,7 +571,7 @@ const Upload = () => {
                 {/* Upload/Change Video button triggers the regular input (no capture) */}
                 <input
                   type="file"
-                  accept="video/*,image/*"
+                  accept="video/*"
                   onChange={e => handleFileSelect(e, 'gallery')}
                   className="hidden"
                   id="file-upload"
@@ -805,9 +756,7 @@ const Upload = () => {
                 {file.type.startsWith('video/') && (
                   <Badge variant="secondary">🎬 Video</Badge>
                 )}
-                {file.type.startsWith('image/') && (
-                  <Badge variant="secondary">📷 Image</Badge>
-                )}
+
                 {file.type.startsWith('audio/') && (
                   <Badge variant="secondary">🎵 Audio</Badge>
                 )}
