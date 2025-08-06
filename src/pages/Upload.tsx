@@ -77,18 +77,19 @@ const Upload = () => {
         "video/hevc", // iPhone HEVC format
         "video/h264", // H.264 format
         "video/x-m4v", // iPhone M4V format
-        "image/jpeg", // JPEG images
-        "image/jpg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "image/heic", // iPhone HEIC format
-        "image/heif"  // iPhone HEIF format
+        "video/mp2v", // MPEG-2 video
+        "video/x-ms-asf", // ASF format
+        "video/x-ms-wm", // Windows Media
+        "video/x-mng", // MNG format
+        "video/x-sgi-movie", // SGI movie
+        "video/3gp", // 3GP format (alternative MIME)
+        "video/x-3gpp", // 3GPP format (alternative MIME)
+        "video/x-3gpp2" // 3GPP2 format (alternative MIME)
       ];
       if (!supportedTypes.includes(selectedFile.type)) {
         toast({
-          title: "Unsupported File Type",
-          description: "Please select a supported video or image file. Most smartphone formats are supported including iPhone videos (mov, mp4, m4v) and images (jpeg, png, heic).",
+          title: "Unsupported Video Format",
+          description: "Please select a supported video file. Most smartphone formats are supported including iPhone videos (mov, mp4, m4v, hevc) and Android videos (mp4, 3gp, webm, ogg).",
           variant: "destructive"
         });
         e.target.value = "";
@@ -442,7 +443,7 @@ const Upload = () => {
                 {/* Hidden file input for changing video */}
                 <input
                   type="file"
-                  accept="video/*"
+                  accept="video/*,video/mp4,video/mov,video/3gp,video/3gpp,video/3gpp2,video/webm,video/ogg,video/avi,video/quicktime,video/x-m4v,video/hevc"
                   className="hidden"
                   ref={changeVideoInputRef}
                   onChange={(e) => {
@@ -497,7 +498,7 @@ const Upload = () => {
                 {/* Upload/Change Video button triggers the regular input (no capture) */}
                 <input
                   type="file"
-                  accept="video/*"
+                  accept="video/*,video/mp4,video/mov,video/3gp,video/3gpp,video/3gpp2,video/webm,video/ogg,video/avi,video/quicktime,video/x-m4v,video/hevc"
                   onChange={e => handleFileSelect(e, 'gallery')}
                   className="hidden"
                   id="file-upload"
