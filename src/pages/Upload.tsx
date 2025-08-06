@@ -681,12 +681,20 @@ const Upload = () => {
                         preload="metadata"
                         className="w-full h-full object-cover"
                         style={{ backgroundColor: '#000000' }}
-                        onLoadedData={(e) => {
+                        muted
+                        onLoadedMetadata={(e) => {
                           // For Android WebView compatibility: seek to 1 second for better thumbnail
                           const video = e.target as HTMLVideoElement;
                           if (video.duration > 1) {
                             video.currentTime = 1;
                           }
+                        }}
+                        onSeeked={(e) => {
+                          // Force a repaint after seeking
+                          const video = e.target as HTMLVideoElement;
+                          video.style.display = 'none';
+                          video.offsetHeight; // Trigger reflow
+                          video.style.display = 'block';
                         }}
                         onError={(e) => {
                           console.log('Video thumbnail load error:', e);
