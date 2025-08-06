@@ -2151,7 +2151,18 @@ const Profile = () => {
                         }}
                       />
                     ) : (
-                      <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">No Cover</div>
+                      <video
+                        src={video.video_url}
+                        className="w-full h-full object-cover rounded"
+                        preload="metadata"
+                        muted
+                        onLoadedData={(e) => {
+                          const video = e.target as HTMLVideoElement;
+                          if (video.duration > 1) {
+                            video.currentTime = 1;
+                          }
+                        }}
+                      />
                     )}
                     {/* Duration badge */}
                     <div className="absolute bottom-2 right-2">
@@ -2291,9 +2302,18 @@ const Profile = () => {
                           }}
                         />
                       ) : (
-                        <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">
-                          No Cover
-                        </div>
+                        <video
+                          src={ad.video_url}
+                          className="w-full h-full object-cover rounded"
+                          preload="metadata"
+                          muted
+                          onLoadedData={(e) => {
+                            const video = e.target as HTMLVideoElement;
+                            if (video.duration > 1) {
+                              video.currentTime = 1;
+                            }
+                          }}
+                        />
                       )}
 
                       {/* Duration badge bottom right */}
@@ -2358,7 +2378,18 @@ const Profile = () => {
                         }}
                       />
                     ) : (
-                      <div className="w-full h-full bg-black flex items-center justify-center text-white text-xs">No Cover</div>
+                      <video
+                        src={video.video_url}
+                        className="w-full h-full object-cover rounded"
+                        preload="metadata"
+                        muted
+                        onLoadedData={(e) => {
+                          const video = e.target as HTMLVideoElement;
+                          if (video.duration > 1) {
+                            video.currentTime = 1;
+                          }
+                        }}
+                      />
                     )}
                     {/* Duration badge bottom right */}
                     <div className="absolute bottom-2 right-2">
