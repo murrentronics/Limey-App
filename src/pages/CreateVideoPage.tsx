@@ -353,20 +353,9 @@ const CreateVideoPage: React.FC = () => {
             />
             
             {/* Centered buttons below video preview */}
-            <div className="flex justify-center gap-3 mt-4">
+            <div className="flex justify-center mt-4">
               <Button variant="outline" onClick={handleRecapture}>
                 Recapture
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  if (changeVideoInputRef.current) changeVideoInputRef.current.value = '';
-                  changeVideoInputRef.current?.click();
-                  // Call Android WebView function
-                  (window as any).onChangeFileClick?.();
-                }}
-              >
-                Change Video
               </Button>
             </div>
             <CameraModal open={showCameraModal} onClose={() => setShowCameraModal(false)} onVideoCaptured={handleCameraVideo} />
@@ -387,7 +376,22 @@ const CreateVideoPage: React.FC = () => {
                   {coverImagePreview ? (
                     <img src={coverImagePreview} alt="Cover Preview" className="w-full h-full object-cover" />
                   ) : videoUrl ? (
-                    <video src={videoUrl} preload="metadata" poster="" style={{ backgroundColor: '#000000' }} className="w-full h-full object-cover" />
+                    <video 
+                      src={videoUrl} 
+                      preload="metadata" 
+                      className="w-full h-full object-cover"
+                      style={{ backgroundColor: '#000000' }}
+                      onLoadedData={(e) => {
+                        // For Android WebView compatibility: seek to 1 second for better thumbnail
+                        const video = e.target as HTMLVideoElement;
+                        if (video.duration > 1) {
+                          video.currentTime = 1;
+                        }
+                      }}
+                      onError={(e) => {
+                        console.log('Video thumbnail load error:', e);
+                      }}
+                    />
                   ) : (
                     <span className="text-white text-xs">No Cover</span>
                   )}

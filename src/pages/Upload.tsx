@@ -122,11 +122,19 @@ const Upload = () => {
     }
   };
 
-  // Direct camera capture: go directly to CreateVideoPage to avoid browser popup
+  // Direct camera capture: hybrid approach for browser vs Android app
   const handleCreateClick = () => {
-    // Navigate directly to CreateVideoPage which uses react-webcam
-    // This bypasses the browser's native camera popup
-    navigate('/create-video', { state: { directCamera: true } });
+    // Check if we're in Android WebView (has the callback function)
+    if ((window as any).onCreateClick) {
+      // Android app: use file input with camera capture
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+        fileInputRef.current.click();
+      }
+    } else {
+      // Browser: navigate to CreateVideoPage which uses react-webcam
+      navigate('/create-video', { state: { directCamera: true } });
+    }
   };
 
   const handleCreateFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -662,7 +670,22 @@ const Upload = () => {
                     {coverImagePreview ? (
                       <img src={coverImagePreview} alt="Cover Preview" className="w-full h-full object-cover" />
                     ) : preview ? (
-                      <video src={preview} preload="metadata" poster="" style={{ backgroundColor: '#000000' }} className="w-full h-full object-cover" />
+                      <video
+                        src={preview}
+                        preload="metadata"
+                        className="w-full h-full object-cover"
+                        style={{ backgroundColor: '#000000' }}
+                        onLoadedData={(e) => {
+                          // For Android WebView compatibility: seek to 1 second for better thumbnail
+                          const video = e.target as HTMLVideoElement;
+                          if (video.duration > 1) {
+                            video.currentTime = 1;
+                          }
+                        }}
+                        onError={(e) => {
+                          console.log('Video thumbnail load error:', e);
+                        }}
+                      />
                     ) : (
                       <span className="text-white text-xs">No Cover</span>
                     )}
