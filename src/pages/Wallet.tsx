@@ -136,7 +136,7 @@ export default function Wallet() {
         description: `Deposit from TrinEPay`,
         referenceId: depositResult.transaction_id || depositResult.id,
       });
-      setSuccess("Deposit successful!");
+      setSuccess("Deposit Successful!");
       setAmount("");
       fetchWalletData();
     } catch (err: any) {
@@ -160,7 +160,7 @@ export default function Wallet() {
     }
 
     if (amountValue > walletBal) {
-      setError("Insufficient Wallet Bal balance");
+      setError("Insufficient TriniCredits");
       setLoading(false);
       return;
     }

@@ -164,7 +164,6 @@ const Upload = () => {
       };
       video.onerror = (e) => {
         // Show toast error and reset file input
-        console.error('Video metadata extraction error:', e);
         toast({
           title: "Failed to Load Video",
           description: "Could not read video metadata. This may happen with unsupported formats or corrupted files. Try a different video, preferably one recorded with your phone camera (mp4, mov, m4v, 3gp).",
@@ -256,11 +255,9 @@ const Upload = () => {
             if (!coverError) {
               thumbnailUrl = coverFileName;
             } else {
-              console.warn('Cover upload failed:', coverError.message);
               // Continue without thumbnail
             }
           } catch (error) {
-            console.warn('Cover upload error:', error);
             // Continue without thumbnail
           }
         } else {
@@ -276,7 +273,6 @@ const Upload = () => {
               thumbnailUrl = thumbnailFileName;
             }
           } catch (thumbnailError) {
-            console.warn('Failed to generate thumbnail:', thumbnailError);
             // Continue without thumbnail
           }
         }
@@ -332,12 +328,6 @@ const Upload = () => {
       }).select();
 
       if (dbError) {
-        console.error('Database error details:', {
-          code: dbError.code,
-          message: dbError.message,
-          details: dbError.details,
-          hint: dbError.hint
-        });
         throw dbError;
       }
 
@@ -355,7 +345,6 @@ const Upload = () => {
       setCoverImageFile(null);
       setCoverImagePreview(null);
     } catch (error: any) {
-      console.error('Upload error:', error);
 
       let errorMessage = "Something went wrong";
 
@@ -575,7 +564,7 @@ const Upload = () => {
                           video.style.display = 'block';
                         }}
                         onError={(e) => {
-                          console.log('Video thumbnail load error:', e);
+                          // Video thumbnail load error
                         }}
                       />
                     ) : (

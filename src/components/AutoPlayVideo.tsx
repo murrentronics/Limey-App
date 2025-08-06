@@ -32,7 +32,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     try {
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-        console.log('Wake lock activated');
+
       }
     } catch (err) {
       console.error('Failed to request wake lock:', err);
@@ -44,7 +44,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
       try {
         await wakeLockRef.current.release();
         wakeLockRef.current = null;
-        console.log('Wake lock released');
+
       } catch (err) {
         console.error('Failed to release wake lock:', err);
       }
@@ -57,16 +57,10 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     video.muted = globalMuted;
     const observer = new window.IntersectionObserver(
       ([entry]) => {
-        console.log('AutoPlayVideo intersection:', {
-          isIntersecting: entry.isIntersecting,
-          intersectionRatio: entry.intersectionRatio,
-          videoSrc: src.substring(src.lastIndexOf('/') + 1, src.lastIndexOf('/') + 10)
-        });
-        
         if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
           setIsVisible(true);
           video.play().catch(error => {
-            console.log('Video play failed:', error);
+
           });
         } else {
           setIsVisible(false);
@@ -77,7 +71,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
       { threshold: 0.5 }
     );
     observer.observe(video);
-    
+
     return () => {
       observer.unobserve(video);
     };
@@ -92,20 +86,20 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    
+
     const onPlay = () => {
       setIsPlaying(true);
       requestWakeLock(); // Prevent screen sleep when video plays
     };
-    
+
     const onPause = () => {
       setIsPlaying(false);
       releaseWakeLock(); // Allow screen sleep when video pauses
     };
-    
+
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
-    
+
     return () => {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
@@ -116,10 +110,10 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
   // Record view when video has been playing and visible for 5 seconds
   useEffect(() => {
     if (isVisible && isPlaying && !viewRecorded && videoId) {
-      console.log('AutoPlayVideo: Starting 5-second view timer for video:', videoId);
+
 
       const timer = setTimeout(async () => {
-        console.log('AutoPlayVideo: 5-second timer completed, recording view for video:', videoId);
+
 
         try {
           // Use the RPC function to record the view
@@ -127,7 +121,6 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
             video_uuid: videoId
           });
 
-          console.log('AutoPlayVideo: RPC function result:', { data, error, videoId });
 
           if (!error) {
             // Always mark as viewed to prevent repeated attempts
@@ -169,7 +162,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
         preload="none"
         poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAwMDAiLz48L3N2Zz4="
         className={className}
-        style={{ 
+        style={{
           pointerEvents: 'auto',
           backgroundColor: '#000000',
           objectFit: 'cover'
