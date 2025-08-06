@@ -266,23 +266,17 @@ const Upload = () => {
         } else {
           // Generate thumbnail from video - same as CreateVideoPage
           try {
-            console.log('Upload: Starting thumbnail generation...');
             const thumbnailBlob = await generateThumbnail(file);
-            console.log('Upload: Thumbnail blob generated:', thumbnailBlob.size, 'bytes');
             const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
             const thumbnailFileName = `${user.id}/thumbnails/${Date.now()}.jpg`;
-            console.log('Upload: Uploading thumbnail to:', thumbnailFileName);
             const { error: thumbnailError } = await supabase.storage
               .from('limeytt-uploads')
               .upload(thumbnailFileName, thumbnailFile);
             if (!thumbnailError) {
               thumbnailUrl = thumbnailFileName;
-              console.log('Upload: Thumbnail uploaded successfully:', thumbnailUrl);
-            } else {
-              console.error('Upload: Thumbnail upload failed:', thumbnailError);
             }
           } catch (thumbnailError) {
-            console.error('Upload: Failed to generate thumbnail:', thumbnailError);
+            console.warn('Failed to generate thumbnail:', thumbnailError);
             // Continue without thumbnail
           }
         }
@@ -324,7 +318,6 @@ const Upload = () => {
       }
 
       // Insert metadata into videos table
-      console.log('Upload: Inserting video with thumbnailUrl:', thumbnailUrl);
       const { data: insertData, error: dbError } = await supabase.from('videos').insert({
         title,
         description,
