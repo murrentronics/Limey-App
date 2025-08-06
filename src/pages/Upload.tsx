@@ -60,13 +60,13 @@ const Upload = () => {
     if (selectedFile) {
       // Only allow supported video types - expanded for smartphone compatibility
       const supportedTypes = [
-        "video/mp4", 
-        "video/webm", 
-        "video/quicktime", 
-        "video/mov", 
-        "video/3gpp", 
+        "video/mp4",
+        "video/webm",
+        "video/quicktime",
+        "video/mov",
+        "video/3gpp",
         "video/3gpp2",
-        "video/ogg", 
+        "video/ogg",
         "video/x-matroska",
         "video/avi",
         "video/x-msvideo",
@@ -185,7 +185,7 @@ const Upload = () => {
       video.muted = true;
       video.playsInline = true;
       video.crossOrigin = 'anonymous';
-      
+
       // Add video to DOM temporarily for better WebView compatibility
       video.style.position = 'absolute';
       video.style.top = '-9999px';
@@ -214,7 +214,7 @@ const Upload = () => {
         try {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
-          
+
           if (!ctx) {
             cleanup();
             reject(new Error('Failed to get canvas context'));
@@ -338,7 +338,7 @@ const Upload = () => {
           try {
             const thumbnailBlob = await Promise.race([
               generateThumbnail(file),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Thumbnail timeout')), 5000))
+              new Promise<Blob>((_, reject) => setTimeout(() => reject(new Error('Thumbnail timeout')), 5000))
             ]);
             const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
             const thumbnailFileName = `${user.id}/thumbnails/${Date.now()}.jpg`;
@@ -367,22 +367,22 @@ const Upload = () => {
         } else {
           // Use the uploaded image as its own thumbnail
           const thumbnailFileName = `${user.id}/thumbnails/img_${Date.now()}.jpg`;
-          
+
           // Convert image to JPEG for consistent thumbnail format
           try {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             const img = new Image();
-            
+
             await new Promise((resolve, reject) => {
               img.onload = resolve;
               img.onerror = reject;
               img.src = URL.createObjectURL(file);
             });
-            
+
             canvas.width = 320;
             canvas.height = 568;
-            
+
             if (ctx) {
               ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
               canvas.toBlob(async (blob) => {
@@ -538,116 +538,116 @@ const Upload = () => {
       <div className="p-4 max-w-2xl mx-auto">
         {/* File Upload Area */}
         <Card className="p-8 border-2 border-dashed border-border hover:border-primary transition-colors">
-        <div className="text-center">
-          {preview ? (
-            <>
-              <div className="mb-2 w-full max-w-xs mx-auto aspect-[9/16] bg-black rounded-lg overflow-hidden flex items-center justify-center">
-                {file?.type.startsWith('video/') ? (
-                  <video 
-                    src={preview} 
-                    className="w-full h-full object-cover"
-                    controls
-                    preload="metadata"
-                    poster=""
-                    style={{ backgroundColor: '#000000' }}
-                  />
-                ) : (
-                  <img 
-                    src={preview} 
-                    alt="Preview"
-                    className="w-full h-full object-cover"
-                  />
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground mt-2 text-center">
-                {file?.name} ({((file?.size || 0) / 1024 / 1024).toFixed(2)} MB)
-              </p>
-              {/* Hidden file input for changing video */}
-              <input
-        type="file"
-        accept="video/*,image/*"
-        className="hidden"
-        ref={changeVideoInputRef}
-        onChange={e => handleFileSelect(e, 'gallery')}
-      />
-      <div className="flex justify-center mt-4">
-        <Button
-          variant="outline"
-          onClick={() => {
-            if (changeVideoInputRef.current) changeVideoInputRef.current.value = '';
-            changeVideoInputRef.current?.click();
-            // Call Android WebView function
-            (window as any).onChangeFileClick?.();
-          }}
-        >
-          Change File
-        </Button>
-      </div>
-            </>
-          ) : (
-            <>
-              <div className="mb-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl">📁</span>
+          <div className="text-center">
+            {preview ? (
+              <>
+                <div className="mb-2 w-full max-w-xs mx-auto aspect-[9/16] bg-black rounded-lg overflow-hidden flex items-center justify-center">
+                  {file?.type.startsWith('video/') ? (
+                    <video
+                      src={preview}
+                      className="w-full h-full object-cover"
+                      controls
+                      preload="metadata"
+                      poster=""
+                      style={{ backgroundColor: '#000000' }}
+                    />
+                  ) : (
+                    <img
+                      src={preview}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
                 </div>
-                <h3 className="text-lg font-semibold mb-2">Create or Upload Your Content</h3>
-                <p className="text-muted-foreground mb-4">
-                  Use the Create button to record a new video or take a photo, or Upload to select an existing video or image to share with the Limey community.
+                <p className="text-sm text-muted-foreground mt-2 text-center">
+                  {file?.name} ({((file?.size || 0) / 1024 / 1024).toFixed(2)} MB)
                 </p>
-              </div>
-              {/* Hidden file input for Create (camera) */}
-              <input
-                type="file"
-                accept="video/*,image/*"
-                capture="environment"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleCreateFile}
-              />
-              {/* Upload/Change Video button triggers the regular input (no capture) */}
-              <input
-                type="file"
-                accept="video/*,image/*"
-                onChange={e => handleFileSelect(e, 'gallery')}
-                className="hidden"
-                id="file-upload"
-              />
-              <div className="flex gap-3 justify-center">
-                <Button 
-                  id="btnCreate" 
-                  variant="neon" 
-                  className="flex items-center gap-2" 
-                  onClick={(e) => {
-                    handleCreateClick();
-                    // Call Android WebView function
-                    (window as any).onCreateClick?.();
-                  }}
-                >
-                  <Paintbrush size={18} />
-                  Create
-                </Button>
-                <label htmlFor="file-upload">
-                  <Button 
-                    id="btnUpload" 
-                    variant="neon" 
-                    asChild 
-                    className="cursor-pointer flex items-center gap-2"
+                {/* Hidden file input for changing video */}
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  ref={changeVideoInputRef}
+                  onChange={e => handleFileSelect(e, 'gallery')}
+                />
+                <div className="flex justify-center mt-4">
+                  <Button
+                    variant="outline"
                     onClick={() => {
+                      if (changeVideoInputRef.current) changeVideoInputRef.current.value = '';
+                      changeVideoInputRef.current?.click();
                       // Call Android WebView function
-                      (window as any).onUploadClick?.();
+                      (window as any).onChangeFileClick?.();
                     }}
                   >
-                    <span className="flex items-center gap-2">
-                      <Plus size={18} />
-                      Upload
-                    </span>
+                    Change File
                   </Button>
-                </label>
-              </div>
-            </>
-          )}
-        </div>
-      </Card>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">📁</span>
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Create or Upload Your Content</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Use the Create button to record a new video or take a photo, or Upload to select an existing video or image to share with the Limey community.
+                  </p>
+                </div>
+                {/* Hidden file input for Create (camera) */}
+                <input
+                  type="file"
+                  accept="video/mp4,video/mov,video/3gp,video/3gpp,video/3gpp2,video/webm,video/quicktime,video/x-m4v,video/hevc,video/h264,video/avi,video/mpeg"
+                  capture="environment"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleCreateFile}
+                />
+                {/* Upload/Change Video button triggers the regular input (no capture) */}
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={e => handleFileSelect(e, 'gallery')}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <div className="flex gap-3 justify-center">
+                  <Button
+                    id="btnCreate"
+                    variant="neon"
+                    className="flex items-center gap-2"
+                    onClick={(e) => {
+                      handleCreateClick();
+                      // Call Android WebView function
+                      (window as any).onCreateClick?.();
+                    }}
+                  >
+                    <Paintbrush size={18} />
+                    Create
+                  </Button>
+                  <label htmlFor="file-upload">
+                    <Button
+                      id="btnUpload"
+                      variant="neon"
+                      asChild
+                      className="cursor-pointer flex items-center gap-2"
+                      onClick={() => {
+                        // Call Android WebView function
+                        (window as any).onUploadClick?.();
+                      }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <Plus size={18} />
+                        Upload
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
 
         {/* Upload Form */}
         {file && (
@@ -683,9 +683,9 @@ const Upload = () => {
                       }}
                     />
                     <label htmlFor="cover-image-input">
-                      <Button 
-                        variant="outline" 
-                        className="cursor-pointer" 
+                      <Button
+                        variant="outline"
+                        className="cursor-pointer"
                         asChild
                         onClick={() => {
                           // Call Android WebView function
@@ -707,7 +707,7 @@ const Upload = () => {
                         Use Default Thumbnail
                       </Button>
                     )}
-                </div>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Choose a custom cover image or use the default video thumbnail.
@@ -734,31 +734,31 @@ const Upload = () => {
                   Category
                 </label>
                 <select
-                className="w-full border rounded px-3 py-2 bg-background text-foreground"
-                value={category || 'All'}
-                onChange={e => setCategory(e.target.value)}
-                required
-              >
-                <option value="All">All</option>
-                <option value="Anime">Anime</option>
-                <option value="Bar Limes">Bar Limes</option>
-                <option value="Cartoon">Cartoon</option>
-                <option value="Carnival">Carnival</option>
-                <option value="Comedy">Comedy</option>
-                <option value="Dance">Dance</option>
-                <option value="Dancehall">Dancehall</option>
-                <option value="DIY Projects">DIY Projects</option>
-                <option value="Educational">Educational</option>
-                <option value="Events">Events</option>
-                <option value="Fete">Fete</option>
-                <option value="Funny Vids">Funny Vids</option>
-                <option value="HOW TOs">HOW TOs</option>
-                <option value="Local News">Local News</option>
-                <option value="Music Vids">Music Vids</option>
-                <option value="Parties">Parties</option>
-                <option value="Soca">Soca</option>
-                <option value="Trini Celebs">Trini Celebs</option>
-              </select>
+                  className="w-full border rounded px-3 py-2 bg-background text-foreground"
+                  value={category || 'All'}
+                  onChange={e => setCategory(e.target.value)}
+                  required
+                >
+                  <option value="All">All</option>
+                  <option value="Anime">Anime</option>
+                  <option value="Bar Limes">Bar Limes</option>
+                  <option value="Cartoon">Cartoon</option>
+                  <option value="Carnival">Carnival</option>
+                  <option value="Comedy">Comedy</option>
+                  <option value="Dance">Dance</option>
+                  <option value="Dancehall">Dancehall</option>
+                  <option value="DIY Projects">DIY Projects</option>
+                  <option value="Educational">Educational</option>
+                  <option value="Events">Events</option>
+                  <option value="Fete">Fete</option>
+                  <option value="Funny Vids">Funny Vids</option>
+                  <option value="HOW TOs">HOW TOs</option>
+                  <option value="Local News">Local News</option>
+                  <option value="Music Vids">Music Vids</option>
+                  <option value="Parties">Parties</option>
+                  <option value="Soca">Soca</option>
+                  <option value="Trini Celebs">Trini Celebs</option>
+                </select>
               </div>
 
               <div>
@@ -793,8 +793,8 @@ const Upload = () => {
 
               {/* Upload Button */}
               <div className="flex space-x-3 pt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setFile(null);
                     setPreview(null);
@@ -805,8 +805,8 @@ const Upload = () => {
                 >
                   Cancel
                 </Button>
-                <Button 
-                  variant="neon" 
+                <Button
+                  variant="neon"
                   onClick={handleUpload}
                   disabled={uploading || !title.trim()}
                   className="flex-1"
@@ -819,22 +819,22 @@ const Upload = () => {
         )}
 
         {/* Upload Tips */}
-<Card className="mt-6 p-4 bg-muted/50">
-  <h4 className="font-medium text-foreground mb-2 text-center">📝 Upload Tips</h4>
-  <ul className="text-sm text-muted-foreground space-y-4 text-center">
-    <li>• <b>Max video duration:</b> 5 minutes</li>
-    <li>• <b>Max file size:</b> 50 MB</li>
-    <li>• <b>Supported video formats:</b> mp4, mov, webm, 3gp, 3gpp2, avi, mpeg, m4v, hevc, h264</li>
-    <li>• <b>Supported image formats:</b> jpeg, jpg, png, gif, webp, heic, heif</li>
-    <li>• <b>iPhone users:</b> All iPhone camera formats supported (mov, mp4, m4v, heic, heif)</li>
-    <li>• <b>Android users:</b> All standard Android formats supported (mp4, 3gp, jpeg, png)</li>
-    <li>• If your video is too large, use free apps like <b>CapCut</b>, <b>InShot</b>, or your phone's built-in editor to compress the video and maintain quality before uploading.</li>
-    <li>• Keep videos under 60 seconds for best engagement</li>
-    <li>• Use good lighting and clear audio</li>
-    <li>• Add hashtags in your description to reach more viewers</li>
-    <li>• Upload during peak hours (6-9 PM) for maximum views</li>
-  </ul>
-</Card>
+        <Card className="mt-6 p-4 bg-muted/50">
+          <h4 className="font-medium text-foreground mb-2 text-center">📝 Upload Tips</h4>
+          <ul className="text-sm text-muted-foreground space-y-4 text-center">
+            <li>• <b>Max video duration:</b> 5 minutes</li>
+            <li>• <b>Max file size:</b> 50 MB</li>
+            <li>• <b>Supported video formats:</b> mp4, mov, webm, 3gp, 3gpp2, avi, mpeg, m4v, hevc, h264</li>
+            <li>• <b>Supported image formats:</b> jpeg, jpg, png, gif, webp, heic, heif</li>
+            <li>• <b>iPhone users:</b> All iPhone camera formats supported (mov, mp4, m4v, heic, heif)</li>
+            <li>• <b>Android users:</b> All standard Android formats supported (mp4, 3gp, jpeg, png)</li>
+            <li>• If your video is too large, use free apps like <b>CapCut</b>, <b>InShot</b>, or your phone's built-in editor to compress the video and maintain quality before uploading.</li>
+            <li>• Keep videos under 60 seconds for best engagement</li>
+            <li>• Use good lighting and clear audio</li>
+            <li>• Add hashtags in your description to reach more viewers</li>
+            <li>• Upload during peak hours (6-9 PM) for maximum views</li>
+          </ul>
+        </Card>
       </div>
 
       {/* Bottom Navigation */}
