@@ -122,12 +122,11 @@ const Upload = () => {
     }
   };
 
-  // Direct camera capture: open camera and go to create-video page
+  // Direct camera capture: go directly to CreateVideoPage to avoid browser popup
   const handleCreateClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-      fileInputRef.current.click();
-    }
+    // Navigate directly to CreateVideoPage which uses react-webcam
+    // This bypasses the browser's native camera popup
+    navigate('/create-video', { state: { directCamera: true } });
   };
 
   const handleCreateFile = (e: React.ChangeEvent<HTMLInputElement>) => {
