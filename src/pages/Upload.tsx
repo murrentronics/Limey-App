@@ -725,7 +725,7 @@ const Upload = () => {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Choose a custom cover image or use the default video thumbnail.
+                  Image auto selected from video.
                 </p>
               </div>
 
