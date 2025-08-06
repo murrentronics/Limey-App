@@ -572,10 +572,23 @@ const Upload = () => {
                 {/* Hidden file input for changing video */}
                 <input
                   type="file"
-                  accept="video/*"
+                  accept="video/*,image/*"
                   className="hidden"
                   ref={changeVideoInputRef}
-                  onChange={e => handleFileSelect(e, 'gallery')}
+                  onChange={(e) => {
+                    const selectedFile = e.target.files?.[0];
+                    if (selectedFile) {
+                      // Clear previous preview URL to free memory
+                      if (preview) {
+                        URL.revokeObjectURL(preview);
+                      }
+                      // Reset cover image when changing video
+                      setCoverImageFile(null);
+                      setCoverImagePreview(null);
+                      // Handle the new file selection
+                      handleFileSelect(e, 'gallery');
+                    }
+                  }}
                 />
                 <div className="flex justify-center mt-4">
                   <Button
@@ -587,7 +600,7 @@ const Upload = () => {
                       (window as any).onChangeFileClick?.();
                     }}
                   >
-                    Change File
+                    Change Video
                   </Button>
                 </div>
               </>
