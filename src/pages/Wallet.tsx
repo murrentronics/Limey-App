@@ -126,23 +126,48 @@ export default function Wallet() {
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
     
-    const monthlyWithdrawals = transactions
+    const monthlyTransactions = transactions
       .filter(tx => {
         const txDate = new Date(tx.created_at);
         return tx.transaction_type === 'withdrawal' && 
                txDate.getMonth() === currentMonth && 
                txDate.getFullYear() === currentYear;
-      })
-      .reduce((acc, tx) => acc + tx.amount, 0);
+      });
+    
+    const monthlyWithdrawals = monthlyTransactions.reduce((acc, tx) => acc + tx.amount, 0);
+    
+    console.log('Monthly transactions details:', monthlyTransactions.map(tx => ({
+      amount: tx.amount,
+      date: new Date(tx.created_at).toLocaleDateString(),
+      description: tx.description
+    })));
 
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const today = new Date();
+    
+    console.log('Date debugging:', {
+      today: today.toString(),
+      currentMonth: currentMonth,
+      currentMonthName: monthNames[currentMonth],
+      currentYear: currentYear,
+      jsMonth: today.getMonth(),
+      jsMonthName: monthNames[today.getMonth()]
+    });
+    
     console.log('Monthly withdrawal check:', {
-      currentMonth,
+      currentMonth: `${currentMonth} (${monthNames[currentMonth]})`,
       currentYear,
       monthlyWithdrawals,
       amountValue,
       maxMonthlyLimit: limits.max_monthly_transactions,
       wouldExceed: monthlyWithdrawals + amountValue > limits.max_monthly_transactions,
-      remaining: limits.max_monthly_transactions - monthlyWithdrawals
+      remaining: limits.max_monthly_transactions - monthlyWithdrawals,
+      totalTransactionsThisMonth: transactions.filter(tx => {
+        const txDate = new Date(tx.created_at);
+        return tx.transaction_type === 'withdrawal' && 
+               txDate.getMonth() === currentMonth && 
+               txDate.getFullYear() === currentYear;
+      }).length
     });
 
     if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
