@@ -531,10 +531,35 @@ async function syncTriniCreditToWordPress(balance: number) {
 }
 
 async function syncUserLimitsToWordPress(limits: any) {
-  // For now, we'll just log that we would sync limits to WordPress
-  // The WordPress endpoint may not exist yet, so we'll focus on getting fresh limits
-  console.log('Would sync user limits to WordPress:', limits);
-  return { success: true, message: 'Limits logged (WordPress endpoint not implemented yet)' };
+  try {
+    const token = await getWpToken();
+    if (!token) {
+      console.warn('No WordPress token available for limits sync - skipping sync');
+      return { success: false, message: 'No token available' };
+    }
+    
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/sync-user-limits", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(limits),
+    });
+    
+    if (!res.ok) {
+      console.warn(`WordPress limits sync failed with status: ${res.status}`);
+      return { success: false, message: `Limits sync failed: ${res.status}` };
+    }
+    
+    const result = await res.json();
+    console.log('Successfully synced user limits to WordPress:', result);
+    return result;
+  } catch (error) {
+    console.warn('WordPress user limits sync error:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
+  }
 }
 
 export async function deductTrincredits(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
