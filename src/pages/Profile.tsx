@@ -534,8 +534,8 @@ const Profile = () => {
         // AUTO-SYNC: Sync balance to WordPress when profile loads
         try {
           const { fixWordPressBalance } = await import('@/lib/trinepayApi');
-          await fixWordPressBalance(user.id);
-          console.log('Auto-synced balance to WordPress from profile:', balance);
+          const syncResult = await fixWordPressBalance(user.id);
+          console.log('Auto-synced data to WordPress from profile:', syncResult);
         } catch (syncError) {
           console.warn('Auto-sync from profile failed:', syncError);
           // Don't fail profile loading if sync fails

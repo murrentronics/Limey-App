@@ -58,16 +58,34 @@ export default function Wallet() {
 
       // AUTO-SYNC: Always sync balance to WordPress when wallet loads
       try {
-        await fixWordPressBalance(user.id);
-        console.log('Auto-synced balance to WordPress:', balance);
+        const syncResult = await fixWordPressBalance(user.id);
+        console.log('Auto-synced data to WordPress from wallet:', syncResult);
+        
+        // Use the limits from the sync result if available
+        if (syncResult.limits) {
+          setLimits(syncResult.limits);
+          console.log('Using synced limits:', syncResult.limits);
+        } else {
+          // Fallback to fetching limits separately
+          const limitsRes = await getUserLimits();
+          if (limitsRes) {
+            setLimits(limitsRes);
+            console.log('Using fallback limits:', limitsRes);
+          }
+        }
       } catch (syncError) {
         console.warn('Auto-sync failed on wallet load:', syncError);
         // Don't fail wallet loading if sync fails
-      }
-
-      const limitsRes = await getUserLimits();
-      if (limitsRes) {
-        setLimits(limitsRes);
+        
+        // Try to get limits anyway
+        try {
+          const limitsRes = await getUserLimits();
+          if (limitsRes) {
+            setLimits(limitsRes);
+          }
+        } catch (limitsError) {
+          console.warn('Failed to get limits after sync failure:', limitsError);
+        }
       }
 
       const { data: transactionsData, error: transactionsError } = await supabase
@@ -105,12 +123,31 @@ export default function Wallet() {
       return;
     }
 
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
     const monthlyWithdrawals = transactions
-      .filter(tx => tx.transaction_type === 'withdrawal' && new Date(tx.created_at).getMonth() === new Date().getMonth())
+      .filter(tx => {
+        const txDate = new Date(tx.created_at);
+        return tx.transaction_type === 'withdrawal' && 
+               txDate.getMonth() === currentMonth && 
+               txDate.getFullYear() === currentYear;
+      })
       .reduce((acc, tx) => acc + tx.amount, 0);
 
+    console.log('Monthly withdrawal check:', {
+      currentMonth,
+      currentYear,
+      monthlyWithdrawals,
+      amountValue,
+      maxMonthlyLimit: limits.max_monthly_transactions,
+      wouldExceed: monthlyWithdrawals + amountValue > limits.max_monthly_transactions,
+      remaining: limits.max_monthly_transactions - monthlyWithdrawals
+    });
+
     if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
-      setError(`This transaction would exceed your monthly debit transaction limit of TT${limits.max_monthly_transactions.toLocaleString()}`);
+      const remaining = limits.max_monthly_transactions - monthlyWithdrawals;
+      setError(`This transaction would exceed your monthly debit transaction limit of TT${limits.max_monthly_transactions.toLocaleString()}. You have TT${remaining.toLocaleString()} remaining this month.`);
       setLoading(false);
       return;
     }

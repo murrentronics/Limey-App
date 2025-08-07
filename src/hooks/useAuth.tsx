@@ -204,8 +204,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             // Get the user ID from the session that was just created
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user?.id) {
-              await fixWordPressBalance(session.user.id);
-              console.log('Auto-synced balance to WordPress after login');
+              const syncResult = await fixWordPressBalance(session.user.id);
+              console.log('Auto-synced data to WordPress after login:', syncResult);
             }
           } catch (syncError) {
             console.warn('Auto-sync after login failed:', syncError);
