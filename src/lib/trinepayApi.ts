@@ -644,22 +644,8 @@ export async function fixWordPressBalance(userId: string) {
 }
 
 async function syncUserLimitsToSupabase(userId: string, limits: any) {
-  try {
-    const { supabase } = await import('@/integrations/supabase/client');
-    
-    const { error } = await supabase
-      .from('profiles')
-      .update({ ttpaypal_limits: limits })
-      .eq('user_id', userId);
-    
-    if (error) {
-      console.warn('Failed to sync limits to Supabase:', error);
-    } else {
-      console.log('Successfully synced user limits to Supabase');
-    }
-  } catch (error) {
-    console.warn('Error syncing limits to Supabase:', error);
-  }
+  // Disabled - ttpaypal_limits column doesn't exist in Supabase
+  console.log('Supabase limits sync disabled - using WordPress as source of truth');
 }
 
 export async function deleteUserAccount(userId: string) {
