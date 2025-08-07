@@ -530,6 +530,36 @@ async function syncTriniCreditToWordPress(balance: number) {
   }
 }
 
+async function syncUserLimitsToWordPress(limits: any) {
+  try {
+    const token = await getWpToken();
+    if (!token) {
+      console.warn('No WordPress token available for limits sync - skipping sync');
+      return { success: false, message: 'No token available' };
+    }
+    
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/sync-user-limits", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(limits),
+    });
+    
+    if (!res.ok) {
+      console.warn(`WordPress limits sync failed with status: ${res.status}`);
+      return { success: false, message: `Limits sync failed: ${res.status}` };
+    }
+    
+    return await res.json();
+  } catch (error) {
+    console.warn('WordPress user limits sync error:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 export async function deductTrincredits(userId: string, amount: number): Promise<{ success: boolean; error?: string }> {
   try {
     const currentBalance = await getTrincreditsBalance(userId);
@@ -573,17 +603,55 @@ export async function fixWordPressBalance(userId: string) {
     // Get the correct balance from Supabase
     const correctBalance = await getTrincreditsBalance(userId);
     
-    // Sync it to WordPress
-    const syncResult = await syncTriniCreditToWordPress(correctBalance);
+    // Get user limits from WordPress/TTPayPal
+    const userLimits = await getUserLimits();
+    
+    // Sync balance to WordPress
+    const balanceSyncResult = await syncTriniCreditToWordPress(correctBalance);
+    
+    // Sync user limits to WordPress (if limits exist)
+    let limitsSyncResult = { success: true, message: 'No limits to sync' };
+    if (userLimits) {
+      limitsSyncResult = await syncUserLimitsToWordPress(userLimits);
+      
+      // Also store limits in Supabase profiles table
+      await syncUserLimitsToSupabase(userId, userLimits);
+    }
+    
+    console.log('Auto-synced balance and user limits to WordPress:', {
+      balance: correctBalance,
+      userRole: userLimits?.user_role,
+      perTransactionLimit: userLimits?.per_transaction_limit
+    });
     
     return { 
-      success: syncResult.success, 
+      success: balanceSyncResult.success && limitsSyncResult.success, 
       balance: correctBalance,
-      syncMessage: syncResult.message 
+      limits: userLimits,
+      syncMessage: `Balance: ${balanceSyncResult.message}, Limits: ${limitsSyncResult.message}` 
     };
   } catch (error) {
-    console.error('Error fixing WordPress balance:', error);
+    console.error('Error fixing WordPress balance and limits:', error);
     throw error;
+  }
+}
+
+async function syncUserLimitsToSupabase(userId: string, limits: any) {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    
+    const { error } = await supabase
+      .from('profiles')
+      .update({ ttpaypal_limits: limits })
+      .eq('user_id', userId);
+    
+    if (error) {
+      console.warn('Failed to sync limits to Supabase:', error);
+    } else {
+      console.log('Successfully synced user limits to Supabase');
+    }
+  } catch (error) {
+    console.warn('Error syncing limits to Supabase:', error);
   }
 }
 
