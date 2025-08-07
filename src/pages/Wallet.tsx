@@ -27,6 +27,8 @@ export default function Wallet() {
     max_wallet_balance: number;
     max_monthly_transactions: number;
     user_role: string;
+    current_month_usage?: number;
+    remaining_monthly_allowance?: number;
   }>({
     per_transaction_limit: 5000,
     max_wallet_balance: 20000,
@@ -154,25 +156,25 @@ export default function Wallet() {
       jsMonthName: monthNames[today.getMonth()]
     });
     
-    console.log('Monthly withdrawal check:', {
-      currentMonth: `${currentMonth} (${monthNames[currentMonth]})`,
-      currentYear,
-      monthlyWithdrawals,
-      amountValue,
+    // Use the ACTUAL remaining monthly allowance from TrinEPay/WordPress
+    const remainingMonthlyAllowance = limits.remaining_monthly_allowance || (limits.max_monthly_transactions - monthlyWithdrawals);
+    const currentMonthUsage = limits.current_month_usage || monthlyWithdrawals;
+    
+    console.log('TrinEPay Monthly Limits Check:', {
       maxMonthlyLimit: limits.max_monthly_transactions,
-      wouldExceed: monthlyWithdrawals + amountValue > limits.max_monthly_transactions,
-      remaining: limits.max_monthly_transactions - monthlyWithdrawals,
-      totalTransactionsThisMonth: transactions.filter(tx => {
-        const txDate = new Date(tx.created_at);
-        return tx.transaction_type === 'withdrawal' && 
-               txDate.getMonth() === currentMonth && 
-               txDate.getFullYear() === currentYear;
-      }).length
+      currentMonthUsage: currentMonthUsage,
+      remainingAllowance: remainingMonthlyAllowance,
+      requestedAmount: amountValue,
+      wouldExceed: amountValue > remainingMonthlyAllowance,
+      // Fallback data for comparison
+      supabaseCalculated: {
+        monthlyWithdrawals,
+        remaining: limits.max_monthly_transactions - monthlyWithdrawals
+      }
     });
 
-    if (monthlyWithdrawals + amountValue > limits.max_monthly_transactions) {
-      const remaining = limits.max_monthly_transactions - monthlyWithdrawals;
-      setError(`This transaction would exceed your monthly debit transaction limit of TT${limits.max_monthly_transactions.toLocaleString()}. You have TT${remaining.toLocaleString()} remaining this month.`);
+    if (amountValue > remainingMonthlyAllowance) {
+      setError(`This transaction would exceed your monthly debit transaction limit. You have TT${remainingMonthlyAllowance.toLocaleString()} remaining this month (Used: TT${currentMonthUsage.toLocaleString()} of TT${limits.max_monthly_transactions.toLocaleString()}).`);
       setLoading(false);
       return;
     }
