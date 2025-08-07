@@ -487,10 +487,9 @@ export async function recordTrincreditsTransaction({
     }
 
     // CRITICAL: Also sync the balance to WordPress trinicredit_balance
-    try {
-      await syncTriniCreditToWordPress(newBalance);
-    } catch (wpError) {
-      console.warn('Failed to sync balance to WordPress:', wpError);
+    const syncResult = await syncTriniCreditToWordPress(newBalance);
+    if (!syncResult.success) {
+      console.warn('Failed to sync balance to WordPress:', syncResult.message);
       // Don't fail the transaction if WordPress sync fails
     }
 
@@ -502,12 +501,13 @@ export async function recordTrincreditsTransaction({
 }
 
 async function syncTriniCreditToWordPress(balance: number) {
-  const token = await getWpToken();
-  if (!token) {
-    throw new Error('No WordPress token available');
-  }
-  
   try {
+    const token = await getWpToken();
+    if (!token) {
+      console.warn('No WordPress token available for sync - skipping sync');
+      return { success: false, message: 'No token available' };
+    }
+    
     const res = await fetch("https://theronm18.sg-host.com/wp-json/ttpaypal/v1/sync-trinicredit", {
       method: "POST",
       headers: {
@@ -519,13 +519,14 @@ async function syncTriniCreditToWordPress(balance: number) {
     });
     
     if (!res.ok) {
-      throw new Error(`WordPress sync failed: ${res.status}`);
+      console.warn(`WordPress sync failed with status: ${res.status}`);
+      return { success: false, message: `Sync failed: ${res.status}` };
     }
     
     return await res.json();
   } catch (error) {
-    console.error('WordPress TriniCredit sync error:', error);
-    throw error;
+    console.warn('WordPress TriniCredit sync error:', error);
+    return { success: false, message: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
 
@@ -573,9 +574,13 @@ export async function fixWordPressBalance(userId: string) {
     const correctBalance = await getTrincreditsBalance(userId);
     
     // Sync it to WordPress
-    await syncTriniCreditToWordPress(correctBalance);
+    const syncResult = await syncTriniCreditToWordPress(correctBalance);
     
-    return { success: true, balance: correctBalance };
+    return { 
+      success: syncResult.success, 
+      balance: correctBalance,
+      syncMessage: syncResult.message 
+    };
   } catch (error) {
     console.error('Error fixing WordPress balance:', error);
     throw error;
