@@ -1,4 +1,4 @@
-function getWpToken() {
+async function getWpToken() {
   const token = localStorage.getItem('wp_jwt_token');
   const validated = localStorage.getItem('wp_jwt_validated');
   const validationTime = localStorage.getItem('wp_jwt_validation_time');
@@ -9,10 +9,17 @@ function getWpToken() {
     const maxAge = 24 * 60 * 60 * 1000; // 24 hours
     
     if (tokenAge > maxAge) {
-      localStorage.removeItem('wp_jwt_token');
-      localStorage.removeItem('wp_jwt_validated');
-      localStorage.removeItem('wp_jwt_validation_time');
-      return null;
+      // Token expired, try to refresh it
+      console.log('WordPress token expired, attempting to refresh...');
+      const refreshed = await refreshWpToken();
+      if (refreshed) {
+        return localStorage.getItem('wp_jwt_token');
+      } else {
+        localStorage.removeItem('wp_jwt_token');
+        localStorage.removeItem('wp_jwt_validated');
+        localStorage.removeItem('wp_jwt_validation_time');
+        return null;
+      }
     }
     
     return token;
@@ -21,8 +28,61 @@ function getWpToken() {
   return null;
 }
 
+async function refreshWpToken(): Promise<boolean> {
+  try {
+    // Get current Supabase user
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user?.email) {
+      console.error('No Supabase user found for token refresh');
+      return false;
+    }
+
+    // Try to refresh the WordPress token using the stored credentials
+    const storedPassword = sessionStorage.getItem('temp_password');
+    if (!storedPassword) {
+      console.error('No stored password for token refresh');
+      return false;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const res = await fetch("https://theronm18.sg-host.com/wp-json/jwt-auth/v1/token", {
+      method: "POST",
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ username: user.email, password: storedPassword }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      
+      if (data.token) {
+        localStorage.setItem('wp_jwt_token', data.token);
+        localStorage.setItem('wp_jwt_validated', 'true');
+        localStorage.setItem('wp_jwt_validation_time', Date.now().toString());
+        console.log('WordPress JWT token refreshed successfully');
+        return true;
+      }
+    }
+
+    console.error('WordPress token refresh failed');
+    return false;
+  } catch (error) {
+    console.error('WordPress token refresh error:', error);
+    return false;
+  }
+}
+
 export async function getWalletStatus() {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
@@ -55,7 +115,7 @@ export async function getWalletStatus() {
 
 
 export async function getUserLimits() {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
@@ -86,7 +146,7 @@ export async function getUserLimits() {
 }
 
 export async function linkWallet({ email, password, passcode }: { email: string; password: string; passcode: string }) {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
@@ -130,7 +190,7 @@ export async function linkWallet({ email, password, passcode }: { email: string;
 }
 
 export async function depositToApp({ amount }: { amount: number }) {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
@@ -189,7 +249,7 @@ export async function depositToApp({ amount }: { amount: number }) {
 }
 
 export async function withdrawToWallet({ amount }: { amount: number }) {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
@@ -246,7 +306,7 @@ export async function withdrawToWallet({ amount }: { amount: number }) {
 }
 
 export async function syncBalanceToWordPress(correctBalance: number) {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
@@ -279,7 +339,7 @@ export async function syncBalanceToWordPress(correctBalance: number) {
 }
 
 export async function unlinkWallet() {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('Not authenticated with TrinEPay. Please sign in again to refresh your session.');
   }
@@ -442,7 +502,7 @@ export async function recordTrincreditsTransaction({
 }
 
 async function syncTriniCreditToWordPress(balance: number) {
-  const token = getWpToken();
+  const token = await getWpToken();
   if (!token) {
     throw new Error('No WordPress token available');
   }
