@@ -22,6 +22,7 @@ export default function Wallet() {
   const [success, setSuccess] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletBal, setWalletBal] = useState<number>(0);
+  const [trinepayBalance, setTrinepayBalance] = useState<number>(0);
   const [limits, setLimits] = useState<{
     per_transaction_limit: number;
     max_wallet_balance: number;
@@ -29,6 +30,7 @@ export default function Wallet() {
     user_role: string;
     current_month_usage?: number;
     remaining_monthly_allowance?: number;
+    trinepay_wallet_balance?: number;
   }>({
     per_transaction_limit: 5000,
     max_wallet_balance: 20000,
@@ -61,29 +63,38 @@ export default function Wallet() {
       // AUTO-SYNC: Always sync balance to WordPress when wallet loads
       try {
         const syncResult = await fixWordPressBalance(user.id);
-        console.log('Auto-synced data to WordPress from wallet:', syncResult);
-        
         // Use the limits from the sync result if available
         if (syncResult.limits) {
           setLimits(syncResult.limits);
-          console.log('Using synced limits:', syncResult.limits);
+          // Set TrinEPay balance from limits
+          if (syncResult.limits.trinepay_wallet_balance !== undefined) {
+            setTrinepayBalance(syncResult.limits.trinepay_wallet_balance);
+          }
         } else {
           // Fallback to fetching limits separately
           const limitsRes = await getUserLimits();
           if (limitsRes) {
             setLimits(limitsRes);
-            console.log('Using fallback limits:', limitsRes);
+
+            // Set TrinEPay balance from limits
+            if (limitsRes.trinepay_wallet_balance !== undefined) {
+              setTrinepayBalance(limitsRes.trinepay_wallet_balance);
+            }
           }
         }
       } catch (syncError) {
         console.warn('Auto-sync failed on wallet load:', syncError);
         // Don't fail wallet loading if sync fails
-        
+
         // Try to get limits anyway
         try {
           const limitsRes = await getUserLimits();
           if (limitsRes) {
             setLimits(limitsRes);
+            // Set TrinEPay balance from limits
+            if (limitsRes.trinepay_wallet_balance !== undefined) {
+              setTrinepayBalance(limitsRes.trinepay_wallet_balance);
+            }
           }
         } catch (limitsError) {
           console.warn('Failed to get limits after sync failure:', limitsError);
@@ -127,54 +138,55 @@ export default function Wallet() {
 
     const currentMonth = new Date().getMonth();
     const currentYear = new Date().getFullYear();
-    
+
     const monthlyTransactions = transactions
       .filter(tx => {
         const txDate = new Date(tx.created_at);
-        return tx.transaction_type === 'withdrawal' && 
-               txDate.getMonth() === currentMonth && 
-               txDate.getFullYear() === currentYear;
+        return tx.transaction_type === 'withdrawal' &&
+          txDate.getMonth() === currentMonth &&
+          txDate.getFullYear() === currentYear;
       });
-    
-    const monthlyWithdrawals = monthlyTransactions.reduce((acc, tx) => acc + tx.amount, 0);
-    
-    console.log('Monthly transactions details:', monthlyTransactions.map(tx => ({
-      amount: tx.amount,
-      date: new Date(tx.created_at).toLocaleDateString(),
-      description: tx.description
-    })));
 
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const today = new Date();
-    
-    console.log('Date debugging:', {
-      today: today.toString(),
-      currentMonth: currentMonth,
-      currentMonthName: monthNames[currentMonth],
-      currentYear: currentYear,
-      jsMonth: today.getMonth(),
-      jsMonthName: monthNames[today.getMonth()]
-    });
-    
+    const monthlyWithdrawals = monthlyTransactions.reduce((acc, tx) => acc + tx.amount, 0);
+
+
+
     // Use the ACTUAL remaining monthly allowance from TrinEPay/WordPress
     const remainingMonthlyAllowance = limits.remaining_monthly_allowance || (limits.max_monthly_transactions - monthlyWithdrawals);
     const currentMonthUsage = limits.current_month_usage || monthlyWithdrawals;
-    
-    console.log('TrinEPay Monthly Limits Check:', {
-      maxMonthlyLimit: limits.max_monthly_transactions,
-      currentMonthUsage: currentMonthUsage,
-      remainingAllowance: remainingMonthlyAllowance,
-      requestedAmount: amountValue,
-      wouldExceed: amountValue > remainingMonthlyAllowance,
-      // Fallback data for comparison
-      supabaseCalculated: {
-        monthlyWithdrawals,
-        remaining: limits.max_monthly_transactions - monthlyWithdrawals
-      }
-    });
 
-    if (amountValue > remainingMonthlyAllowance) {
-      setError(`This transaction would exceed your monthly debit transaction limit. You have TT${remainingMonthlyAllowance.toLocaleString()} remaining this month (Used: TT${currentMonthUsage.toLocaleString()} of TT${limits.max_monthly_transactions.toLocaleString()}).`);
+    // Check if TrinEPay balance is negative
+    if (trinepayBalance < 0) {
+      setError(`Your TrinEPay balance is negative (TT${trinepayBalance.toLocaleString()}). Please contact support to resolve this issue before making any transactions.`);
+      setLoading(false);
+      return;
+    }
+
+    // STRONGER CHECK: Block if remaining allowance is 0 or less
+    if (!remainingMonthlyAllowance || remainingMonthlyAllowance <= 0) {
+      setError(`DEPOSIT BLOCKED: You have reached your monthly debit transaction limit of TT${limits.max_monthly_transactions.toLocaleString()}. You have used TT${currentMonthUsage.toLocaleString()} this month. Please try again next month.`);
+      setLoading(false);
+      return;
+    }
+
+    // FIRST: Check per-transaction limit (this takes priority)
+    if (amountValue > limits.per_transaction_limit) {
+      setError(`Maximum per transaction for your TrinEPay account type is TT${limits.per_transaction_limit.toLocaleString()}`);
+      setLoading(false);
+      return;
+    }
+
+    // SECOND: Check if monthly limit is already exceeded
+    if (currentMonthUsage >= limits.max_monthly_transactions) {
+      setError(`DEPOSIT BLOCKED: You have exceeded your monthly debit transaction limit of TT${limits.max_monthly_transactions.toLocaleString()}. You have used TT${currentMonthUsage.toLocaleString()} this month. Please try again next month.`);
+      setLoading(false);
+      return;
+    }
+
+    // THIRD: Check if transaction would exceed monthly limit
+    if (currentMonthUsage + amountValue > limits.max_monthly_transactions) {
+      const actualRemaining = Math.max(0, limits.max_monthly_transactions - currentMonthUsage);
+      setError(`DEPOSIT BLOCKED: This transaction would exceed your monthly debit transaction limit. You can only deposit up to TT${actualRemaining.toLocaleString()} more this month.`);
       setLoading(false);
       return;
     }
@@ -185,11 +197,7 @@ export default function Wallet() {
       return;
     }
 
-    if (amountValue > limits.per_transaction_limit) {
-      setError(`Maximum per transaction for your TrinEPay account type is TT${limits.per_transaction_limit.toLocaleString()}`);
-      setLoading(false);
-      return;
-    }
+
 
     try {
       const depositResult = await depositToApp({ amount: amountValue });
@@ -204,7 +212,15 @@ export default function Wallet() {
       setAmount("");
       fetchWalletData();
     } catch (err: any) {
-      setError(err.message || "Failed to deposit");
+      let errorMessage = err.message || "Failed to deposit";
+
+      // If it's a wallet balance error, show the actual TrinEPay balance
+      if (errorMessage.includes("Not enough balance") || errorMessage.includes("insufficient")) {
+        const needed = amountValue - trinepayBalance;
+        errorMessage = `Insufficient TrinEPay balance. You have TT${trinepayBalance.toLocaleString()} but need TT${amountValue.toLocaleString()}. You need TT${needed.toLocaleString()} more.`;
+      }
+
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -234,6 +250,8 @@ export default function Wallet() {
       setLoading(false);
       return;
     }
+
+
 
     try {
       const withdrawResult = await withdrawToWallet({ amount: amountValue });
@@ -314,10 +332,16 @@ export default function Wallet() {
               Max per transaction: TT${limits.per_transaction_limit.toLocaleString()}
             </div>
             <div className="text-xs text-gray-400">
-              Max wallet balance: TT${limits.max_wallet_balance.toLocaleString()}
+              Max TrinEPay balance: TT${limits.max_wallet_balance.toLocaleString()}
             </div>
             <div className="text-xs text-gray-400">
               Monthly limit: TT${limits.max_monthly_transactions.toLocaleString()}
+            </div>
+            <div className="text-xs text-gray-400">
+              Remaining deposit limit: TT${(limits.remaining_monthly_allowance || 0).toLocaleString()}
+            </div>
+            <div className="text-xs text-gray-400">
+              TrinEPay balance: TT${trinepayBalance.toLocaleString()}
             </div>
           </div>
 
@@ -331,10 +355,10 @@ export default function Wallet() {
                 <input
                   className="w-full p-2 rounded bg-white text-black text-center font-semibold"
                   type="number"
-                  min="100"
+                  min="10"
                   max="25000"
                   step="0.01"
-                  placeholder="Amount (TT$100 - TT$25,000)"
+                  placeholder="Amount (TT$10 - TT$25,000)"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   required
@@ -349,10 +373,10 @@ export default function Wallet() {
                 <input
                   className="w-full p-2 rounded bg-white text-black text-center font-semibold"
                   type="number"
-                  min="100"
+                  min="10"
                   max="25000"
                   step="0.01"
-                  placeholder="Amount (TT$100 - TT$25,000)"
+                  placeholder="Amount (TT$10 - TT$25,000)"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   required
