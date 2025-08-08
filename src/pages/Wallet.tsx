@@ -332,16 +332,16 @@ export default function Wallet() {
               Max per transaction: TT${limits.per_transaction_limit.toLocaleString()}
             </div>
             <div className="text-xs text-gray-400">
+              TrinEPay balance: TT${trinepayBalance.toLocaleString()}
+            </div>
+            <div className="text-xs text-gray-400">
               Max TrinEPay balance: TT${limits.max_wallet_balance.toLocaleString()}
             </div>
             <div className="text-xs text-gray-400">
-              Monthly limit: TT${limits.max_monthly_transactions.toLocaleString()}
+              Max deposit limit: TT${limits.max_monthly_transactions.toLocaleString()}
             </div>
             <div className="text-xs text-gray-400">
               Remaining deposit limit: TT${(limits.remaining_monthly_allowance || 0).toLocaleString()}
-            </div>
-            <div className="text-xs text-gray-400">
-              TrinEPay balance: TT${trinepayBalance.toLocaleString()}
             </div>
           </div>
 
