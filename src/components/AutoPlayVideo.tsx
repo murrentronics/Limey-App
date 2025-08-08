@@ -31,20 +31,23 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
 
     const observer = new window.IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-          video.play();
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.7) {
+          video.play().catch(() => {}); // Ignore play errors
         } else {
           video.pause();
           video.currentTime = 0;
         }
       },
-      { threshold: 0.5 }
+      { 
+        threshold: 0.7,
+        rootMargin: '0px 0px -20% 0px' // Only trigger when more in view
+      }
     );
 
     observer.observe(video);
 
     return () => {
-      observer.unobserve(video);
+      observer.disconnect(); // More thorough cleanup
     };
   }, [globalMuted]);
 
@@ -54,7 +57,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     }
   }, [globalMuted]);
 
-  // Simple view recording with less frequent checks
+  // Optimized view recording - less resource intensive
   useEffect(() => {
     if (!videoId || !user || viewRecorded) return;
 
@@ -62,40 +65,33 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
     if (!video) return;
 
     let viewTimer: NodeJS.Timeout;
+    let hasStartedPlaying = false;
 
-    const handlePlay = () => {
-      if (!viewRecorded) {
+    const handleTimeUpdate = () => {
+      if (!hasStartedPlaying && video.currentTime >= 2) {
+        hasStartedPlaying = true;
+        setViewRecorded(true);
+        
+        // Debounce the view recording
+        if (viewTimer) clearTimeout(viewTimer);
         viewTimer = setTimeout(() => {
-          if (!viewRecorded && video.currentTime >= 3) {
-            setViewRecorded(true);
-            supabase.rpc('record_video_view', { video_uuid: videoId })
-              .then(({ data }) => {
-                if (data && onViewRecorded) {
-                  onViewRecorded(videoId);
-                }
-              });
-          }
-        }, 3000);
+          supabase.rpc('record_video_view', { video_uuid: videoId })
+            .catch(() => {}); // Ignore errors silently
+        }, 1000);
+        
+        video.removeEventListener('timeupdate', handleTimeUpdate);
       }
     };
 
-    const handlePause = () => {
-      if (viewTimer) {
-        clearTimeout(viewTimer);
-      }
-    };
-
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
+    video.addEventListener('timeupdate', handleTimeUpdate, { passive: true });
 
     return () => {
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
       if (viewTimer) {
         clearTimeout(viewTimer);
       }
     };
-  }, [videoId, user, viewRecorded, onViewRecorded]);
+  }, [videoId, user, viewRecorded]);
 
   return (
     <video
@@ -105,7 +101,7 @@ const AutoPlayVideo: React.FC<AutoPlayVideoProps> = ({
       muted={globalMuted}
       playsInline
       controls={false}
-      preload="metadata"
+      preload="none"
       poster="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAwMDAiLz48L3N2Zz4="
       className={className}
       style={{

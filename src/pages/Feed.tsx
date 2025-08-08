@@ -261,7 +261,9 @@ const Feed = () => {
   const [activeHashtag, setActiveHashtag] = useState<string | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState<boolean>(true);
   const [currentVideoIndex, setCurrentVideoIndex] = useState<number>(0);
   const [showSearch, setShowSearch] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -352,9 +354,20 @@ const Feed = () => {
 
 
   useEffect(() => {
-
     fetchVideos();
   }, [activeCategory]);
+
+  // Infinite scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 1000) {
+        loadMoreVideos();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loadingMore, hasMore, videos.length]);
 
   // Handle shared video auto-scroll
   useEffect(() => {
@@ -544,49 +557,8 @@ const Feed = () => {
       })
       .subscribe();
 
-    // Subscribe to video_views changes
-    const viewsChannel = supabase
-      .channel('video_views_realtime')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'video_views'
-      }, async (payload) => {
-        const newView = payload.new;
-
-        if (newView && newView.video_id) {
-          try {
-            const { data: genuineCount, error } = await supabase.rpc('get_genuine_view_count', {
-              video_uuid: newView.video_id
-            });
-
-            if (!error && typeof genuineCount === 'number') {
-              setViewCounts(prev => ({
-                ...prev,
-                [newView.video_id]: genuineCount
-              }));
-            } else {
-              setViewCounts(prev => {
-                const newCount = (prev[newView.video_id] || 0) + 1;
-                return {
-                  ...prev,
-                  [newView.video_id]: newCount
-                };
-              });
-            }
-          } catch (error) {
-            console.error('Error getting genuine view count:', error);
-            setViewCounts(prev => {
-              const newCount = (prev[newView.video_id] || 0) + 1;
-              return {
-                ...prev,
-                [newView.video_id]: newCount
-              };
-            });
-          }
-        }
-      })
-      .subscribe();
+    // Views subscription disabled for performance
+    const viewsChannel = null;
 
     // Subscribe to saved_videos changes
     const savedChannel = supabase
@@ -620,7 +592,7 @@ const Feed = () => {
     return () => {
       supabase.removeChannel(videosChannel);
       supabase.removeChannel(likesChannel);
-      supabase.removeChannel(viewsChannel);
+      if (viewsChannel) supabase.removeChannel(viewsChannel);
       supabase.removeChannel(savedChannel);
     };
   }, [user, videos]);
@@ -813,6 +785,44 @@ const Feed = () => {
     await trackAdImpression(ad.id, user?.id, viewDuration);
   };
 
+  const loadMoreVideos = async () => {
+    if (loadingMore || !hasMore) return;
+    
+    try {
+      setLoadingMore(true);
+      let query = supabase
+        .from('videos')
+        .select(`*, like_count, view_count, share_count, save_count`)
+        .order('created_at', { ascending: false })
+        .range(videos.length, videos.length + 9); // Load 10 more videos
+        
+      if (activeCategory !== "All") {
+        query = query.eq('category', activeCategory);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error || !data || data.length === 0) {
+        setHasMore(false);
+        return;
+      }
+      
+      // Filter and merge new videos
+      const filtered = data.filter(v => {
+        const profileData = v as unknown as { profiles?: { deactivated?: boolean } };
+        return !profileData.profiles?.deactivated;
+      });
+      
+      setVideos(prev => [...prev, ...filtered as VideoData[]]);
+      setHasMore(filtered.length === 10);
+      
+    } catch (error) {
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const fetchVideos = async () => {
     try {
       setLoading(true);
@@ -821,7 +831,7 @@ const Feed = () => {
         .from('videos')
         .select(`*, like_count, view_count, share_count, save_count`)
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(10);
       if (activeCategory !== "All") {
         query = query.eq('category', activeCategory);
       }
@@ -864,6 +874,9 @@ const Feed = () => {
 
       const mergedContent = mergeVideosWithAds(filtered as VideoData[], ads);
       setVideos(mergedContent as VideoData[]);
+      
+      // Check if we have more videos to load
+      setHasMore(filtered.length === 10);
 
       await checkFollowStatus(filtered as VideoData[]);
       await checkLikeStatus(filtered as VideoData[]);
