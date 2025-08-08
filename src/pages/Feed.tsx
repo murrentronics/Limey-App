@@ -790,11 +790,17 @@ const Feed = () => {
     
     try {
       setLoadingMore(true);
+      
+      // Get the last video's created_at timestamp for pagination
+      const lastVideo = videos[videos.length - 1];
+      if (!lastVideo) return;
+      
       let query = supabase
         .from('videos')
         .select(`*, like_count, view_count, share_count, save_count`)
         .order('created_at', { ascending: false })
-        .range(videos.length, videos.length + 9); // Load 10 more videos
+        .lt('created_at', lastVideo.created_at)
+        .limit(10);
         
       if (activeCategory !== "All") {
         query = query.eq('category', activeCategory);
@@ -812,6 +818,11 @@ const Feed = () => {
         const profileData = v as unknown as { profiles?: { deactivated?: boolean } };
         return !profileData.profiles?.deactivated;
       });
+      
+      if (filtered.length === 0) {
+        setHasMore(false);
+        return;
+      }
       
       setVideos(prev => [...prev, ...filtered as VideoData[]]);
       setHasMore(filtered.length === 10);
